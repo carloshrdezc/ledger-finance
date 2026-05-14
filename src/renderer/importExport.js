@@ -195,13 +195,25 @@ async function parseSQLiteMMBAK(buffer) {
   const tableRows = db.exec("SELECT name FROM sqlite_master WHERE type='table'");
   const tables = tableRows[0]?.values.flat().map(String) || [];
 
-  // MoneyMoney Core Data uses Z-prefixed table names
-  // Prefer entry/transaction tables over statement/account tables
-  const txTable =
-    tables.find(t => /^Z.*(ENTRY|TRANSACTION|BOOKING)/i.test(t)) ||
-    tables.find(t => /^Z.*(STATEMENT)/i.test(t)) ||
-    tables.find(t => /ENTRY|TRANSACTION|BOOKING/i.test(t)) ||
-    tables.find(t => /STATEMENT/i.test(t));
+  // Skip auxiliary/template tables and pick the best candidate by priority,
+  // then by row count so we don't accidentally land on an empty or FAV table.
+  const SKIP = /FAV|TEMPLATE|RULE|BUDGET|ACCOUNT|CURRENCY|CATEGORY|PAYEE|SYNC|ASSET|META|SETTING/i;
+  const WANT = /TRANSACTION|ENTRY|BOOKING|STATEMENT/i;
+
+  const candidates = tables.filter(t => WANT.test(t) && !SKIP.test(t));
+
+  // If filtering left nothing, fall back to any TRANSACTION/ENTRY table (including FAV)
+  const pool = candidates.length > 0 ? candidates : tables.filter(t => WANT.test(t));
+
+  // Pick the table with the most rows (most likely the main ledger)
+  let txTable = null, bestCount = -1;
+  for (const t of pool) {
+    try {
+      const r = db.exec(`SELECT COUNT(*) FROM "${t}"`);
+      const n = Number(r[0]?.values[0]?.[0] ?? 0);
+      if (n > bestCount) { bestCount = n; txTable = t; }
+    } catch { /* skip unreadable tables */ }
+  }
 
   if (!txTable) {
     db.close();
@@ -215,14 +227,14 @@ async function parseSQLiteMMBAK(buffer) {
 
   const pick = (...candidates) => candidates.find(c => cols.includes(c));
 
-  const amtCol  = pick('ZAMOUNT', 'ZVALUE', 'ZSUM', 'AMOUNT', 'VALUE');
-  const dateCol = pick('ZBOOKINGDATE', 'ZDATE', 'ZVALUEDATE', 'ZPOSTINGDATE', 'DATE', 'BOOKINGDATE');
-  const nameCol = pick('ZPURPOSE', 'ZNAME', 'ZDESCRIPTION', 'ZMEMO', 'ZTEXT', 'PURPOSE', 'NAME', 'DESCRIPTION');
-  const ccyCol  = pick('ZCURRENCY', 'CURRENCY', 'ZCURRENCYCODE');
+  const amtCol  = pick('ZAMOUNT', 'ZAMOUNTSUB', 'ZAMOUNT_SUB', 'ZVALUE', 'ZSUM', 'AMOUNT', 'VALUE', 'SUM');
+  const dateCol = pick('ZBOOKINGDATE', 'ZDATE', 'ZVALUEDATE', 'ZPOSTINGDATE', 'ZUTIME', 'ZTIME', 'ZTIMESTAMP', 'DATE', 'BOOKINGDATE');
+  const nameCol = pick('ZPURPOSE', 'ZPAYEE', 'ZNAME', 'ZDESCRIPTION', 'ZMEMO', 'ZTEXT', 'PURPOSE', 'PAYEE', 'NAME', 'DESCRIPTION', 'MEMO');
+  const ccyCol  = pick('ZCURRENCY', 'ZCURRENCYCODE', 'ZCURRENCYUID', 'CURRENCY');
 
   if (!amtCol) {
     db.close();
-    throw new Error(`No amount column found in "${txTable}". Columns: ${cols.join(', ')}`);
+    throw new Error(`No amount column found in "${txTable}" (${bestCount} rows). Columns: ${cols.join(', ')}`);
   }
 
   const result = db.exec(`SELECT * FROM "${txTable}"`)[0];
