@@ -9,13 +9,14 @@ import {
 } from '../../data';
 import { useStore } from '../../store';
 
-export default function Dashboard({ t, onNavigate }) {
+export default function Dashboard({ t, onNavigate, onAdd }) {
   const { transactions, budgets } = useStore();
   const [scrub, setScrub] = React.useState(null);
+  const [period, setPeriod] = React.useState('1M');
   const heroVal = scrub != null ? SPARK_NW[scrub] : NET_WORTH;
 
   return (
-    <WebShell active="dashboard" t={t} onNavigate={onNavigate}>
+    <WebShell active="dashboard" t={t} onNavigate={onNavigate} onAdd={onAdd}>
       {/* Hero */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
         <div>
@@ -29,12 +30,12 @@ export default function Dashboard({ t, onNavigate }) {
           </div>
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
-          {['1D','1W','1M','3M','1Y','MAX'].map((p, i) => (
-            <span key={p} style={{
+          {['1D','1W','1M','3M','1Y','MAX'].map(p => (
+            <span key={p} onClick={() => setPeriod(p)} style={{
               fontSize: 10, letterSpacing: 1.2, padding: '5px 10px',
-              border: '1px solid ' + (i === 2 ? A.ink : A.rule2),
-              background: i === 2 ? A.ink : 'transparent',
-              color: i === 2 ? A.bg : A.ink, cursor: 'pointer',
+              border: '1px solid ' + (period === p ? A.ink : A.rule2),
+              background: period === p ? A.ink : 'transparent',
+              color: period === p ? A.bg : A.ink, cursor: 'pointer',
             }}>{p}</span>
           ))}
         </div>

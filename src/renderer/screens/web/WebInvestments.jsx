@@ -4,14 +4,14 @@ import { AsciiSpark, ALabel } from '../../components/Shared';
 import WebShell from './WebShell';
 import { INVESTMENTS, NET_WORTH, SPARK_NW, fmtMoney, fmtSigned, fmtPct } from '../../data';
 
-export default function WebInvestments({ t, onNavigate }) {
+export default function WebInvestments({ t, onNavigate, onAdd }) {
   const totalPort = INVESTMENTS.reduce((s, i) => s + i.shares * i.price, 0);
   const dayChg = INVESTMENTS.reduce((s, i) => s + i.shares * i.price * i.chg / 100, 0);
   const alloc = INVESTMENTS.map(i => ({ ...i, val: i.shares * i.price, pct: (i.shares * i.price) / totalPort }));
   const shades = [t.accent, A.ink, '#8c8678', '#bdb6a3', '#4a463e'];
 
   return (
-    <WebShell active="investments" t={t} onNavigate={onNavigate}>
+    <WebShell active="investments" t={t} onNavigate={onNavigate} onAdd={onAdd}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
         <div>
           <ALabel>[01] PORTFOLIO · 11 MAY 2026</ALabel>

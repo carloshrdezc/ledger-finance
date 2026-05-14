@@ -5,7 +5,7 @@ import WebShell from './WebShell';
 import { useStore } from '../../store';
 import ImportExport from '../../components/ImportExport';
 
-export default function WebSettings({ t, onNavigate }) {
+export default function WebSettings({ t, onNavigate, onAdd }) {
   const { categoryTree, addCategory } = useStore();
   const [expanded, setExpanded] = React.useState({ edu: true, 'edu.school': true, 'edu.school.supplies': true, food: true });
   const [adding, setAdding] = React.useState(null);
@@ -59,7 +59,7 @@ export default function WebSettings({ t, onNavigate }) {
   };
 
   return (
-    <WebShell active="settings" t={t} onNavigate={onNavigate}>
+    <WebShell active="settings" t={t} onNavigate={onNavigate} onAdd={onAdd}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
         <ALabel>[01] SETTINGS</ALabel>
         <button onClick={() => setShowIO(true)} style={{ all: 'unset', cursor: 'pointer', fontSize: 10, letterSpacing: 1.2, padding: '5px 12px', border: '1px solid ' + A.ink }}>

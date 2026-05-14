@@ -13,7 +13,7 @@ const NAV_ITEMS = [
   ['SETTINGS',      'settings'],
 ];
 
-export default function WebShell({ active, t, onNavigate, children }) {
+export default function WebShell({ active, t, onNavigate, onAdd, children }) {
   return (
     <div style={{ background: A.bg, color: A.ink, fontFamily: A.font, height: '100%', overflow: 'auto' }}>
       <div style={{ padding: '28px 40px', display: 'grid', gridTemplateColumns: '200px 1fr', gap: 40, minHeight: '100%', boxSizing: 'border-box' }}>
@@ -40,7 +40,7 @@ export default function WebShell({ active, t, onNavigate, children }) {
             <span style={{ color: t.accent }}>● SYNCED 09:41 PT</span>
           </div>
           <div style={{ fontSize: 10, letterSpacing: 1.4, color: A.ink2, textTransform: 'uppercase', marginTop: 28 }}>QUICK · ADD</div>
-          <div style={{ marginTop: 8, padding: '10px 12px', border: '1.5px solid ' + A.ink, fontSize: 11, letterSpacing: 1.2, cursor: 'pointer', display: 'flex', justifyContent: 'space-between' }}>
+          <div onClick={onAdd} style={{ marginTop: 8, padding: '10px 12px', border: '1.5px solid ' + A.ink, fontSize: 11, letterSpacing: 1.2, cursor: 'pointer', display: 'flex', justifyContent: 'space-between' }}>
             <span>+ TRANSACTION</span><span style={{ color: A.muted }}>⌘N</span>
           </div>
         </div>

@@ -5,7 +5,7 @@ import WebShell from './WebShell';
 import { MERCHANTS, MOM_SPEND, fmtMoney, fmtSigned } from '../../data';
 import { useStore } from '../../store';
 
-export default function WebReports({ t, onNavigate }) {
+export default function WebReports({ t, onNavigate, onAdd }) {
   const { transactions, categoryTree } = useStore();
   const total = transactions.filter(x => x.amt < 0)
     .reduce((s, x) => s + Math.abs(x.ccy === 'USD' ? x.amt : x.amt * 1.08), 0);
@@ -24,7 +24,7 @@ export default function WebReports({ t, onNavigate }) {
   const cellMax = Math.max(...cells, 1);
 
   return (
-    <WebShell active="reports" t={t} onNavigate={onNavigate}>
+    <WebShell active="reports" t={t} onNavigate={onNavigate} onAdd={onAdd}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
         <div>
           <ALabel>[01] REPORTS · MAY 2026</ALabel>

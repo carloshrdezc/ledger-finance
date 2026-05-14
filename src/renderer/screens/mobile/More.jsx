@@ -17,14 +17,14 @@ export default function More({ t, onNavigate }) {
       rows: GOALS.map(g => ({
         label: g.name,
         sub: Math.round(g.current / g.target * 100) + '% COMPLETE',
-        screen: 'goal-detail',
+        screen: 'goal',
         params: { goalId: g.id },
       })),
     },
     {
       title: 'CREDIT CARDS',
       rows: [
-        { label: 'AMEX PLATINUM · ··1009', sub: 'UTILIZATION · PAYOFF', screen: 'cc-detail' },
+        { label: 'AMEX PLATINUM · ··1009', sub: 'UTILIZATION · PAYOFF', screen: 'cc' },
       ],
     },
     {

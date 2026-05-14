@@ -4,8 +4,17 @@ import { ALabel } from '../../components/Shared';
 import WebShell from './WebShell';
 import { ACCOUNTS, fmtMoney, fmtSigned, dayLabel, catGlyph, catBreadcrumb } from '../../data';
 import { useStore } from '../../store';
+import { exportCSV } from '../../importExport';
 
-export default function WebTransactions({ t, onNavigate }) {
+function download(name, content) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([content], { type: 'text/plain' }));
+  a.download = name;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+export default function WebTransactions({ t, onNavigate, onAdd }) {
   const { transactions } = useStore();
   const [filter, setFilter] = React.useState('ALL');
   const [search, setSearch] = React.useState('');
@@ -22,7 +31,7 @@ export default function WebTransactions({ t, onNavigate }) {
   const total = visible.reduce((s, x) => s + Math.abs(x.amt), 0);
 
   return (
-    <WebShell active="tx" t={t} onNavigate={onNavigate}>
+    <WebShell active="tx" t={t} onNavigate={onNavigate} onAdd={onAdd}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
         <div>
           <ALabel>[01] TRANSACTIONS · MAY 2026</ALabel>
@@ -34,7 +43,7 @@ export default function WebTransactions({ t, onNavigate }) {
           <input value={search} onChange={e => setSearch(e.target.value)}
             placeholder="SEARCH…"
             style={{ fontFamily: A.font, fontSize: 11, padding: '6px 10px', border: '1px solid ' + A.rule2, background: A.bg, color: A.ink, letterSpacing: 1, width: 160, outline: 'none' }} />
-          <button style={{ all: 'unset', cursor: 'pointer', fontSize: 10, letterSpacing: 1.2, padding: '6px 12px', border: '1px solid ' + A.ink, background: A.ink, color: A.bg }}>
+          <button onClick={() => download(`ledger-${new Date().toISOString().slice(0,10)}.csv`, exportCSV(transactions))} style={{ all: 'unset', cursor: 'pointer', fontSize: 10, letterSpacing: 1.2, padding: '6px 12px', border: '1px solid ' + A.ink, background: A.ink, color: A.bg }}>
             EXPORT · CSV
           </button>
         </div>

@@ -1,16 +1,16 @@
 import React from 'react';
 import { A } from '../../theme';
-import { ARule, ALabel } from '../../components/Shared';
+import { ALabel, ARule } from '../../components/Shared';
 import { ACCOUNTS, CATEGORIES } from '../../data';
 import { useStore } from '../../store';
 
-export default function AddSheet({ t, onClose }) {
+export default function WebAddModal({ t, onClose }) {
   const { addTransactions } = useStore();
-  const [amt, setAmt] = React.useState('');
+  const [amt, setAmt]           = React.useState('');
   const [merchant, setMerchant] = React.useState('');
   const [isExpense, setIsExpense] = React.useState(true);
-  const [cat, setCat] = React.useState('dining');
-  const [acct, setAcct] = React.useState('chk');
+  const [cat, setCat]           = React.useState('dining');
+  const [acct, setAcct]         = React.useState('chk');
 
   const canSave = amt && parseFloat(amt) > 0 && merchant.trim();
 
@@ -28,29 +28,32 @@ export default function AddSheet({ t, onClose }) {
     onClose();
   };
 
+  React.useEffect(() => {
+    const handler = e => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [onClose]);
+
   return (
     <div onClick={onClose} style={{
-      position: 'absolute', inset: 0,
-      background: 'rgba(20,18,15,0.4)', zIndex: 30,
-      animation: 'fadeIn .15s ease-out',
+      position: 'fixed', inset: 0,
+      background: 'rgba(20,18,15,0.5)', zIndex: 2000,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
     }}>
       <div onClick={e => e.stopPropagation()} style={{
-        position: 'absolute', left: 0, right: 0, bottom: 0,
-        background: A.bg, padding: 18,
-        borderTop: '2px solid ' + A.ink,
-        animation: 'slideUp .2s ease-out',
+        background: A.bg, border: '2px solid ' + A.ink,
+        width: 480, padding: 32, fontFamily: A.font,
       }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div style={{ fontSize: 12, letterSpacing: 2, fontWeight: 700 }}>NEW · TRANSACTION</div>
-          <button onClick={onClose} style={{ all: 'unset', cursor: 'pointer', fontSize: 10, letterSpacing: 1.2 }}>CLOSE ×</button>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 20 }}>
+          <ALabel>NEW · TRANSACTION</ALabel>
+          <button onClick={onClose} style={{ all: 'unset', cursor: 'pointer', fontSize: 20, color: A.muted }}>×</button>
         </div>
-        <ARule thick style={{ marginTop: 8 }} />
 
-        <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
           {[['EXPENSE', true], ['INCOME', false]].map(([label, val]) => (
             <button key={label} onClick={() => setIsExpense(val)} style={{
               all: 'unset', cursor: 'pointer', flex: 1, textAlign: 'center',
-              padding: '7px', fontSize: 10, letterSpacing: 1.4,
+              padding: '8px', fontSize: 10, letterSpacing: 1.4,
               border: '1px solid ' + (isExpense === val ? A.ink : A.rule2),
               background: isExpense === val ? A.ink : 'transparent',
               color: isExpense === val ? A.bg : A.ink,
@@ -58,15 +61,15 @@ export default function AddSheet({ t, onClose }) {
           ))}
         </div>
 
-        <div style={{ padding: '14px 0 6px' }}>
+        <div style={{ marginBottom: 16 }}>
           <ALabel>AMOUNT · USD</ALabel>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 6 }}>
-            <span style={{ fontSize: 32, color: A.muted }}>$</span>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 8 }}>
+            <span style={{ fontSize: 28, color: A.muted }}>$</span>
             <input
               autoFocus type="number" min="0" step="0.01" placeholder="0.00"
               value={amt} onChange={e => setAmt(e.target.value)}
               style={{
-                all: 'unset', flex: 1, fontSize: 44, fontVariantNumeric: 'tabular-nums',
+                all: 'unset', flex: 1, fontSize: 40, fontVariantNumeric: 'tabular-nums',
                 letterSpacing: -1, borderBottom: '1px solid ' + A.rule2,
                 color: isExpense ? A.neg : t.accent, fontFamily: A.font,
               }}
@@ -74,23 +77,24 @@ export default function AddSheet({ t, onClose }) {
           </div>
         </div>
 
-        <div style={{ paddingBottom: 12 }}>
+        <div style={{ marginBottom: 16 }}>
           <ALabel>MERCHANT / PAYEE</ALabel>
           <input
             value={merchant} onChange={e => setMerchant(e.target.value)}
             placeholder="e.g. STARBUCKS"
             onKeyDown={e => e.key === 'Enter' && handleSave()}
             style={{
-              all: 'unset', display: 'block', width: '100%', marginTop: 6,
+              all: 'unset', display: 'block', width: '100%', marginTop: 8,
               fontFamily: A.font, fontSize: 14, letterSpacing: 0.6,
               borderBottom: '1px solid ' + A.rule2, padding: '6px 0', color: A.ink,
               boxSizing: 'border-box',
             }}
           />
         </div>
+
         <ARule />
 
-        <div style={{ padding: '10px 0' }}>
+        <div style={{ margin: '12px 0' }}>
           <ALabel>CATEGORY</ALabel>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
             {Object.entries(CATEGORIES).slice(0, 8).map(([k, c]) => (
@@ -104,9 +108,10 @@ export default function AddSheet({ t, onClose }) {
             ))}
           </div>
         </div>
+
         <ARule />
 
-        <div style={{ padding: '10px 0' }}>
+        <div style={{ margin: '12px 0 20px' }}>
           <ALabel>ACCOUNT</ALabel>
           <select value={acct} onChange={e => setAcct(e.target.value)} style={{
             marginTop: 8, width: '100%', fontFamily: A.font,
@@ -121,7 +126,7 @@ export default function AddSheet({ t, onClose }) {
 
         <button onClick={handleSave} style={{
           all: 'unset', cursor: canSave ? 'pointer' : 'default', display: 'block',
-          textAlign: 'center', width: '100%', padding: '14px', marginTop: 6,
+          textAlign: 'center', width: '100%', padding: '14px',
           background: canSave ? t.accent : A.rule2,
           color: A.bg, fontSize: 12, letterSpacing: 2, fontWeight: 700,
           boxSizing: 'border-box',

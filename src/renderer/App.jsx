@@ -19,9 +19,14 @@ import {
 // Web screens
 import Dashboard from './screens/web/Dashboard';
 import WebTransactions from './screens/web/WebTransactions';
+import WebAccounts from './screens/web/WebAccounts';
+import WebBudgets from './screens/web/WebBudgets';
+import WebGoals from './screens/web/WebGoals';
+import WebBills from './screens/web/WebBills';
 import WebReports from './screens/web/WebReports';
 import WebInvestments from './screens/web/WebInvestments';
 import WebSettings from './screens/web/WebSettings';
+import WebAddModal from './screens/web/WebAddModal';
 
 // ─── Tweaks ────────────────────────────────────────────────────────────────
 
@@ -175,7 +180,7 @@ function MobileApp({ t, setAccent, setDensity, setDecimals }) {
   const renderTab = () => {
     const props = { t, onNavigate: push };
     switch (tab) {
-      case 'home':     return <Home {...props} onAcct={acct => push('acct', { acct })} onAdd={() => setShowAdd(true)} />;
+      case 'home':     return <Home {...props} onAcct={acct => push('acct', { acct })} onAdd={() => setShowAdd(true)} onViewAll={() => setTab('accounts')} />;
       case 'accounts': return <Accounts {...props} onAcct={acct => push('acct', { acct })} />;
       case 'tx':       return <Transactions {...props} />;
       case 'budgets':  return <Budgets {...props} />;
@@ -212,13 +217,18 @@ function DesktopApp({ t, setAccent, setDensity, setDecimals }) {
   const [page, setPage] = React.useState('dashboard');
   const [showTweaks, setShowTweaks] = React.useState(false);
   const [showIO, setShowIO] = React.useState(false);
+  const [showAdd, setShowAdd] = React.useState(false);
 
-  const props = { t, onNavigate: setPage };
+  const props = { t, onNavigate: setPage, onAdd: () => setShowAdd(true) };
 
   const renderPage = () => {
     switch (page) {
       case 'dashboard':    return <Dashboard {...props} />;
       case 'tx':           return <WebTransactions {...props} />;
+      case 'accounts':     return <WebAccounts {...props} />;
+      case 'budgets':      return <WebBudgets {...props} />;
+      case 'goals':        return <WebGoals {...props} />;
+      case 'bills':        return <WebBills {...props} />;
       case 'reports':      return <WebReports {...props} />;
       case 'investments':  return <WebInvestments {...props} />;
       case 'settings':     return <WebSettings {...props} />;
@@ -236,6 +246,7 @@ function DesktopApp({ t, setAccent, setDensity, setDecimals }) {
       </div>
 
       {showIO && <ImportExport onClose={() => setShowIO(false)} />}
+      {showAdd && <WebAddModal t={t} onClose={() => setShowAdd(false)} />}
       {showTweaks && (
         <TweaksPanel t={t} setAccent={setAccent} setDensity={setDensity} setDecimals={setDecimals} onClose={() => setShowTweaks(false)} />
       )}

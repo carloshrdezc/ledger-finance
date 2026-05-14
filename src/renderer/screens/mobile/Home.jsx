@@ -3,7 +3,7 @@ import { A } from '../../theme';
 import { AsciiSpark, ARule, ALabel } from '../../components/Shared';
 import { ACCOUNTS, BILLS, HERO_METRICS, fmtMoney, fmtSigned, fmtPct, dayLabel } from '../../data';
 
-export default function Home({ t, onAcct, onAddTx }) {
+export default function Home({ t, onAcct, onAddTx, onViewAll }) {
   const [heroIdx, setHeroIdx] = React.useState(0);
   const [scrub, setScrub] = React.useState(null);
   const hero = HERO_METRICS[heroIdx];
@@ -52,7 +52,7 @@ export default function Home({ t, onAcct, onAddTx }) {
       {/* Accounts mini-list */}
       <div style={{ padding: '14px 0 6px', display: 'flex', justifyContent: 'space-between' }}>
         <ALabel>[02] ACCOUNTS · 8</ALabel>
-        <div style={{ fontSize: 10, letterSpacing: 1.2, color: A.ink }}>VIEW ALL ▸</div>
+        <div onClick={onViewAll} style={{ fontSize: 10, letterSpacing: 1.2, color: A.ink, cursor: 'pointer' }}>VIEW ALL ▸</div>
       </div>
       {ACCOUNTS.slice(0, 5).map(a => (
         <button key={a.id} onClick={() => onAcct(a.id)} style={{
