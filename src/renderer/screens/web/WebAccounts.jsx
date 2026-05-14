@@ -1,30 +1,32 @@
-import React from 'react';
+﻿import React from 'react';
 import { A } from '../../theme';
 import { ALabel, ARule } from '../../components/Shared';
 import WebShell from './WebShell';
-import { ACCOUNTS, fmtMoney, fmtSigned, NET_WORTH, dayLabel, catGlyph } from '../../data';
+import { fmtMoney, fmtSigned, dayLabel, catGlyph } from '../../data';
 import { useStore } from '../../store';
 
 const TYPE_LABELS = { CHK: 'CHECKING', SAV: 'SAVINGS', CC: 'CREDIT CARD', INV: 'INVESTMENT', CRY: 'CRYPTO', FX: 'FOREIGN' };
 const TYPE_ORDER  = ['CHK', 'SAV', 'CC', 'INV', 'CRY', 'FX'];
 
 export default function WebAccounts({ t, onNavigate, onAdd }) {
-  const { transactions } = useStore();
+  const { transactions, accountsWithBalance } = useStore();
   const [selected, setSelected] = React.useState(null);
+
+  const NET_WORTH = accountsWithBalance.reduce((s, a) => s + (a.ccy === 'USD' ? a.balance : a.balance * 1.08), 0);
 
   const acctTxs = selected
     ? transactions.filter(tx => tx.acct === selected)
     : [];
 
   const grouped = TYPE_ORDER
-    .map(type => ({ type, accounts: ACCOUNTS.filter(a => a.type === type) }))
+    .map(type => ({ type, accounts: accountsWithBalance.filter(a => a.type === type) }))
     .filter(g => g.accounts.length > 0);
 
   return (
     <WebShell active="accounts" t={t} onNavigate={onNavigate} onAdd={onAdd}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
         <div>
-          <ALabel>[01] ACCOUNTS · {ACCOUNTS.length} LINKED</ALabel>
+          <ALabel>[01] ACCOUNTS · {accountsWithBalance.length} LINKED</ALabel>
           <div style={{ fontSize: 48, letterSpacing: -1.5, fontVariantNumeric: 'tabular-nums', lineHeight: 1, marginTop: 6 }}>
             {fmtMoney(NET_WORTH, 'USD', t.decimals)}
           </div>
@@ -50,8 +52,8 @@ export default function WebAccounts({ t, onNavigate, onAdd }) {
                     <div style={{ fontSize: 9, color: A.muted }}>{a.type}</div>
                     <div style={{ fontSize: 12, fontWeight: selected === a.id ? 600 : 400 }}>{a.name}</div>
                     <div style={{ fontSize: 10, color: A.muted }}>{a.code}</div>
-                    <div style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontSize: 13, color: a.bal < 0 ? A.neg : A.ink }}>
-                      {fmtMoney(a.bal, a.ccy, t.decimals)}
+                    <div style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontSize: 13, color: a.balance < 0 ? A.neg : A.ink }}>
+                      {fmtMoney(a.balance, a.ccy, t.decimals)}
                     </div>
                     <div style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontSize: 10, color: a.delta < 0 ? A.neg : t.accent }}>
                       {fmtSigned(a.delta, a.ccy, t.decimals)}
@@ -66,7 +68,7 @@ export default function WebAccounts({ t, onNavigate, onAdd }) {
         {selected && (
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
-              <ALabel>{ACCOUNTS.find(a => a.id === selected)?.name}</ALabel>
+              <ALabel>{accountsWithBalance.find(a => a.id === selected)?.name}</ALabel>
               <button onClick={() => setSelected(null)} style={{ all: 'unset', cursor: 'pointer', fontSize: 10, color: A.muted, letterSpacing: 1 }}>CLOSE ×</button>
             </div>
             <div style={{ borderTop: '2px solid ' + A.ink }}>
