@@ -1,15 +1,18 @@
-import React from 'react';
+﻿import React from 'react';
 import { A } from '../../theme';
 import { ARule, ALabel, ADetailCell } from '../../components/Shared';
-import { ACCOUNTS, NET_WORTH, fmtMoney, fmtSigned, dayLabel, catBreadcrumb } from '../../data';
+import { fmtMoney, fmtSigned, dayLabel, catBreadcrumb } from '../../data';
 import { useStore } from '../../store';
 
 export function Accounts({ t, onAcct }) {
+  const { accountsWithBalance, transactions } = useStore();
+  const NET_WORTH = accountsWithBalance.reduce((s, a) => s + (a.ccy === 'USD' ? a.balance : a.balance * 1.08), 0);
+
   const groups = [
-    ['CASH',        ACCOUNTS.filter(a => ['CHK','SAV','FX'].includes(a.type))],
-    ['CREDIT',      ACCOUNTS.filter(a => a.type === 'CC')],
-    ['INVESTMENTS', ACCOUNTS.filter(a => a.type === 'INV')],
-    ['CRYPTO',      ACCOUNTS.filter(a => a.type === 'CRY')],
+    ['CASH',        accountsWithBalance.filter(a => ['CHK','SAV','FX'].includes(a.type))],
+    ['CREDIT',      accountsWithBalance.filter(a => a.type === 'CC')],
+    ['INVESTMENTS', accountsWithBalance.filter(a => a.type === 'INV')],
+    ['CRYPTO',      accountsWithBalance.filter(a => a.type === 'CRY')],
   ];
 
   return (
@@ -30,7 +33,7 @@ export function Accounts({ t, onAcct }) {
         <div key={title}>
           <div style={{ padding: '12px 0 8px', display: 'flex', justifyContent: 'space-between' }}>
             <ALabel>{title}</ALabel>
-            <ALabel>{fmtMoney(rows.reduce((s, a) => s + (a.ccy === 'USD' ? a.bal : a.bal * 1.08), 0), 'USD', t.decimals)}</ALabel>
+            <ALabel>{fmtMoney(rows.reduce((s, a) => s + (a.ccy === 'USD' ? a.balance : a.balance * 1.08), 0), 'USD', t.decimals)}</ALabel>
           </div>
           {rows.map(a => (
             <button key={a.id} onClick={() => onAcct(a.id)} style={{ all: 'unset', cursor: 'pointer', display: 'block', width: '100%' }}>
@@ -40,8 +43,8 @@ export function Accounts({ t, onAcct }) {
                   <div style={{ fontSize: 10, color: A.muted, marginTop: 2 }}>{a.type} · {a.code}</div>
                 </div>
                 <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontSize: 14, fontVariantNumeric: 'tabular-nums', color: a.bal < 0 ? A.neg : A.ink }}>
-                    {fmtMoney(a.bal, a.ccy, t.decimals)}
+                  <div style={{ fontSize: 14, fontVariantNumeric: 'tabular-nums', color: a.balance < 0 ? A.neg : A.ink }}>
+                    {fmtMoney(a.balance, a.ccy, t.decimals)}
                   </div>
                   <div style={{ fontSize: 10, color: a.delta < 0 ? A.neg : t.accent, marginTop: 2 }}>
                     {fmtSigned(a.delta, a.ccy, t.decimals)}
@@ -57,9 +60,11 @@ export function Accounts({ t, onAcct }) {
 }
 
 export function AccountDetail({ t, accountId, onBack }) {
-  const { transactions } = useStore();
-  const a = ACCOUNTS.find(x => x.id === accountId) || ACCOUNTS[0];
-  const txns = transactions.filter(x => x.acct === a.id).slice(0, 10);
+  const { accountsWithBalance, transactions } = useStore();
+  const a = accountsWithBalance.find(x => x.id === accountId) || accountsWithBalance[0];
+  const txns = transactions.filter(x => x.acct === a?.id).slice(0, 10);
+
+  if (!a) return null;
 
   return (
     <div style={{ padding: '0 18px 20px' }}>
@@ -70,8 +75,8 @@ export function AccountDetail({ t, accountId, onBack }) {
       <ARule thick />
       <div style={{ padding: '16px 0 8px' }}>
         <div style={{ fontSize: 11, letterSpacing: 1.4, color: A.muted, textTransform: 'uppercase' }}>{a.name}</div>
-        <div style={{ fontSize: 34, fontVariantNumeric: 'tabular-nums', letterSpacing: -1, marginTop: 4, color: a.bal < 0 ? A.neg : A.ink }}>
-          {fmtMoney(a.bal, a.ccy, t.decimals)}
+        <div style={{ fontSize: 34, fontVariantNumeric: 'tabular-nums', letterSpacing: -1, marginTop: 4, color: a.balance < 0 ? A.neg : A.ink }}>
+          {fmtMoney(a.balance, a.ccy, t.decimals)}
         </div>
         <div style={{ fontSize: 11, color: a.delta < 0 ? A.neg : t.accent, marginTop: 2 }}>
           {fmtSigned(a.delta, a.ccy, t.decimals)} · 30D
@@ -81,18 +86,18 @@ export function AccountDetail({ t, accountId, onBack }) {
         {a.type === 'CC' ? (
           <>
             <ADetailCell label="CREDIT LIMIT" val={fmtMoney(10000, 'USD', t.decimals)} />
-            <ADetailCell label="AVAILABLE" val={fmtMoney(10000 + a.bal, 'USD', t.decimals)} />
+            <ADetailCell label="AVAILABLE" val={fmtMoney(10000 + a.balance, 'USD', t.decimals)} />
             <ADetailCell label="APR" val="22.74%" />
           </>
         ) : a.type === 'INV' ? (
           <>
-            <ADetailCell label="COST BASIS" val={fmtMoney(a.bal * 0.78, 'USD', t.decimals)} />
-            <ADetailCell label="GAIN" val={fmtSigned(a.bal * 0.22, 'USD', t.decimals)} c={t.accent} />
+            <ADetailCell label="COST BASIS" val={fmtMoney(a.balance * 0.78, 'USD', t.decimals)} />
+            <ADetailCell label="GAIN" val={fmtSigned(a.balance * 0.22, 'USD', t.decimals)} c={t.accent} />
             <ADetailCell label="YIELD" val="1.42%" />
           </>
         ) : (
           <>
-            <ADetailCell label="AVAILABLE" val={fmtMoney(a.bal, a.ccy, t.decimals)} />
+            <ADetailCell label="AVAILABLE" val={fmtMoney(a.balance, a.ccy, t.decimals)} />
             <ADetailCell label="APY" val={a.type === 'SAV' ? '4.20%' : '0.00%'} />
             <ADetailCell label="STATEMENT" val="MAY 28" />
           </>
@@ -105,7 +110,7 @@ export function AccountDetail({ t, accountId, onBack }) {
           <div style={{ minWidth: 0, flex: 1, paddingRight: 8 }}>
             <div style={{ fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tx.name}</div>
             <div style={{ fontSize: 10, color: A.muted, marginTop: 2, letterSpacing: 0.6, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {dayLabel(tx.d)} · {catBreadcrumb(tx.path || [tx.cat])}
+              {dayLabel(tx.date)} · {catBreadcrumb(tx.path || [tx.cat])}
             </div>
           </div>
           <div style={{ fontSize: 13, fontVariantNumeric: 'tabular-nums', color: tx.amt < 0 ? A.ink : t.accent, flexShrink: 0 }}>
