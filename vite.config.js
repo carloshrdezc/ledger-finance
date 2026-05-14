@@ -9,7 +9,4 @@ export default defineConfig({
     outDir: 'dist',
     emptyOutDir: true,
   },
-  optimizeDeps: {
-    exclude: ['sql.js'],
-  },
 });

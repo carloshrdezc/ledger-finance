@@ -168,8 +168,13 @@ function isSQLite(buffer) {
 let _SQL = null;
 async function getSQLjs() {
   if (_SQL) return _SQL;
-  const initSqlJs = (await import('sql.js')).default;
-  _SQL = await initSqlJs({ locateFile: () => sqlWasm });
+  const mod = await import('sql.js');
+  // CJS interop: may be mod / mod.default / mod.default.default
+  const init = typeof mod === 'function' ? mod
+             : typeof mod.default === 'function' ? mod.default
+             : mod.default?.default;
+  if (typeof init !== 'function') throw new Error('Failed to load sql.js');
+  _SQL = await init({ locateFile: () => sqlWasm });
   return _SQL;
 }
 
