@@ -22,9 +22,12 @@ export default function ImportExport({ onClose }) {
   const handleFile = async file => {
     if (!file) return;
     setStatus(null);
+    setStatus({ ok: null, msg: 'Reading file…' });
     try {
-      const text = await file.text();
+      const buffer = await file.arrayBuffer();
+      const text = new TextDecoder('utf-8', { fatal: false }).decode(buffer);
       const ext = file.name.split('.').pop().toLowerCase();
+
       if (ext === 'qif') {
         const txs = parseQIF(text);
         store.addTransactions(txs);
@@ -34,11 +37,16 @@ export default function ImportExport({ onClose }) {
         store.addTransactions(txs);
         setStatus({ ok: true, msg: `Imported ${txs.length} transactions from CSV` });
       } else if (ext === 'mmbak') {
-        const data = parseMMBAK(text);
-        if (data.transactions) store.setTransactions(data.transactions);
-        if (data.categoryTree) store.setCategoryTree(data.categoryTree);
-        if (data.budgets) store.setBudgets(data.budgets);
-        setStatus({ ok: true, msg: `Backup restored · ${data.transactions?.length ?? 0} transactions` });
+        const data = await parseMMBAK(text, buffer);
+        if (data.isLedgerBackup) {
+          if (data.transactions) store.setTransactions(data.transactions);
+          if (data.categoryTree) store.setCategoryTree(data.categoryTree);
+          if (data.budgets) store.setBudgets(data.budgets);
+          setStatus({ ok: true, msg: `Backup restored · ${data.transactions?.length ?? 0} transactions` });
+        } else {
+          store.addTransactions(data.transactions);
+          setStatus({ ok: true, msg: `Imported ${data.transactions.length} transactions from MoneyMoney` });
+        }
       } else {
         setStatus({ ok: false, msg: 'Unsupported format — use .qif, .csv, or .mmbak' });
       }
@@ -89,8 +97,8 @@ export default function ImportExport({ onClose }) {
         </div>
 
         {status && (
-          <div style={{ marginTop: 14, padding: '9px 12px', fontSize: 10, letterSpacing: 1, border: '1px solid ' + (status.ok ? A.rule2 : A.neg), color: status.ok ? A.ink : A.neg }}>
-            {status.ok ? '✓ ' : '✗ '}{status.msg}
+          <div style={{ marginTop: 14, padding: '9px 12px', fontSize: 10, letterSpacing: 1, border: '1px solid ' + (status.ok === true ? A.rule2 : status.ok === false ? A.neg : A.rule2), color: status.ok === true ? A.ink : status.ok === false ? A.neg : A.muted }}>
+            {status.ok === true ? '✓ ' : status.ok === false ? '✗ ' : '⋯ '}{status.msg}
           </div>
         )}
 

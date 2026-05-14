@@ -14,10 +14,19 @@
   "build": {
     "appId": "com.ledger.finance",
     "productName": "LEDGER",
-    "directories": { "output": "dist-app" },
-    "files": ["dist/**/*", "src/main/**/*"],
-    "win": { "target": "nsis" },
-    "mac": { "target": "dmg" }
+    "directories": {
+      "output": "dist-app"
+    },
+    "files": [
+      "dist/**/*",
+      "src/main/**/*"
+    ],
+    "win": {
+      "target": "nsis"
+    },
+    "mac": {
+      "target": "dmg"
+    }
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^6.0.1",
@@ -29,6 +38,7 @@
   },
   "dependencies": {
     "react": "^19.2.6",
-    "react-dom": "^19.2.6"
+    "react-dom": "^19.2.6",
+    "sql.js": "^1.14.1"
   }
 }

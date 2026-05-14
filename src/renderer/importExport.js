@@ -1,3 +1,5 @@
+import sqlWasm from 'sql.js/dist/sql-wasm.wasm?url';
+
 // ─── Category key normaliser ───────────────────────────────────────────────
 
 function toCatKey(cat) {
@@ -142,7 +144,7 @@ export function exportCSV(transactions) {
   ].join('\n');
 }
 
-// ─── MMBAK (full JSON backup) ──────────────────────────────────────────────
+// ─── MMBAK: JSON backup (our own format) ──────────────────────────────────
 
 export function exportMMBAK(store) {
   return JSON.stringify({
@@ -155,9 +157,124 @@ export function exportMMBAK(store) {
   }, null, 2);
 }
 
-export function parseMMBAK(text) {
-  const d = JSON.parse(text);
-  if (d._type !== 'ledger-backup')
-    throw new Error('Not a valid LEDGER backup file. Expected .mmbak exported from LEDGER.');
-  return d;
+// Detects SQLite magic header bytes
+function isSQLite(buffer) {
+  const magic = 'SQLite format 3\0';
+  const view = new Uint8Array(buffer, 0, 16);
+  return [...magic].every((c, i) => view[i] === c.charCodeAt(0));
+}
+
+// Lazy-loaded sql.js instance
+let _SQL = null;
+async function getSQLjs() {
+  if (_SQL) return _SQL;
+  const initSqlJs = (await import('sql.js')).default;
+  _SQL = await initSqlJs({ locateFile: () => sqlWasm });
+  return _SQL;
+}
+
+// Parse MoneyMoney (or generic) SQLite .mmbak
+async function parseSQLiteMMBAK(buffer) {
+  const SQL = await getSQLjs();
+
+  let db;
+  try {
+    db = new SQL.Database(new Uint8Array(buffer));
+  } catch {
+    throw new Error(
+      'Cannot open this .mmbak file — it may be password-encrypted. ' +
+      'In MoneyMoney: File → Export → Transactions (CSV) instead.'
+    );
+  }
+
+  const tableRows = db.exec("SELECT name FROM sqlite_master WHERE type='table'");
+  const tables = tableRows[0]?.values.flat().map(String) || [];
+
+  // MoneyMoney Core Data uses Z-prefixed table names
+  // Prefer entry/transaction tables over statement/account tables
+  const txTable =
+    tables.find(t => /^Z.*(ENTRY|TRANSACTION|BOOKING)/i.test(t)) ||
+    tables.find(t => /^Z.*(STATEMENT)/i.test(t)) ||
+    tables.find(t => /ENTRY|TRANSACTION|BOOKING/i.test(t)) ||
+    tables.find(t => /STATEMENT/i.test(t));
+
+  if (!txTable) {
+    db.close();
+    throw new Error(`SQLite opened but no transaction table found. Tables: ${tables.join(', ')}`);
+  }
+
+  const colInfo = db.exec(`PRAGMA table_info("${txTable}")`)[0];
+  if (!colInfo) { db.close(); throw new Error('Could not read table schema'); }
+
+  const cols = colInfo.values.map(r => String(r[1]).toUpperCase());
+
+  const pick = (...candidates) => candidates.find(c => cols.includes(c));
+
+  const amtCol  = pick('ZAMOUNT', 'ZVALUE', 'ZSUM', 'AMOUNT', 'VALUE');
+  const dateCol = pick('ZBOOKINGDATE', 'ZDATE', 'ZVALUEDATE', 'ZPOSTINGDATE', 'DATE', 'BOOKINGDATE');
+  const nameCol = pick('ZPURPOSE', 'ZNAME', 'ZDESCRIPTION', 'ZMEMO', 'ZTEXT', 'PURPOSE', 'NAME', 'DESCRIPTION');
+  const ccyCol  = pick('ZCURRENCY', 'CURRENCY', 'ZCURRENCYCODE');
+
+  if (!amtCol) {
+    db.close();
+    throw new Error(`No amount column found in "${txTable}". Columns: ${cols.join(', ')}`);
+  }
+
+  const result = db.exec(`SELECT * FROM "${txTable}"`)[0];
+  db.close();
+
+  if (!result) return [];
+
+  const idx = Object.fromEntries(result.columns.map((c, i) => [c.toUpperCase(), i]));
+
+  return result.values
+    .map((row, i) => {
+      const amt = parseFloat(row[idx[amtCol]] ?? 0);
+      if (isNaN(amt) || amt === 0) return null;
+
+      // Core Data timestamps = seconds since 2001-01-01 (add 978307200 to get Unix)
+      let day = new Date().getDate();
+      if (dateCol && row[idx[dateCol]] != null) {
+        const raw = Number(row[idx[dateCol]]);
+        // Heuristic: if > 1e9 it's a Unix ts, if < 1e9 it's Core Data ts
+        const unix = raw > 1_000_000_000 ? raw : raw + 978_307_200;
+        day = new Date(unix * 1000).getDate();
+      }
+
+      const name = String(row[nameCol ? idx[nameCol] : 0] ?? '').trim() || 'Transaction';
+      const ccy  = ccyCol ? String(row[idx[ccyCol]] ?? 'EUR').trim() : 'EUR';
+
+      return {
+        id: `mm_${i}_${Math.random().toString(36).slice(2, 6)}`,
+        name,
+        amt,
+        d: day,
+        cat: 'other',
+        ccy,
+        acct: 'chk1',
+      };
+    })
+    .filter(Boolean);
+}
+
+// Main entry point — handles both JSON (our backup) and SQLite (MoneyMoney)
+export async function parseMMBAK(text, buffer) {
+  // Try our own JSON format first
+  const trimmed = text.trimStart();
+  if (trimmed.startsWith('{')) {
+    const d = JSON.parse(text);
+    if (d._type !== 'ledger-backup')
+      throw new Error('Not a valid LEDGER backup. Expected a file exported from LEDGER.');
+    return { isLedgerBackup: true, ...d };
+  }
+
+  // Fall back to SQLite (MoneyMoney native format)
+  if (buffer && isSQLite(buffer)) {
+    const transactions = await parseSQLiteMMBAK(buffer);
+    return { isLedgerBackup: false, transactions };
+  }
+
+  throw new Error(
+    `Unexpected token '${trimmed[0]}' — file is neither a LEDGER JSON backup nor a SQLite database.`
+  );
 }

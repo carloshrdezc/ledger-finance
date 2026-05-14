@@ -4,8 +4,12 @@ import react from '@vitejs/plugin-react';
 export default defineConfig({
   plugins: [react()],
   base: './',
+  assetsInclude: ['**/*.wasm'],
   build: {
     outDir: 'dist',
     emptyOutDir: true,
+  },
+  optimizeDeps: {
+    exclude: ['sql.js'],
   },
 });
