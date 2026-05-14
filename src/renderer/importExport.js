@@ -1,4 +1,4 @@
-import sqlWasm from 'sql.js/dist/sql-wasm.wasm?url';
+﻿import sqlWasm from 'sql.js/dist/sql-wasm.wasm?url';
 
 // ─── Category key normaliser ───────────────────────────────────────────────
 
@@ -19,6 +19,19 @@ function toCatKey(cat) {
 
 // ─── QIF ──────────────────────────────────────────────────────────────────
 
+function qifIso(s) {
+  if (!s) return new Date().toISOString().slice(0, 10);
+  const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+  const now = new Date();
+  const mdy = s.match(/^(\d{1,2})[\/\-\.']\s*(\d{1,2})[\/\-\.']\s*(\d{2,4})?/);
+  if (mdy) {
+    const yr = mdy[3] ? (mdy[3].length === 2 ? '20' + mdy[3] : mdy[3]) : now.getFullYear();
+    return `${yr}-${String(mdy[1]).padStart(2,'0')}-${String(mdy[2]).padStart(2,'0')}`;
+  }
+  return now.toISOString().slice(0, 10);
+}
+
 export function parseQIF(text) {
   const txs = [];
   const blocks = text.replace(/\r\n/g, '\n').split(/\^[ \t]*\n?/);
@@ -38,7 +51,7 @@ export function parseQIF(text) {
     txs.push({
       id: 'qif_' + Math.random().toString(36).slice(2),
       name, amt,
-      d: qifDay(date),
+      date: qifIso(date),
       cat: toCatKey(cat),
       ccy: 'USD', acct: 'chk1',
       memo: memo || undefined,
@@ -47,18 +60,10 @@ export function parseQIF(text) {
   return txs;
 }
 
-function qifDay(s) {
-  if (!s) return new Date().getDate();
-  const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/); if (iso) return +iso[3];
-  const mdy = s.match(/^(\d{1,2})[\/\-\.']\s*(\d{1,2})/); if (mdy) return +mdy[2];
-  return new Date().getDate();
-}
-
 export function exportQIF(transactions) {
-  const d = new Date(), mo = d.getMonth() + 1, yr = d.getFullYear();
   const lines = ['!Type:Bank'];
   for (const tx of transactions) {
-    lines.push(`D${mo}/${tx.d || 1}/${yr}`);
+    lines.push(`D${tx.date || new Date().toISOString().slice(0, 10)}`);
     lines.push(`T${tx.amt.toFixed(2)}`);
     lines.push(`P${tx.name}`);
     if (tx.cat) lines.push(`L${tx.cat}`);
@@ -69,6 +74,20 @@ export function exportQIF(transactions) {
 }
 
 // ─── CSV ──────────────────────────────────────────────────────────────────
+
+function csvIso(s) {
+  if (!s) return new Date().toISOString().slice(0, 10);
+  s = s.replace(/['"]/g, '').trim();
+  const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+  const p = s.split(/[\/\-\.]/);
+  if (p.length >= 3) {
+    const yr = p[2].length === 2 ? '20' + p[2] : p[2];
+    const [m, d] = +p[0] > 12 ? [p[1], p[0]] : [p[0], p[1]];
+    return `${yr}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+  }
+  return new Date().toISOString().slice(0, 10);
+}
 
 export function parseCSV(text) {
   const lines = text.replace(/\r\n/g, '\n').trim().split('\n');
@@ -97,7 +116,7 @@ export function parseCSV(text) {
     return [{
       id: `csv_${i}_${Math.random().toString(36).slice(2, 6)}`,
       name, amt,
-      d: dateI >= 0 ? csvDay(c[dateI]) : new Date().getDate(),
+      date: dateI >= 0 ? csvIso(c[dateI]) : new Date().toISOString().slice(0, 10),
       cat: catI >= 0 ? toCatKey(c[catI]) : 'other',
       ccy: ccyI >= 0 ? (c[ccyI]?.trim() || 'USD') : 'USD',
       acct: acctI >= 0 ? (c[acctI]?.trim() || 'chk1') : 'chk1',
@@ -116,23 +135,13 @@ function csvSplit(line) {
   return [...r, cur.trim()];
 }
 
-function csvDay(s) {
-  if (!s) return new Date().getDate();
-  s = s.replace(/['"]/g, '').trim();
-  const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/); if (iso) return +iso[3];
-  const p = s.split(/[\/\-\.]/);
-  if (p.length >= 2) return +p[0] > 12 ? +p[0] : +p[1];
-  return new Date().getDate();
-}
-
 export function exportCSV(transactions) {
-  const d = new Date(), yr = d.getFullYear(), mo = String(d.getMonth() + 1).padStart(2, '0');
   const esc = s => `"${(s || '').replace(/"/g, '""')}"`;
   return [
     'Date,Description,Amount,Category,Account,Currency,Memo',
     ...transactions.map(tx =>
       [
-        `${yr}-${mo}-${String(tx.d || 1).padStart(2, '0')}`,
+        tx.date || new Date().toISOString().slice(0, 10),
         esc(tx.name),
         tx.amt.toFixed(2),
         tx.cat || '',
@@ -152,6 +161,7 @@ export function exportMMBAK(store) {
     version: 1,
     exported: new Date().toISOString(),
     transactions: store.allTransactions,
+    accounts: store.accounts,
     categoryTree: store.categoryTree,
     budgets: store.budgets,
   }, null, 2);
@@ -195,8 +205,48 @@ async function parseSQLiteMMBAK(buffer) {
   const tableRows = db.exec("SELECT name FROM sqlite_master WHERE type='table'");
   const tables = tableRows[0]?.values.flat().map(String) || [];
 
+  // Read Money Manager ACCOUNT table
+  const ACCT_SKIP = /TRANSACTION|ENTRY|BOOKING/i;
+  const ACCT_WANT = /ACCOUNT/i;
+  const acctTableName = tables.find(t => ACCT_WANT.test(t) && !ACCT_SKIP.test(t)) || null;
+
+  let importedAccounts = [];
+  const acctIdMap = {};
+
+  if (acctTableName) {
+    const acctSchema = db.exec(`PRAGMA table_info("${acctTableName}")`)[0];
+    if (acctSchema) {
+      const aCols = acctSchema.values.map(r => String(r[1]).toUpperCase());
+      const pickA = (...cs) => cs.find(c => aCols.includes(c));
+      const pkCol   = pickA('Z_PK', 'ZPRIMARYKEY', 'ZID', 'ID');
+      const nameCol = pickA('ZNAME', 'ZTITLE', 'ZDISPLAYNAME', 'NAME', 'TITLE');
+      const balCol  = pickA('ZINITIALBALANCE', 'ZOPENINGBALANCE', 'ZAMOUNT', 'ZBALANCE', 'BALANCE');
+      const ccyCol  = pickA('ZCURRENCY', 'ZCURRENCYCODE', 'CURRENCY');
+      const typeCol = pickA('ZKIND', 'ZTYPE', 'ZACCOUNTTYPE', 'TYPE', 'KIND');
+
+      const acctResult = db.exec(`SELECT * FROM "${acctTableName}"`)[0];
+      if (acctResult) {
+        const aIdx = Object.fromEntries(acctResult.columns.map((c, i) => [c.toUpperCase(), i]));
+        importedAccounts = acctResult.values.map((row, i) => {
+          const pk = pkCol ? String(row[aIdx[pkCol]]) : String(i);
+          const name = nameCol ? String(row[aIdx[nameCol]] ?? `Account ${i + 1}`).trim() : `Account ${i + 1}`;
+          const openingBal = balCol ? parseFloat(row[aIdx[balCol]] ?? 0) || 0 : 0;
+          const ccy = ccyCol ? String(row[aIdx[ccyCol]] ?? 'EUR').trim() : 'EUR';
+          const rawType = typeCol ? String(row[aIdx[typeCol]] ?? '').toLowerCase() : '';
+          const type = /credit|card|cc/.test(rawType) ? 'CC'
+                     : /saving/.test(rawType) ? 'SAV'
+                     : /invest|broker/.test(rawType) ? 'INV'
+                     : /crypto/.test(rawType) ? 'CRY' : 'CHK';
+          const id = `mm_acct_${i}`;
+          acctIdMap[pk] = id;
+          return { id, name, type, code: '', openingBal, ccy };
+        });
+      }
+    }
+  }
+
   // Skip auxiliary/template tables and pick the best candidate by priority,
-  // then by row count so we don't accidentally land on an empty or FAV table.
+  // then by row count so we do not accidentally land on an empty or FAV table.
   const SKIP = /FAV|TEMPLATE|RULE|BUDGET|ACCOUNT|CURRENCY|CATEGORY|PAYEE|SYNC|ASSET|META|SETTING/i;
   const WANT = /TRANSACTION|ENTRY|BOOKING|STATEMENT/i;
 
@@ -231,6 +281,7 @@ async function parseSQLiteMMBAK(buffer) {
   const dateCol = pick('ZBOOKINGDATE', 'ZDATE', 'ZVALUEDATE', 'ZPOSTINGDATE', 'ZUTIME', 'ZTIME', 'ZTIMESTAMP', 'DATE', 'BOOKINGDATE');
   const nameCol = pick('ZPURPOSE', 'ZPAYEE', 'ZNAME', 'ZDESCRIPTION', 'ZMEMO', 'ZTEXT', 'PURPOSE', 'PAYEE', 'NAME', 'DESCRIPTION', 'MEMO');
   const ccyCol  = pick('ZCURRENCY', 'ZCURRENCYCODE', 'ZCURRENCYUID', 'CURRENCY');
+  const acctFkCol = pick('ZACCOUNT', 'ZACCOUNTID', 'ZACCOUNTREF', 'ACCOUNT_ID', 'ACCOUNTID');
 
   if (!amtCol) {
     db.close();
@@ -240,38 +291,39 @@ async function parseSQLiteMMBAK(buffer) {
   const result = db.exec(`SELECT * FROM "${txTable}"`)[0];
   db.close();
 
-  if (!result) return [];
+  if (!result) return { transactions: [], accounts: importedAccounts };
 
   const idx = Object.fromEntries(result.columns.map((c, i) => [c.toUpperCase(), i]));
 
-  return result.values
+  const transactions = result.values
     .map((row, i) => {
       const amt = parseFloat(row[idx[amtCol]] ?? 0);
       if (isNaN(amt) || amt === 0) return null;
 
       // Core Data timestamps = seconds since 2001-01-01 (add 978307200 to get Unix)
-      let day = new Date().getDate();
+      let date = new Date().toISOString().slice(0, 10);
       if (dateCol && row[idx[dateCol]] != null) {
         const raw = Number(row[idx[dateCol]]);
-        // Heuristic: if > 1e9 it's a Unix ts, if < 1e9 it's Core Data ts
+        // Heuristic: if > 1e9 it is a Unix ts, if < 1e9 it is Core Data ts
         const unix = raw > 1_000_000_000 ? raw : raw + 978_307_200;
-        day = new Date(unix * 1000).getDate();
+        const dt = new Date(unix * 1000);
+        date = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;
       }
 
       const name = String(row[nameCol ? idx[nameCol] : 0] ?? '').trim() || 'Transaction';
       const ccy  = ccyCol ? String(row[idx[ccyCol]] ?? 'EUR').trim() : 'EUR';
 
+      const acctFk = acctFkCol ? String(row[idx[acctFkCol]] ?? '') : '';
+      const acct = acctIdMap[acctFk] || (importedAccounts[0]?.id ?? 'imported');
+
       return {
         id: `mm_${i}_${Math.random().toString(36).slice(2, 6)}`,
-        name,
-        amt,
-        d: day,
-        cat: 'other',
-        ccy,
-        acct: 'chk1',
+        name, amt, date, cat: 'other', ccy, acct,
       };
     })
     .filter(Boolean);
+
+  return { transactions, accounts: importedAccounts };
 }
 
 // Main entry point — handles both JSON (our backup) and SQLite (MoneyMoney)
@@ -287,8 +339,8 @@ export async function parseMMBAK(text, buffer) {
 
   // Fall back to SQLite (MoneyMoney native format)
   if (buffer && isSQLite(buffer)) {
-    const transactions = await parseSQLiteMMBAK(buffer);
-    return { isLedgerBackup: false, transactions };
+    const { transactions, accounts } = await parseSQLiteMMBAK(buffer);
+    return { isLedgerBackup: false, transactions, accounts };
   }
 
   throw new Error(
