@@ -1,4 +1,4 @@
-﻿import React from 'react';
+import React from 'react';
 import { TRANSACTIONS, CATEGORY_TREE, BUDGETS, ACCOUNTS } from './data';
 
 function useLS(key, def) {
@@ -21,7 +21,7 @@ function migrateTransactions(txs) {
   return txs.map(tx => {
     if (tx.date) return tx;
     const { d, ...rest } = tx;
-    return { ...rest, date: `${yyyy}-${mm}-${String(d || 1).padStart(2, '0')}` };
+    return { ...rest, date: `1970-01-${String(d || 1).padStart(2, '0')}` };
   });
 }
 
@@ -35,10 +35,12 @@ export function StoreProvider({ children }) {
   const [accounts, setAccounts] = useLS('ledger:accounts', ACCOUNTS);
 
   React.useEffect(() => {
+    // Intentional: txs is read from the initial synchronous localStorage load.
+    // Empty deps ensures this runs only once on mount.
     if (txs.some(tx => !tx.date)) {
       setTxs(prev => migrateTransactions(prev));
     }
-  }, []); // migrates old localStorage data once
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const hiddenSet = React.useMemo(() => new Set(hidden), [hidden]);
   const transactions = React.useMemo(() => txs.filter(t => !hiddenSet.has(t.id)), [txs, hiddenSet]);
