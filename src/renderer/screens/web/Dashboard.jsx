@@ -1,18 +1,26 @@
-import React from 'react';
+﻿import React from 'react';
 import { A } from '../../theme';
 import { AsciiSpark, ARule, ALabel } from '../../components/Shared';
 import WebShell from './WebShell';
 import {
-  ACCOUNTS, BILLS, CATEGORIES,
-  NET_WORTH, SPARK_NW,
+  BILLS, CATEGORIES,
+  SPARK_NW,
   fmtMoney, fmtSigned, fmtPct, dayLabel, catGlyph,
 } from '../../data';
 import { useStore } from '../../store';
 
 export default function Dashboard({ t, onNavigate, onAdd }) {
-  const { transactions, budgets } = useStore();
+  const { transactions, budgets, accountsWithBalance } = useStore();
   const [scrub, setScrub] = React.useState(null);
   const [period, setPeriod] = React.useState('1M');
+
+  const now = new Date();
+  const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const NET_WORTH  = accountsWithBalance.reduce((s, a) => s + (a.ccy === 'USD' ? a.balance : a.balance * 1.08), 0);
+  const NW_DELTA   = accountsWithBalance.reduce((s, a) => s + (a.ccy === 'USD' ? a.delta  : a.delta  * 1.08), 0);
+  const NW_PCT     = NET_WORTH ? (NW_DELTA / Math.abs(NET_WORTH - NW_DELTA)) * 100 : 0;
+  const todayLabel = now.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }).toUpperCase();
+
   const heroVal = scrub != null ? SPARK_NW[scrub] : NET_WORTH;
 
   return (
@@ -20,12 +28,12 @@ export default function Dashboard({ t, onNavigate, onAdd }) {
       {/* Hero */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
         <div>
-          <ALabel>[01] NET WORTH · MAY 11 2026</ALabel>
+          <ALabel>[01] NET WORTH · {todayLabel}</ALabel>
           <div style={{ fontSize: 64, letterSpacing: -2, fontVariantNumeric: 'tabular-nums', lineHeight: 1, marginTop: 8 }}>
             {fmtMoney(heroVal, 'USD', t.decimals)}
           </div>
           <div style={{ fontSize: 12, marginTop: 6 }}>
-            <span style={{ color: t.accent }}>{fmtSigned(3412.40, 'USD', t.decimals)} · {fmtPct(1.21)}</span>
+            <span style={{ color: t.accent }}>{fmtSigned(NW_DELTA, 'USD', t.decimals)} · {fmtPct(NW_PCT)}</span>
             <span style={{ color: A.muted, marginLeft: 12 }}>30D</span>
           </div>
         </div>
@@ -61,12 +69,12 @@ export default function Dashboard({ t, onNavigate, onAdd }) {
             <div style={{ display: 'grid', gridTemplateColumns: '30px 1fr 80px 110px 80px', padding: '8px 0', fontSize: 9, color: A.muted, letterSpacing: 1.2, borderBottom: '1px solid ' + A.rule2 }}>
               <div /><div>NAME</div><div>CODE</div><div style={{ textAlign: 'right' }}>BALANCE</div><div style={{ textAlign: 'right' }}>30D</div>
             </div>
-            {ACCOUNTS.map(a => (
+            {accountsWithBalance.map(a => (
               <div key={a.id} style={{ display: 'grid', gridTemplateColumns: '30px 1fr 80px 110px 80px', padding: t.density === 'compact' ? '7px 0' : '10px 0', fontSize: 11, borderBottom: '1px solid ' + A.rule2, alignItems: 'center' }}>
                 <div style={{ fontSize: 9, color: A.muted, letterSpacing: 0.8 }}>{a.type}</div>
                 <div>{a.name}</div>
                 <div style={{ color: A.muted, fontSize: 10 }}>{a.code}</div>
-                <div style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: a.bal < 0 ? A.neg : A.ink }}>{fmtMoney(a.bal, a.ccy, t.decimals)}</div>
+                <div style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: a.balance < 0 ? A.neg : A.ink }}>{fmtMoney(a.balance, a.ccy, t.decimals)}</div>
                 <div style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: a.delta < 0 ? A.neg : t.accent, fontSize: 10 }}>{fmtSigned(a.delta, a.ccy, t.decimals)}</div>
               </div>
             ))}
@@ -117,7 +125,7 @@ export default function Dashboard({ t, onNavigate, onAdd }) {
               <div style={{ fontSize: 9, color: A.muted, letterSpacing: 1 }}>{dayLabel(tx.d)}</div>
               <div>{catGlyph(tx.path || [tx.cat])}</div>
               <div>{tx.name}<span style={{ color: A.muted, marginLeft: 8, fontSize: 10 }}>{CATEGORIES[tx.cat]?.label}</span></div>
-              <div style={{ color: A.muted, fontSize: 10 }}>{ACCOUNTS.find(a => a.id === tx.acct)?.code}</div>
+              <div style={{ color: A.muted, fontSize: 10 }}>{accountsWithBalance.find(a => a.id === tx.acct)?.code}</div>
               <div style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: tx.amt >= 0 ? t.accent : A.ink }}>{fmtSigned(tx.amt, tx.ccy, t.decimals)}</div>
             </div>
           ))}
