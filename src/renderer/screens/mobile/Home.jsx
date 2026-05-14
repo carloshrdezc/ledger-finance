@@ -1,21 +1,45 @@
-import React from 'react';
+﻿import React from 'react';
 import { A } from '../../theme';
 import { AsciiSpark, ARule, ALabel } from '../../components/Shared';
-import { ACCOUNTS, BILLS, HERO_METRICS, fmtMoney, fmtSigned, fmtPct, dayLabel } from '../../data';
+import { BILLS, SPARK_NW, SPARK_SPEND, fmtMoney, fmtSigned, fmtPct } from '../../data';
+import { useStore } from '../../store';
 
 export default function Home({ t, onAcct, onAddTx, onViewAll }) {
+  const { accountsWithBalance, transactions } = useStore();
+  const now = new Date();
+  const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const todayLabel = now.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }).toUpperCase();
+
+  const NET_WORTH   = accountsWithBalance.reduce((s, a) => s + (a.ccy === 'USD' ? a.balance : a.balance * 1.08), 0);
+  const MONTH_SPEND = transactions
+    .filter(tx => tx.cat !== 'income' && tx.amt < 0 && tx.date?.startsWith(thisMonth))
+    .reduce((s, tx) => s + Math.abs(tx.ccy === 'USD' ? tx.amt : tx.amt * 1.08), 0);
+  const CASH        = accountsWithBalance
+    .filter(a => ['CHK', 'SAV', 'FX'].includes(a.type))
+    .reduce((s, a) => s + (a.ccy === 'USD' ? a.balance : a.balance * 1.08), 0);
+  const NW_DELTA    = accountsWithBalance.reduce((s, a) => s + (a.ccy === 'USD' ? a.delta : a.delta * 1.08), 0);
+
+  const HERO_METRICS = [
+    { key: 'nw',    label: 'NET WORTH',      value: NET_WORTH,   delta: NW_DELTA, deltaPct: NET_WORTH ? (NW_DELTA / Math.abs(NET_WORTH - NW_DELTA)) * 100 : 0, spark: SPARK_NW,                       ccy: 'USD' },
+    { key: 'spend', label: 'MONTH SPENDING', value: MONTH_SPEND, delta: 0,        deltaPct: 0,                                                                   spark: SPARK_SPEND, ccy: 'USD', invert: true },
+    { key: 'cash',  label: 'CASH ON HAND',   value: CASH,        delta: 0,        deltaPct: 0,                                                                   spark: SPARK_NW.map(v => v * 0.12),   ccy: 'USD' },
+    { key: 'safe',  label: 'SAFE TO SPEND',  value: CASH / 30,   delta: 0,        deltaPct: 0,                                                                   spark: SPARK_NW.map(v => v * 0.0006), ccy: 'USD', unit: '/ DAY' },
+  ];
+
   const [heroIdx, setHeroIdx] = React.useState(0);
   const [scrub, setScrub] = React.useState(null);
   const hero = HERO_METRICS[heroIdx];
   const accent = hero.invert ? (scrub != null ? A.neg : A.ink) : t.accent;
   const displayVal = scrub != null ? hero.spark[scrub] : hero.value;
-  const dateLbl = scrub != null ? dayLabel(29 - scrub) : 'MAY 11 · 2026';
+  const dateLbl = scrub != null
+    ? (() => { const d = new Date(); d.setDate(d.getDate() - (29 - scrub)); return d.toLocaleDateString('en-US', { month: 'short', day: '2-digit' }).toUpperCase(); })()
+    : todayLabel;
 
   return (
     <div style={{ padding: '0 18px 20px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0 6px' }}>
         <div style={{ fontSize: 12, letterSpacing: 2, fontWeight: 700 }}>LEDGER</div>
-        <div style={{ fontSize: 10, letterSpacing: 1.2, color: A.ink2 }}>11 MAY · 2026</div>
+        <div style={{ fontSize: 10, letterSpacing: 1.2, color: A.ink2 }}>{todayLabel}</div>
       </div>
       <ARule thick />
 
@@ -51,10 +75,10 @@ export default function Home({ t, onAcct, onAddTx, onViewAll }) {
 
       {/* Accounts mini-list */}
       <div style={{ padding: '14px 0 6px', display: 'flex', justifyContent: 'space-between' }}>
-        <ALabel>[02] ACCOUNTS · 8</ALabel>
+        <ALabel>[02] ACCOUNTS · {accountsWithBalance.length}</ALabel>
         <div onClick={onViewAll} style={{ fontSize: 10, letterSpacing: 1.2, color: A.ink, cursor: 'pointer' }}>VIEW ALL ▸</div>
       </div>
-      {ACCOUNTS.slice(0, 5).map(a => (
+      {accountsWithBalance.slice(0, 5).map(a => (
         <button key={a.id} onClick={() => onAcct(a.id)} style={{
           all: 'unset', cursor: 'pointer', display: 'flex', alignItems: 'center',
           justifyContent: 'space-between', width: '100%',
@@ -67,8 +91,8 @@ export default function Home({ t, onAcct, onAddTx, onViewAll }) {
             <span style={{ fontSize: 10, color: A.muted }}>{a.code}</span>
           </div>
           <div style={{ textAlign: 'right' }}>
-            <div style={{ fontSize: 13, fontVariantNumeric: 'tabular-nums', color: a.bal < 0 ? A.neg : A.ink }}>
-              {fmtMoney(a.bal, a.ccy, t.decimals)}
+            <div style={{ fontSize: 13, fontVariantNumeric: 'tabular-nums', color: a.balance < 0 ? A.neg : A.ink }}>
+              {fmtMoney(a.balance, a.ccy, t.decimals)}
             </div>
             <div style={{ fontSize: 9, color: a.delta < 0 ? A.neg : t.accent }}>
               {fmtSigned(a.delta, a.ccy, t.decimals)}
