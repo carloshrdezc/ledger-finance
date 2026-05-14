@@ -39,13 +39,16 @@ export default function ImportExport({ onClose }) {
       } else if (ext === 'mmbak') {
         const data = await parseMMBAK(text, buffer);
         if (data.isLedgerBackup) {
+          if (data.accounts?.length) store.setAccounts(data.accounts);
           if (data.transactions) store.setTransactions(data.transactions);
           if (data.categoryTree) store.setCategoryTree(data.categoryTree);
           if (data.budgets) store.setBudgets(data.budgets);
           setStatus({ ok: true, msg: `Backup restored · ${data.transactions?.length ?? 0} transactions` });
         } else {
+          if (data.accounts?.length) store.setAccounts(data.accounts);
           store.addTransactions(data.transactions);
-          setStatus({ ok: true, msg: `Imported ${data.transactions.length} transactions from MoneyMoney` });
+          const acctNote = data.accounts?.length ? ` · ${data.accounts.length} accounts` : '';
+          setStatus({ ok: true, msg: `Imported ${data.transactions.length} transactions${acctNote} from MoneyMoney` });
         }
       } else {
         setStatus({ ok: false, msg: 'Unsupported format — use .qif, .csv, or .mmbak' });
