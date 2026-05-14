@@ -2,14 +2,16 @@ import React from 'react';
 import { A } from '../../theme';
 import { ALabel } from '../../components/Shared';
 import WebShell from './WebShell';
-import { TRANSACTIONS, MERCHANTS, MOM_SPEND, CATEGORY_TREE, fmtMoney, fmtSigned } from '../../data';
+import { MERCHANTS, MOM_SPEND, fmtMoney, fmtSigned } from '../../data';
+import { useStore } from '../../store';
 
 export default function WebReports({ t, onNavigate }) {
-  const total = TRANSACTIONS.filter(x => x.amt < 0)
+  const { transactions, categoryTree } = useStore();
+  const total = transactions.filter(x => x.amt < 0)
     .reduce((s, x) => s + Math.abs(x.ccy === 'USD' ? x.amt : x.amt * 1.08), 0);
 
   const byCat = {};
-  TRANSACTIONS.filter(x => x.amt < 0).forEach(x => {
+  transactions.filter(x => x.amt < 0).forEach(x => {
     const k = (x.path || [x.cat])[0];
     byCat[k] = (byCat[k] || 0) + Math.abs(x.ccy === 'USD' ? x.amt : x.amt * 1.08);
   });
@@ -17,7 +19,7 @@ export default function WebReports({ t, onNavigate }) {
   const maxCat = cats[0] ? cats[0][1] : 1;
 
   const cells = Array.from({ length: 30 }, (_, i) =>
-    TRANSACTIONS.filter(x => x.d === i && x.amt < 0).reduce((s, x) => s + Math.abs(x.amt), 0)
+    transactions.filter(x => x.d === i && x.amt < 0).reduce((s, x) => s + Math.abs(x.amt), 0)
   );
   const cellMax = Math.max(...cells, 1);
 
@@ -66,7 +68,7 @@ export default function WebReports({ t, onNavigate }) {
           <ALabel>[03] SPEND · BY · CATEGORY</ALabel>
           <div style={{ marginTop: 12, borderTop: '2px solid ' + A.ink }}>
             {cats.map(([k, v]) => {
-              const c = CATEGORY_TREE[k] || { label: k, glyph: '·' };
+              const c = categoryTree[k] || { label: k, glyph: '·' };
               return (
                 <div key={k} style={{ padding: '11px 0', borderBottom: '1px solid ' + A.rule2 }}>
                   <div style={{ display: 'grid', gridTemplateColumns: '20px 1fr 80px 60px', alignItems: 'center', gap: 8 }}>

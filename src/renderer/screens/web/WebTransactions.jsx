@@ -2,13 +2,15 @@ import React from 'react';
 import { A } from '../../theme';
 import { ALabel } from '../../components/Shared';
 import WebShell from './WebShell';
-import { TRANSACTIONS, ACCOUNTS, fmtMoney, fmtSigned, dayLabel, catGlyph, catBreadcrumb } from '../../data';
+import { ACCOUNTS, fmtMoney, fmtSigned, dayLabel, catGlyph, catBreadcrumb } from '../../data';
+import { useStore } from '../../store';
 
 export default function WebTransactions({ t, onNavigate }) {
+  const { transactions } = useStore();
   const [filter, setFilter] = React.useState('ALL');
   const [search, setSearch] = React.useState('');
 
-  const visible = TRANSACTIONS.filter(x => {
+  const visible = transactions.filter(x => {
     if (filter !== 'ALL') {
       if (filter === 'EXP' && x.amt >= 0) return false;
       if (filter === 'INC' && x.amt < 0) return false;

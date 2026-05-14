@@ -2,17 +2,20 @@ import React from 'react';
 import { A } from '../../theme';
 import { AsciiSpark, ARule, ALabel, ADetailCell } from '../../components/Shared';
 import {
-  ACCOUNTS, TRANSACTIONS, GOALS, BILLS, MERCHANTS, MOM_SPEND, CATEGORY_TREE,
+  ACCOUNTS, GOALS, BILLS, MERCHANTS, MOM_SPEND,
   fmtMoney, fmtSigned, fmtPct, dayLabel, catBreadcrumb,
 } from '../../data';
+import { useStore } from '../../store';
+import ImportExport from '../../components/ImportExport';
 
 // ── Reports ──────────────────────────────────────────────────────────────────
 export function Reports({ t, onBack }) {
+  const { transactions, categoryTree } = useStore();
   const [period, setPeriod] = React.useState('30D');
-  const total = TRANSACTIONS.filter(x => x.amt < 0)
+  const total = transactions.filter(x => x.amt < 0)
     .reduce((s, x) => s + Math.abs(x.ccy === 'USD' ? x.amt : x.amt * 1.08), 0);
   const byCat = {};
-  TRANSACTIONS.filter(x => x.amt < 0).forEach(x => {
+  transactions.filter(x => x.amt < 0).forEach(x => {
     const k = (x.path || [x.cat])[0];
     byCat[k] = (byCat[k] || 0) + Math.abs(x.ccy === 'USD' ? x.amt : x.amt * 1.08);
   });
@@ -71,7 +74,7 @@ export function Reports({ t, onBack }) {
       <ARule style={{ marginTop: 14 }} />
       <div style={{ padding: '14px 0 4px' }}><ALabel>[03] TOP · CATEGORIES</ALabel></div>
       {cats.map(([k, v]) => {
-        const c = CATEGORY_TREE[k] || { label: k, glyph: '·' };
+        const c = categoryTree[k] || { label: k, glyph: '·' };
         return (
           <div key={k} style={{ padding: '10px 0', borderBottom: '1px solid ' + A.rule2 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
@@ -120,8 +123,9 @@ export function Reports({ t, onBack }) {
 
 // ── Reports Calendar ──────────────────────────────────────────────────────────
 export function ReportsCalendar({ t, onBack }) {
+  const { transactions } = useStore();
   const cells = Array.from({ length: 30 }, (_, i) => {
-    return TRANSACTIONS.filter(x => x.d === i && x.amt < 0).reduce((s, x) => s + Math.abs(x.amt), 0);
+    return transactions.filter(x => x.d === i && x.amt < 0).reduce((s, x) => s + Math.abs(x.amt), 0);
   });
   const max = Math.max(...cells, 1);
   const total = cells.reduce((a, b) => a + b, 0);
@@ -177,9 +181,10 @@ export function ReportsCalendar({ t, onBack }) {
 
 // ── Credit Card Detail ────────────────────────────────────────────────────────
 export function CCDetail({ t, onBack }) {
+  const { transactions } = useStore();
   const a = ACCOUNTS.find(x => x.id === 'amex');
   const limit = 10000, used = Math.abs(a.bal), util = used / limit;
-  const txns = TRANSACTIONS.filter(x => x.acct === 'amex').slice(0, 8);
+  const txns = transactions.filter(x => x.acct === 'amex').slice(0, 8);
 
   return (
     <div style={{ padding: '0 18px 20px' }}>
@@ -405,12 +410,12 @@ export function BillsHub({ t, onBack }) {
 
 // ── Settings ──────────────────────────────────────────────────────────────────
 export function Settings({ t, onBack, onNavigate }) {
+  const [showIO, setShowIO] = React.useState(false);
   const groups = [
     { title: 'PROFILE', rows: [['ACCOUNT', 'm@example.com', null], ['CURRENCY', 'USD · €, £ ALSO', null], ['NOTIFICATIONS', 'ON · 4', null]] },
-    { title: 'DATA', rows: [['LINKED · INSTITUTIONS', '8', null], ['CATEGORIES', 'EDIT ▸', 'categories'], ['AUTOMATIC · RULES', '12 ACTIVE', null]] },
+    { title: 'DATA', rows: [['LINKED · INSTITUTIONS', '8', null], ['CATEGORIES', 'EDIT ▸', 'categories'], ['IMPORT · EXPORT', '⇅', 'io'], ['AUTOMATIC · RULES', '12 ACTIVE', null]] },
     { title: 'BUDGETS', rows: [['BUDGET · PERIOD', 'MONTHLY · 1 → 31', null], ['ROLLOVER', 'OFF', null], ['ALERTS', '80% · LIMIT', null]] },
     { title: 'SECURITY', rows: [['FACE · ID', 'ON', null], ['PASSCODE', 'SET', null], ['SESSIONS', '2 DEVICES', null]] },
-    { title: 'EXPORT', rows: [['CSV · TRANSACTIONS', '↓', null], ['OFX · 30 DAYS', '↓', null], ['PDF · STATEMENT', '↓', null]] },
     { title: 'ABOUT', rows: [['VERSION', 'v1.0 · 11 MAY 26', null], ['HELP', '▸', null], ['LICENSE', 'GPL · 3.0', null]] },
   ];
 
@@ -427,7 +432,7 @@ export function Settings({ t, onBack, onNavigate }) {
           <div style={{ marginTop: 6 }}>
             {g.rows.map(([k, v, action], i) => (
               <button key={i}
-                onClick={() => action && onNavigate(action)}
+                onClick={() => action === 'io' ? setShowIO(true) : (action && onNavigate(action))}
                 style={{ all: 'unset', cursor: action ? 'pointer' : 'default', display: 'block', width: '100%' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '11px 0', borderBottom: '1px solid ' + A.rule2 }}>
                   <span style={{ fontSize: 12 }}>{k}</span>
@@ -438,24 +443,24 @@ export function Settings({ t, onBack, onNavigate }) {
           </div>
         </div>
       ))}
+      {showIO && <ImportExport onClose={() => setShowIO(false)} />}
     </div>
   );
 }
 
 // ── Categories Editor ─────────────────────────────────────────────────────────
 export function CategoriesEditor({ t, onBack }) {
+  const { categoryTree, addCategory } = useStore();
   const [expanded, setExpanded] = React.useState({ edu: true, 'edu.school': true, 'edu.school.supplies': true });
   const [adding, setAdding] = React.useState(null);
   const [newName, setNewName] = React.useState('');
-  const [extras, setExtras] = React.useState({});
 
   const toggle = k => setExpanded(e => ({ ...e, [k]: !e[k] }));
 
   const renderNode = (key, node, path, depth) => {
     const id = path.join('.');
     const children = node.children || {};
-    const extraKids = extras[id] || [];
-    const hasKids = Object.keys(children).length + extraKids.length > 0;
+    const hasKids = Object.keys(children).length > 0;
     const isOpen = expanded[id];
     return (
       <div key={id}>
@@ -477,7 +482,7 @@ export function CategoriesEditor({ t, onBack }) {
               placeholder="NEW · CATEGORY"
               onKeyDown={e => {
                 if (e.key === 'Enter' && newName.trim()) {
-                  setExtras(x => ({ ...x, [id]: [...(x[id] || []), { name: newName.trim().toUpperCase() }] }));
+                  addCategory(path, newName.trim().toUpperCase());
                   setExpanded(e => ({ ...e, [id]: true }));
                   setNewName(''); setAdding(null);
                 }
@@ -489,12 +494,7 @@ export function CategoriesEditor({ t, onBack }) {
               style={{ all: 'unset', cursor: 'pointer', fontSize: 10, color: A.muted }}>×</button>
           </div>
         )}
-        {isOpen && (
-          <>
-            {Object.entries(children).map(([k, n]) => renderNode(k, n, [...path, k], depth + 1))}
-            {extraKids.map((c, i) => renderNode('x' + i, { label: c.name }, [...path, 'x' + i], depth + 1))}
-          </>
-        )}
+        {isOpen && Object.entries(children).map(([k, n]) => renderNode(k, n, [...path, k], depth + 1))}
       </div>
     );
   };
@@ -514,7 +514,7 @@ export function CategoriesEditor({ t, onBack }) {
       </div>
       <ARule />
       <div style={{ marginTop: 4 }}>
-        {Object.entries(CATEGORY_TREE).map(([k, n]) => renderNode(k, n, [k], 0))}
+        {Object.entries(categoryTree).map(([k, n]) => renderNode(k, n, [k], 0))}
       </div>
       <div style={{ marginTop: 16, padding: '12px', border: '1.5px dashed ' + A.ink, fontSize: 10, color: A.muted, letterSpacing: 1, textAlign: 'center', cursor: 'pointer' }}>
         + ADD · TOP · LEVEL · CATEGORY

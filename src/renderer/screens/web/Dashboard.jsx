@@ -3,12 +3,14 @@ import { A } from '../../theme';
 import { AsciiSpark, ARule, ALabel } from '../../components/Shared';
 import WebShell from './WebShell';
 import {
-  ACCOUNTS, TRANSACTIONS, BUDGETS, BILLS, CATEGORIES,
+  ACCOUNTS, BILLS, CATEGORIES,
   NET_WORTH, SPARK_NW,
   fmtMoney, fmtSigned, fmtPct, dayLabel, catGlyph,
 } from '../../data';
+import { useStore } from '../../store';
 
 export default function Dashboard({ t, onNavigate }) {
+  const { transactions, budgets } = useStore();
   const [scrub, setScrub] = React.useState(null);
   const heroVal = scrub != null ? SPARK_NW[scrub] : NET_WORTH;
 
@@ -74,7 +76,7 @@ export default function Dashboard({ t, onNavigate }) {
         <div>
           <ALabel>[03] MAY · BUDGETS</ALabel>
           <div style={{ marginTop: 8, borderTop: '2px solid ' + A.ink }}>
-            {BUDGETS.slice(0, 5).map(b => {
+            {budgets.slice(0, 5).map(b => {
               const pct = Math.min(b.spent / b.limit, 1.2);
               const over = b.spent > b.limit;
               return (
@@ -109,7 +111,7 @@ export default function Dashboard({ t, onNavigate }) {
       <div style={{ marginTop: 28 }}>
         <ALabel>[05] RECENT · TRANSACTIONS</ALabel>
         <div style={{ marginTop: 8, borderTop: '2px solid ' + A.ink }}>
-          {TRANSACTIONS.slice(0, 8).map(tx => (
+          {transactions.slice(0, 8).map(tx => (
             <div key={tx.id} style={{ display: 'grid', gridTemplateColumns: '80px 16px 1fr 100px 100px', padding: t.density === 'compact' ? '7px 0' : '9px 0', fontSize: 11, borderBottom: '1px solid ' + A.rule2, alignItems: 'center' }}>
               <div style={{ fontSize: 9, color: A.muted, letterSpacing: 1 }}>{dayLabel(tx.d)}</div>
               <div>{catGlyph(tx.path || [tx.cat])}</div>

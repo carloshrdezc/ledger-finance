@@ -1,6 +1,8 @@
 import React from 'react';
 import { A } from './theme';
 import { ALabel } from './components/Shared';
+import { StoreProvider } from './store';
+import ImportExport from './components/ImportExport';
 
 // Mobile screens
 import Home from './screens/mobile/Home';
@@ -31,10 +33,23 @@ const ACCENTS = [
   { label: 'SLATE',  val: '#2f4858' },
 ];
 
+function useLS(key, def) {
+  const [v, setV] = React.useState(() => {
+    try { const s = localStorage.getItem(key); return s !== null ? JSON.parse(s) : def; }
+    catch { return def; }
+  });
+  const set = React.useCallback(u => setV(prev => {
+    const next = typeof u === 'function' ? u(prev) : u;
+    try { localStorage.setItem(key, JSON.stringify(next)); } catch {}
+    return next;
+  }), [key]);
+  return [v, set];
+}
+
 function useTweaks() {
-  const [accent, setAccent] = React.useState(ACCENTS[0].val);
-  const [density, setDensity] = React.useState('comfortable');
-  const [decimals, setDecimals] = React.useState(true);
+  const [accent, setAccent]   = useLS('ledger:accent',   ACCENTS[0].val);
+  const [density, setDensity] = useLS('ledger:density',  'comfortable');
+  const [decimals, setDecimals] = useLS('ledger:decimals', true);
   return { accent, setAccent, density, setDensity, decimals, setDecimals };
 }
 
@@ -196,6 +211,7 @@ function MobileApp({ t, setAccent, setDensity, setDecimals }) {
 function DesktopApp({ t, setAccent, setDensity, setDecimals }) {
   const [page, setPage] = React.useState('dashboard');
   const [showTweaks, setShowTweaks] = React.useState(false);
+  const [showIO, setShowIO] = React.useState(false);
 
   const props = { t, onNavigate: setPage };
 
@@ -214,16 +230,12 @@ function DesktopApp({ t, setAccent, setDensity, setDecimals }) {
     <div style={{ height: '100%', background: A.bg, fontFamily: A.font, position: 'relative' }}>
       {renderPage()}
 
-      <button onClick={() => setShowTweaks(v => !v)} style={{
-        position: 'fixed', bottom: 20, right: 20, zIndex: 500,
-        all: 'unset', cursor: 'pointer',
-        width: 36, height: 36,
-        border: '1.5px solid ' + A.ink,
-        background: A.bg,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontSize: 14, color: A.ink,
-      }}>⚙</button>
+      <div style={{ position: 'fixed', bottom: 20, right: 20, zIndex: 500, display: 'flex', gap: 8 }}>
+        <button onClick={() => setShowIO(v => !v)} style={{ all: 'unset', cursor: 'pointer', width: 36, height: 36, border: '1.5px solid ' + A.ink, background: A.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, color: A.ink }}>⇅</button>
+        <button onClick={() => setShowTweaks(v => !v)} style={{ all: 'unset', cursor: 'pointer', width: 36, height: 36, border: '1.5px solid ' + A.ink, background: A.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, color: A.ink }}>⚙</button>
+      </div>
 
+      {showIO && <ImportExport onClose={() => setShowIO(false)} />}
       {showTweaks && (
         <TweaksPanel t={t} setAccent={setAccent} setDensity={setDensity} setDecimals={setDecimals} onClose={() => setShowTweaks(false)} />
       )}
@@ -246,7 +258,11 @@ export default function App() {
   const t = { accent, density, decimals };
   const tweakProps = { setAccent, setDensity, setDecimals };
 
-  return isMobile
-    ? <MobileApp t={t} {...tweakProps} />
-    : <DesktopApp t={t} {...tweakProps} />;
+  return (
+    <StoreProvider>
+      {isMobile
+        ? <MobileApp t={t} {...tweakProps} />
+        : <DesktopApp t={t} {...tweakProps} />}
+    </StoreProvider>
+  );
 }

@@ -1,7 +1,8 @@
 import React from 'react';
 import { A } from '../../theme';
 import { ARule, ALabel, ADetailCell } from '../../components/Shared';
-import { ACCOUNTS, TRANSACTIONS, NET_WORTH, fmtMoney, fmtSigned, dayLabel, catBreadcrumb } from '../../data';
+import { ACCOUNTS, NET_WORTH, fmtMoney, fmtSigned, dayLabel, catBreadcrumb } from '../../data';
+import { useStore } from '../../store';
 
 export function Accounts({ t, onAcct }) {
   const groups = [
@@ -56,8 +57,9 @@ export function Accounts({ t, onAcct }) {
 }
 
 export function AccountDetail({ t, accountId, onBack }) {
+  const { transactions } = useStore();
   const a = ACCOUNTS.find(x => x.id === accountId) || ACCOUNTS[0];
-  const txns = TRANSACTIONS.filter(x => x.acct === a.id).slice(0, 10);
+  const txns = transactions.filter(x => x.acct === a.id).slice(0, 10);
 
   return (
     <div style={{ padding: '0 18px 20px' }}>

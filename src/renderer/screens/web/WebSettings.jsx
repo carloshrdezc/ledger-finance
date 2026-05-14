@@ -2,21 +2,22 @@ import React from 'react';
 import { A } from '../../theme';
 import { ALabel } from '../../components/Shared';
 import WebShell from './WebShell';
-import { CATEGORY_TREE } from '../../data';
+import { useStore } from '../../store';
+import ImportExport from '../../components/ImportExport';
 
 export default function WebSettings({ t, onNavigate }) {
+  const { categoryTree, addCategory } = useStore();
   const [expanded, setExpanded] = React.useState({ edu: true, 'edu.school': true, 'edu.school.supplies': true, food: true });
   const [adding, setAdding] = React.useState(null);
   const [newName, setNewName] = React.useState('');
-  const [extras, setExtras] = React.useState({});
+  const [showIO, setShowIO] = React.useState(false);
 
   const toggle = k => setExpanded(e => ({ ...e, [k]: !e[k] }));
 
   const renderNode = (key, node, path, depth) => {
     const id = path.join('.');
     const children = node.children || {};
-    const extraKids = extras[id] || [];
-    const hasKids = Object.keys(children).length + extraKids.length > 0;
+    const hasKids = Object.keys(children).length > 0;
     const isOpen = expanded[id];
     return (
       <div key={id}>
@@ -40,7 +41,7 @@ export default function WebSettings({ t, onNavigate }) {
               placeholder="NEW · SUB · CATEGORY"
               onKeyDown={e => {
                 if (e.key === 'Enter' && newName.trim()) {
-                  setExtras(x => ({ ...x, [id]: [...(x[id] || []), { name: newName.trim().toUpperCase() }] }));
+                  addCategory(path, newName.trim().toUpperCase());
                   setExpanded(e => ({ ...e, [id]: true }));
                   setNewName(''); setAdding(null);
                 }
@@ -52,20 +53,21 @@ export default function WebSettings({ t, onNavigate }) {
               style={{ all: 'unset', cursor: 'pointer', fontSize: 10, color: A.muted, letterSpacing: 1 }}>× CANCEL</button>
           </div>
         )}
-        {isOpen && (
-          <>
-            {Object.entries(children).map(([k, n]) => renderNode(k, n, [...path, k], depth + 1))}
-            {extraKids.map((c, i) => renderNode('x' + i, { label: c.name }, [...path, 'x' + i], depth + 1))}
-          </>
-        )}
+        {isOpen && Object.entries(children).map(([k, n]) => renderNode(k, n, [...path, k], depth + 1))}
       </div>
     );
   };
 
   return (
     <WebShell active="settings" t={t} onNavigate={onNavigate}>
-      <ALabel>[01] SETTINGS</ALabel>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+        <ALabel>[01] SETTINGS</ALabel>
+        <button onClick={() => setShowIO(true)} style={{ all: 'unset', cursor: 'pointer', fontSize: 10, letterSpacing: 1.2, padding: '5px 12px', border: '1px solid ' + A.ink }}>
+          IMPORT · EXPORT ⇅
+        </button>
+      </div>
       <div style={{ fontSize: 36, letterSpacing: -1, marginTop: 8, fontWeight: 600 }}>Categories &amp; preferences</div>
+      {showIO && <ImportExport onClose={() => setShowIO(false)} />}
 
       <div style={{ marginTop: 24, display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: 40 }}>
         {/* Category tree */}
@@ -75,7 +77,7 @@ export default function WebSettings({ t, onNavigate }) {
             <span style={{ fontSize: 10, color: A.muted, letterSpacing: 1 }}>NEST AS DEEP AS YOU NEED · + ON ANY ROW</span>
           </div>
           <div style={{ marginTop: 12, borderTop: '2px solid ' + A.ink }}>
-            {Object.entries(CATEGORY_TREE).map(([k, n]) => renderNode(k, n, [k], 0))}
+            {Object.entries(categoryTree).map(([k, n]) => renderNode(k, n, [k], 0))}
           </div>
           <div style={{ marginTop: 16, padding: '10px 14px', border: '1.5px dashed ' + A.ink, fontSize: 10, color: A.ink2, letterSpacing: 1.2, textAlign: 'center', cursor: 'pointer' }}>
             + ADD · TOP · LEVEL · CATEGORY

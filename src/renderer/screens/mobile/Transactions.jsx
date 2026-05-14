@@ -1,11 +1,13 @@
 import React from 'react';
 import { A } from '../../theme';
 import { ARule, ALabel } from '../../components/Shared';
-import { TRANSACTIONS, ACCOUNTS, fmtMoney, fmtSigned, dayLabel, catGlyph, catBreadcrumb } from '../../data';
+import { ACCOUNTS, fmtMoney, fmtSigned, dayLabel, catGlyph, catBreadcrumb } from '../../data';
+import { useStore } from '../../store';
 
-export default function Transactions({ t, hidden, onSwipeHide, filter, setFilter }) {
-  const visible = TRANSACTIONS.filter(x => {
-    if (hidden.includes(x.id)) return false;
+export default function Transactions({ t }) {
+  const { transactions, hideTx } = useStore();
+  const [filter, setFilter] = React.useState('ALL');
+  const visible = transactions.filter(x => {
     if (filter === 'ALL') return true;
     if (filter === 'EXP') return x.amt < 0;
     if (filter === 'INC') return x.amt >= 0;
@@ -43,7 +45,7 @@ export default function Transactions({ t, hidden, onSwipeHide, filter, setFilter
             <ALabel>{fmtSigned(byDay[d].reduce((s, x) => s + x.amt, 0), 'USD', t.decimals)}</ALabel>
           </div>
           {byDay[d].map(tx => (
-            <SwipeRow key={tx.id} t={t} tx={tx} onHide={() => onSwipeHide(tx.id)} />
+            <SwipeRow key={tx.id} t={t} tx={tx} onHide={() => hideTx(tx.id)} />
           ))}
         </div>
       ))}
