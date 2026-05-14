@@ -1,0 +1,292 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Finance App — LEDGER</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600;700&display=swap" />
+  <style>
+    html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; background: #f0eee9; }
+    @keyframes aslide { from { transform: translateY(20px); opacity: 0 } to { transform: translateY(0); opacity: 1 } }
+    /* clean number inputs in onboarding etc. */
+    input { font-family: inherit; }
+  </style>
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel" src="design-canvas.jsx"></script>
+  <script type="text/babel" src="tweaks-panel.jsx"></script>
+  <script type="text/babel" src="app-data.jsx"></script>
+  <script type="text/babel" src="direction-a.jsx"></script>
+  <script type="text/babel" src="direction-a-screens.jsx"></script>
+  <script type="text/babel" src="direction-a-web.jsx"></script>
+
+  <script type="text/babel">
+    const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+      "accent": "#1f6b3a",
+      "density": "comfortable",
+      "decimals": true
+    }/*EDITMODE-END*/;
+
+    // ─── Minimal phone shell for the new screens on the canvas ─────────────
+    // Status bar + scrollable body. The `bottomTab` prop highlights one of the
+    // tabs so each artboard reads in-context. `noTabs` for onboarding-style
+    // flows where the chrome would be wrong.
+    function PhoneFrame({ children, t, bottomTab, noTabs, addLabel }) {
+      const A = window.A;
+      return (
+        <div style={{ width:'100%', height:'100%', background: A.bg, color: A.ink, fontFamily: A.font, position:'relative', overflow:'hidden' }}>
+          <div style={{ display:'flex', justifyContent:'space-between', padding:'12px 22px 4px', fontSize: 11, fontWeight: 600 }}>
+            <div>09:41</div>
+            <div style={{ letterSpacing: 1 }}>● ● ● ●</div>
+          </div>
+          <div style={{ height: noTabs ? 'calc(100% - 36px)' : 'calc(100% - 36px - 70px)', overflow:'auto' }}>
+            {children}
+          </div>
+          {!noTabs && <StaticTabs active={bottomTab} t={t} />}
+        </div>
+      );
+    }
+    function StaticTabs({ active, t }) {
+      const A = window.A;
+      const tabs = [
+        { k: 'home', l: 'HOME' },
+        { k: 'acct', l: 'ACCTS' },
+        { k: 'add',  l: '+', center: true },
+        { k: 'tx',   l: 'TX' },
+        { k: 'more', l: 'MORE' },
+      ];
+      return (
+        <div style={{ position:'absolute', left:0, right:0, bottom: 0, paddingBottom: 24, background: A.bg, borderTop: '2px solid ' + A.ink }}>
+          <div style={{ display:'flex', justifyContent:'space-around', padding:'10px 0 6px' }}>
+            {tabs.map(x => (
+              <div key={x.k} style={{
+                fontSize: x.center ? 18 : 10, letterSpacing: 1.4,
+                color: active === x.k ? A.ink : A.muted, fontWeight: active === x.k ? 700 : 400,
+                padding: '6px 10px',
+                border: x.center ? '1.5px solid ' + A.ink : 'none',
+                width: x.center ? 38 : 'auto', textAlign:'center',
+              }}>{x.l}</div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    function App() {
+      const [tweaks, setTweak] = useTweaks(TWEAK_DEFAULTS);
+      const t = { accent: tweaks.accent, density: tweaks.density, decimals: tweaks.decimals };
+
+      return (
+        <>
+          <DesignCanvas>
+            {/* Section 1 — intro */}
+            <DCSection id="intro" title="LEDGER · finance app" subtitle="Brutalist mono · IBM Plex · multi-currency · 11 May 2026">
+              <DCArtboard id="concept" label="Direction · LEDGER" width={620} height={300}>
+                <ConceptCard t={t} />
+              </DCArtboard>
+              <DCArtboard id="system" label="System · type, rules, palette" width={620} height={300}>
+                <SystemCard t={t} />
+              </DCArtboard>
+            </DCSection>
+
+            {/* Section 2 — core flow */}
+            <DCSection id="mobile-core" title="Mobile · core flow" subtitle="Tap hero to cycle metric · scrub chart · tap account to drill in · swipe rows · + to add">
+              <DCArtboard id="m-home" label="Home" width={390} height={844}>
+                <APhone t={t} />
+              </DCArtboard>
+              <DCArtboard id="m-accts" label="Accounts" width={390} height={844}>
+                <PhoneFrame t={t} bottomTab="acct"><AAccounts t={t} onAcct={()=>{}} /></PhoneFrame>
+              </DCArtboard>
+              <DCArtboard id="m-acct-detail" label="Account detail" width={390} height={844}>
+                <PhoneFrame t={t} bottomTab="acct"><AAccountDetail t={t} accountId="sav" onBack={()=>{}} /></PhoneFrame>
+              </DCArtboard>
+              <DCArtboard id="m-tx" label="Transactions · w/ nested paths" width={390} height={844}>
+                <PhoneFrame t={t} bottomTab="tx"><TxDemo t={t} /></PhoneFrame>
+              </DCArtboard>
+              <DCArtboard id="m-budgets" label="Budgets" width={390} height={844}>
+                <PhoneFrame t={t} bottomTab="more"><ABudgets t={t} /></PhoneFrame>
+              </DCArtboard>
+              <DCArtboard id="m-add" label="Add transaction · sheet" width={390} height={844}>
+                <PhoneFrame t={t} bottomTab="add"><AddDemo t={t} /></PhoneFrame>
+              </DCArtboard>
+            </DCSection>
+
+            {/* Section 3 — detail screens (new) */}
+            <DCSection id="mobile-detail" title="Mobile · detail & insights" subtitle="Deep screens for credit card, goals, reports">
+              <DCArtboard id="m-cc" label="Credit card · detail" width={390} height={844}>
+                <PhoneFrame t={t} bottomTab="acct"><ACCDetail t={t} onBack={()=>{}} /></PhoneFrame>
+              </DCArtboard>
+              <DCArtboard id="m-goal" label="Goal · detail + projection" width={390} height={844}>
+                <PhoneFrame t={t} bottomTab="more"><AGoalDetail t={t} goalId="g1" onBack={()=>{}} /></PhoneFrame>
+              </DCArtboard>
+              <DCArtboard id="m-reports" label="Reports · spending breakdown" width={390} height={844}>
+                <PhoneFrame t={t} bottomTab="more"><AReports t={t} /></PhoneFrame>
+              </DCArtboard>
+              <DCArtboard id="m-reports-cal" label="Reports · calendar variant" width={390} height={844}>
+                <PhoneFrame t={t} bottomTab="more"><AReportsCalendar t={t} /></PhoneFrame>
+              </DCArtboard>
+              <DCArtboard id="m-bills" label="Recurring · bills + subs" width={390} height={844}>
+                <PhoneFrame t={t} bottomTab="more"><ABillsHub t={t} /></PhoneFrame>
+              </DCArtboard>
+            </DCSection>
+
+            {/* Section 4 — settings & categories */}
+            <DCSection id="mobile-settings" title="Mobile · settings & nested categories" subtitle="The category tree is the highlight — tap + on any row to add a sub-category, arbitrarily deep">
+              <DCArtboard id="m-settings" label="Settings" width={390} height={844}>
+                <PhoneFrame t={t} bottomTab="more"><ASettings t={t} onOpenCategories={()=>{}} onLink={()=>{}} /></PhoneFrame>
+              </DCArtboard>
+              <DCArtboard id="m-cats" label="Categories · nested tree editor" width={390} height={844}>
+                <PhoneFrame t={t} bottomTab="more"><ACategoriesEditor t={t} onBack={()=>{}} /></PhoneFrame>
+              </DCArtboard>
+            </DCSection>
+
+            {/* Section 5 — onboarding */}
+            <DCSection id="onboarding" title="Onboarding · first-run flow" subtitle="Three steps: welcome · link · pick headline metric · click NEXT to advance">
+              <DCArtboard id="m-onb" label="Onboarding · 3 steps" width={390} height={844}>
+                <PhoneFrame t={t} noTabs><AOnboarding t={t} /></PhoneFrame>
+              </DCArtboard>
+            </DCSection>
+
+            {/* Section 6 — web */}
+            <DCSection id="web" title="Web companion · full surface" subtitle="Sidebar nav · same data expanded for desktop · pages for dashboard, transactions, reports, investments, settings (with the nested category tree)">
+              <DCArtboard id="w-dash" label="Dashboard" width={1180} height={820}>
+                <AWeb t={t} />
+              </DCArtboard>
+              <DCArtboard id="w-tx" label="Transactions · ledger" width={1180} height={820}>
+                <AWebTx t={t} />
+              </DCArtboard>
+              <DCArtboard id="w-reports" label="Reports · MoM + calendar + insights" width={1180} height={820}>
+                <AWebReports t={t} />
+              </DCArtboard>
+              <DCArtboard id="w-invest" label="Investments · holdings + allocation" width={1180} height={820}>
+                <AWebInvestments t={t} />
+              </DCArtboard>
+              <DCArtboard id="w-settings" label="Settings · nested category tree" width={1180} height={820}>
+                <AWebSettings t={t} />
+              </DCArtboard>
+            </DCSection>
+          </DesignCanvas>
+
+          <TweaksPanel title="Tweaks">
+            <TweakSection title="Accent">
+              <TweakColor
+                value={tweaks.accent}
+                onChange={(v) => setTweak('accent', v)}
+                options={['#1f6b3a', '#1d4ed8', '#d97757', '#15130f', '#a73a2c']} />
+            </TweakSection>
+            <TweakSection title="Density">
+              <TweakRadio
+                value={tweaks.density}
+                onChange={(v) => setTweak('density', v)}
+                options={[{ value: 'comfortable', label: 'Comfortable' }, { value: 'compact', label: 'Compact' }]} />
+            </TweakSection>
+            <TweakSection title="Decimals">
+              <TweakToggle
+                value={tweaks.decimals}
+                onChange={(v) => setTweak('decimals', v)}
+                label="Show cents" />
+            </TweakSection>
+          </TweaksPanel>
+        </>
+      );
+    }
+
+    // Small wrappers so detail screens have local state where needed.
+    function TxDemo({ t }) {
+      const [hidden, setHidden] = React.useState([]);
+      const [filter, setFilter] = React.useState('ALL');
+      return <ATransactions t={t} hidden={hidden} onSwipeHide={(id)=>setHidden(h=>[...h,id])} onCategorize={()=>{}} filter={filter} setFilter={setFilter} />;
+    }
+    function AddDemo({ t }) {
+      return (
+        <div style={{ position:'relative', height: '100%' }}>
+          <div style={{ filter: 'opacity(0.35)' }}>
+            <AHome t={t} onAcct={()=>{}} onAddTx={()=>{}} />
+          </div>
+          <AAddSheet t={t} open={true} onClose={()=>{}} />
+        </div>
+      );
+    }
+
+    function ConceptCard({ t }) {
+      const A = window.A;
+      return (
+        <div style={{ background: A.bg, color: A.ink, fontFamily: A.font, height: '100%', padding: '28px 36px', display:'flex', flexDirection:'column', gap: 16, boxSizing:'border-box' }}>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'baseline', borderBottom: '2px solid ' + A.ink, paddingBottom: 12 }}>
+            <div style={{ fontSize: 22, letterSpacing: 4, fontWeight: 700 }}>LEDGER<span style={{ color: t.accent }}>.</span></div>
+            <div style={{ fontSize: 10, letterSpacing: 1.6, color: A.muted }}>v1.0 · 11 MAY 26</div>
+          </div>
+          <div style={{ fontSize: 24, letterSpacing: -0.3, fontWeight: 500, lineHeight: 1.3, color: A.ink, maxWidth: 520 }}>
+            Paper-ledger discipline for a multi-currency life. Heavy rules, bracketed sections, every figure pinned to a grid. No noise.
+          </div>
+          <div style={{ marginTop: 'auto', display:'grid', gridTemplateColumns:'repeat(4, 1fr)', gap: 16 }}>
+            {[
+              ['SCREENS', '13'],
+              ['ACCOUNTS', '8 LIVE'],
+              ['CATEGORIES', '∞ NESTED'],
+              ['LANGUAGES', 'MULTI · FX'],
+            ].map(([k, v]) => (
+              <div key={k}>
+                <div style={{ fontSize: 9, color: A.muted, letterSpacing: 1.4 }}>{k}</div>
+                <div style={{ fontSize: 18, fontWeight: 500, marginTop: 4, fontVariantNumeric:'tabular-nums' }}>{v}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+    function SystemCard({ t }) {
+      const A = window.A;
+      return (
+        <div style={{ background: A.bg, color: A.ink, fontFamily: A.font, height: '100%', padding: '24px 32px', boxSizing:'border-box', display:'flex', flexDirection:'column', gap: 14 }}>
+          <div style={{ fontSize: 11, letterSpacing: 2, fontWeight: 700, borderBottom: '2px solid ' + A.ink, paddingBottom: 10 }}>SYSTEM</div>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap: 14, fontSize: 11 }}>
+            <div>
+              <div style={{ fontSize: 9, color: A.muted, letterSpacing: 1.4, marginBottom: 6 }}>TYPE</div>
+              <div style={{ fontSize: 24, fontWeight: 300 }}>$ 284,591.20</div>
+              <div style={{ fontSize: 14, fontWeight: 500, marginTop: 2 }}>IBM Plex Mono · 300 / 500 / 700</div>
+              <div style={{ fontSize: 10, color: A.muted, marginTop: 4 }}>TABULAR NUMS · TRACKING +1.2</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 9, color: A.muted, letterSpacing: 1.4, marginBottom: 6 }}>RULES</div>
+              <div style={{ height: 2, background: A.ink, marginBottom: 6 }} />
+              <div style={{ height: 1, background: A.ink, marginBottom: 6 }} />
+              <div style={{ height: 1, background: '#bdb6a3' }} />
+              <div style={{ fontSize: 10, color: A.muted, marginTop: 6, letterSpacing: 1 }}>2 PX · 1 PX · #BDB6A3</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 9, color: A.muted, letterSpacing: 1.4, marginBottom: 6 }}>PALETTE</div>
+              <div style={{ display:'flex', gap: 4 }}>
+                {[['BG', '#f4f1ea'], ['INK', '#15130f'], ['MUTED', '#8c8678'], ['ACCENT', t.accent], ['NEG', 'oklch(52% 0.17 25)']].map(([k, c]) => (
+                  <div key={k} style={{ flex: 1 }}>
+                    <div style={{ height: 36, background: c, border: '1px solid ' + A.rule }} />
+                    <div style={{ fontSize: 8, marginTop: 4, color: A.muted, letterSpacing: 1, textAlign:'center' }}>{k}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div>
+              <div style={{ fontSize: 9, color: A.muted, letterSpacing: 1.4, marginBottom: 6 }}>CATEGORY · PATHS</div>
+              <div style={{ fontSize: 10, lineHeight: 1.7, letterSpacing: 0.4 }}>
+                EDUCATION › SCHOOL › SUPPLIES › PENCILS<br/>
+                FOOD › PRODUCE<br/>
+                SUBS › MEDIA<br/>
+                <span style={{ color: A.muted }}>NEST AS DEEP AS YOU NEED</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
