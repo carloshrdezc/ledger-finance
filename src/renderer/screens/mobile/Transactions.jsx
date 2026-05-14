@@ -14,9 +14,9 @@ export default function Transactions({ t }) {
     return x.cat === filter.toLowerCase();
   });
 
-  const byDay = {};
-  visible.forEach(tx => { (byDay[tx.d] = byDay[tx.d] || []).push(tx); });
-  const days = Object.keys(byDay).map(Number).sort((a, b) => a - b);
+  const byDate = {};
+  visible.forEach(tx => { (byDate[tx.date] = byDate[tx.date] || []).push(tx); });
+  const dates = Object.keys(byDate).sort((a, b) => b.localeCompare(a));
 
   return (
     <div style={{ padding: '0 18px 20px' }}>
@@ -38,13 +38,13 @@ export default function Transactions({ t }) {
           }}>{f}</button>
         ))}
       </div>
-      {days.map(d => (
-        <div key={d}>
+      {dates.map(date => (
+        <div key={date}>
           <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0 4px', borderTop: '1px solid ' + A.rule2 }}>
-            <ALabel>{dayLabel(d)}</ALabel>
-            <ALabel>{fmtSigned(byDay[d].reduce((s, x) => s + x.amt, 0), 'USD', t.decimals)}</ALabel>
+            <ALabel>{dayLabel(date)}</ALabel>
+            <ALabel>{fmtSigned(byDate[date].reduce((s, x) => s + x.amt, 0), 'USD', t.decimals)}</ALabel>
           </div>
-          {byDay[d].map(tx => (
+          {byDate[date].map(tx => (
             <SwipeRow key={tx.id} t={t} tx={tx} onHide={() => hideTx(tx.id)} />
           ))}
         </div>
