@@ -3,16 +3,19 @@ import { A } from '../../theme';
 import { ARule, ALabel } from '../../components/Shared';
 import { CATEGORIES } from '../../data';
 import { useStore } from '../../store';
+import { getDaysInPeriod } from '../../period.mjs';
 
 export default function AddSheet({ t, onClose, editTx = null }) {
-  const { addTransactions, updateTx, deleteTx, accountsWithBalance } = useStore();
+  const { addTransactions, updateTx, deleteTx, accountsWithBalance, selectedPeriod } = useStore();
+  const defaultDay = Math.min(new Date().getDate(), getDaysInPeriod(selectedPeriod));
+  const defaultDate = `${selectedPeriod}-${String(defaultDay).padStart(2, '0')}`;
 
   const [amt, setAmt]           = React.useState(editTx ? String(Math.abs(editTx.amt)) : '');
   const [merchant, setMerchant] = React.useState(editTx ? editTx.name : '');
   const [isExpense, setIsExpense] = React.useState(editTx ? editTx.amt < 0 : true);
   const [cat, setCat]           = React.useState(editTx ? (editTx.cat || editTx.path?.[0] || 'dining') : 'dining');
   const [acct, setAcct]         = React.useState(editTx ? editTx.acct : (accountsWithBalance[0]?.id || 'chk'));
-  const [date, setDate]         = React.useState(editTx ? editTx.date : new Date().toISOString().slice(0, 10));
+  const [date, setDate]         = React.useState(editTx ? editTx.date : defaultDate);
 
   const canSave = amt && parseFloat(amt) > 0 && merchant.trim();
 

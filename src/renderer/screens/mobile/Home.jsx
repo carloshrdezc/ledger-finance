@@ -1,11 +1,11 @@
 ﻿import React from 'react';
 import { A } from '../../theme';
 import { AsciiSpark, ARule, ALabel } from '../../components/Shared';
-import { BILLS, SPARK_NW, SPARK_SPEND, fmtMoney, fmtSigned, fmtPct } from '../../data';
+import { SPARK_NW, SPARK_SPEND, fmtMoney, fmtSigned, fmtPct } from '../../data';
 import { useStore } from '../../store';
 
 export default function Home({ t, onAcct, onAddTx, onViewAll }) {
-  const { accountsWithBalance, transactions } = useStore();
+  const { accountsWithBalance, transactions, billRows } = useStore();
   const now = new Date();
   const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   const todayLabel = now.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }).toUpperCase();
@@ -125,10 +125,10 @@ export default function Home({ t, onAcct, onAddTx, onViewAll }) {
       {/* Upcoming */}
       <div style={{ padding: '14px 0 0' }}>
         <ALabel>[04] UPCOMING · 7 DAYS</ALabel>
-        {BILLS.slice(0, 3).map((b, i) => (
-          <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '9px 0', borderBottom: '1px solid ' + A.rule2, fontSize: 12 }}>
+        {billRows.filter(b => b.status !== 'paid').slice(0, 3).map(b => (
+          <div key={b.key} style={{ display: 'flex', justifyContent: 'space-between', padding: '9px 0', borderBottom: '1px solid ' + A.rule2, fontSize: 12 }}>
             <div style={{ display: 'flex', gap: 10 }}>
-              <span style={{ color: A.muted, width: 24 }}>{String(b.day).padStart(2, '0')}</span>
+              <span style={{ color: b.status === 'upcoming' ? A.muted : A.neg, width: 24 }}>{b.dueDate.slice(8)}</span>
               <span style={{ fontWeight: 500 }}>{b.name}</span>
             </div>
             <div style={{ fontVariantNumeric: 'tabular-nums' }}>{fmtMoney(b.amt, 'USD', t.decimals)}</div>

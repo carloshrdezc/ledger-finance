@@ -1,11 +1,17 @@
 import React from 'react';
 import { A } from '../../theme';
 import { ARule, ALabel } from '../../components/Shared';
-import { BUDGETS, CATEGORIES, fmtMoney } from '../../data';
+import PeriodSwitcher from '../../components/PeriodSwitcher';
+import { CATEGORIES, fmtMoney } from '../../data';
+import { useStore } from '../../store';
+import { getDaysInPeriod } from '../../period.mjs';
 
 export default function Budgets({ t }) {
-  const totalSpent = BUDGETS.reduce((s, b) => s + b.spent, 0);
-  const totalLimit = BUDGETS.reduce((s, b) => s + b.limit, 0);
+  const { budgetRows, periodLabel, selectedPeriod } = useStore();
+  const totalSpent = budgetRows.reduce((s, b) => s + b.spent, 0);
+  const totalLimit = budgetRows.reduce((s, b) => s + b.limit, 0);
+  const totalAvailable = budgetRows.reduce((s, b) => s + b.available, 0);
+  const dayCount = getDaysInPeriod(selectedPeriod);
 
   return (
     <div style={{ padding: '0 18px 20px' }}>
@@ -13,19 +19,22 @@ export default function Budgets({ t }) {
         <div style={{ fontSize: 12, letterSpacing: 2, fontWeight: 700 }}>BUDGETS</div>
       </div>
       <ARule thick />
-      <div style={{ padding: '14px 0 8px' }}>
-        <ALabel>MAY · {Math.round(totalSpent)} / {totalLimit}</ALabel>
+      <div style={{ padding: '12px 0 2px' }}>
+        <PeriodSwitcher compact />
+      </div>
+      <div style={{ padding: '12px 0 8px' }}>
+        <ALabel>{periodLabel} · {Math.round(totalSpent)} / {Math.round(totalAvailable)}</ALabel>
         <div style={{ fontSize: 32, fontVariantNumeric: 'tabular-nums', letterSpacing: -1, marginTop: 4 }}>
           {fmtMoney(totalSpent, 'USD', t.decimals)}
         </div>
         <div style={{ fontSize: 11, color: A.muted, marginTop: 2 }}>
-          of {fmtMoney(totalLimit, 'USD', false)} · day 11 / 31
+          of {fmtMoney(totalLimit, 'USD', false)} base · {fmtMoney(totalAvailable, 'USD', false)} available · {dayCount} days
         </div>
       </div>
       <ARule />
-      {BUDGETS.map(b => {
-        const pct = Math.min(b.spent / b.limit, 1.2);
-        const over = b.spent > b.limit;
+      {budgetRows.map(b => {
+        const pct = Math.min(b.spent / Math.max(b.available, 1), 1.2);
+        const over = b.left < 0;
         return (
           <div key={b.cat} style={{ padding: '12px 0', borderBottom: '1px solid ' + A.rule2 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
@@ -33,7 +42,7 @@ export default function Budgets({ t }) {
                 {CATEGORIES[b.cat].glyph} {CATEGORIES[b.cat].label}
               </div>
               <div style={{ fontSize: 12, fontVariantNumeric: 'tabular-nums', color: over ? A.neg : A.ink }}>
-                {fmtMoney(b.spent, 'USD', t.decimals)} / {fmtMoney(b.limit, 'USD', false)}
+                {fmtMoney(b.spent, 'USD', t.decimals)} / {fmtMoney(b.available, 'USD', false)}
               </div>
             </div>
             <div style={{ marginTop: 8, position: 'relative', height: 8, background: A.rule2 }}>
@@ -45,7 +54,12 @@ export default function Budgets({ t }) {
             </div>
             {over && (
               <div style={{ fontSize: 9, color: A.neg, marginTop: 3, letterSpacing: 1 }}>
-                OVER BY {fmtMoney(b.spent - b.limit, 'USD', false)}
+                OVER BY {fmtMoney(Math.abs(b.left), 'USD', false)}
+              </div>
+            )}
+            {b.rollover !== 0 && (
+              <div style={{ fontSize: 9, color: A.muted, marginTop: 3, letterSpacing: 1 }}>
+                ROLLOVER {b.rollover > 0 ? '+' : '-'}{fmtMoney(Math.abs(b.rollover), 'USD', false)}
               </div>
             )}
           </div>

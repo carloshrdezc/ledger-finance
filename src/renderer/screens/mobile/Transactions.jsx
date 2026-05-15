@@ -1,17 +1,18 @@
 import React from 'react';
 import { A } from '../../theme';
 import { ARule, ALabel } from '../../components/Shared';
+import PeriodSwitcher from '../../components/PeriodSwitcher';
 import { fmtMoney, fmtSigned, dayLabel, catGlyph, catBreadcrumb } from '../../data';
 import { useStore } from '../../store';
 import AddSheet from './AddSheet';
 
 export default function Transactions({ t }) {
-  const { transactions, deleteTx, accountsWithBalance } = useStore();
+  const { periodTransactions, deleteTx, accountsWithBalance, periodLabel } = useStore();
   const [filter, setFilter] = React.useState('ALL');
   const [search, setSearch] = React.useState('');
   const [editTx, setEditTx] = React.useState(null);
 
-  const visible = transactions.filter(x => {
+  const visible = periodTransactions.filter(x => {
     if (filter !== 'ALL') {
       if (filter === 'EXP' && x.amt >= 0) return false;
       if (filter === 'INC' && x.amt < 0) return false;
@@ -33,10 +34,13 @@ export default function Transactions({ t }) {
       <div style={{ padding: '10px 0 6px', display: 'flex', justifyContent: 'space-between' }}>
         <div style={{ fontSize: 12, letterSpacing: 2, fontWeight: 700 }}>TRANSACTIONS</div>
         <div style={{ fontSize: 10, letterSpacing: 1.2 }}>
-          {visible.length} · {fmtMoney(visible.reduce((s, x) => s + Math.abs(x.amt), 0), 'USD', false)}
+          {periodLabel} · {visible.length} · {fmtMoney(visible.reduce((s, x) => s + Math.abs(x.amt), 0), 'USD', false)}
         </div>
       </div>
       <ARule thick />
+      <div style={{ padding: '10px 0 2px' }}>
+        <PeriodSwitcher compact />
+      </div>
 
       <div style={{ padding: '10px 0 4px' }}>
         <input

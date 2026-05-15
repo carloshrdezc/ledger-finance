@@ -1,55 +1,83 @@
 import React from 'react';
 import { A } from '../../theme';
-import { AsciiSpark, ARule, ALabel, ADetailCell } from '../../components/Shared';
-import {
-  GOALS, BILLS, MERCHANTS, MOM_SPEND,
-  fmtMoney, fmtSigned, fmtPct, dayLabel, catBreadcrumb,
-} from '../../data';
+import { AsciiSpark, ARule, ALabel, ADetailCell, CategoryTrendChart, IncomeExpenseChart, LineChart } from '../../components/Shared';
+import PeriodSwitcher from '../../components/PeriodSwitcher';
+import { MERCHANTS, MOM_SPEND, fmtMoney, fmtSigned, fmtPct, dayLabel, catBreadcrumb } from '../../data';
 import { useStore } from '../../store';
 import ImportExport from '../../components/ImportExport';
+import { addMonths, filterTransactionsForPeriod, formatShortPeriodLabel, getDaysInPeriod } from '../../period.mjs';
+import {
+  buildCategoryTrend,
+  buildIncomeExpenseSeries,
+  buildNetWorthTrend,
+  getRecentPeriods,
+} from '../../charts.mjs';
 
 // ── Reports ──────────────────────────────────────────────────────────────────
 export function Reports({ t, onBack }) {
-  const { transactions, categoryTree } = useStore();
-  const [period, setPeriod] = React.useState('30D');
-  const total = transactions.filter(x => x.amt < 0)
+  const { transactions, periodTransactions, categoryTree, selectedPeriod, periodLabel, accounts } = useStore();
+  const previousPeriod = addMonths(selectedPeriod, -1);
+  const previousTotal = filterTransactionsForPeriod(transactions, previousPeriod).filter(x => x.amt < 0)
+    .reduce((s, x) => s + Math.abs(x.ccy === 'USD' ? x.amt : x.amt * 1.08), 0);
+  const total = periodTransactions.filter(x => x.amt < 0)
     .reduce((s, x) => s + Math.abs(x.ccy === 'USD' ? x.amt : x.amt * 1.08), 0);
   const byCat = {};
-  transactions.filter(x => x.amt < 0).forEach(x => {
+  periodTransactions.filter(x => x.amt < 0).forEach(x => {
     const k = (x.path || [x.cat])[0];
     byCat[k] = (byCat[k] || 0) + Math.abs(x.ccy === 'USD' ? x.amt : x.amt * 1.08);
   });
   const cats = Object.entries(byCat).sort((a, b) => b[1] - a[1]).slice(0, 6);
   const maxCat = cats[0] ? cats[0][1] : 1;
+  const trendPeriods = getRecentPeriods(selectedPeriod, 6);
+  const incomeExpense = buildIncomeExpenseSeries(transactions, trendPeriods);
+  const categoryTrend = buildCategoryTrend(transactions, trendPeriods, 4);
+  const netWorthTrend = buildNetWorthTrend(accounts, transactions, trendPeriods);
 
   return (
     <div style={{ padding: '0 18px 20px' }}>
       <div style={{ padding: '10px 0 6px', display: 'flex', justifyContent: 'space-between' }}>
         <button onClick={onBack} style={{ all: 'unset', cursor: 'pointer', fontSize: 10, letterSpacing: 1.2 }}>◂ BACK</button>
-        <div style={{ fontSize: 10, letterSpacing: 1.2, color: A.muted }}>MAY · 2026</div>
+        <div style={{ fontSize: 10, letterSpacing: 1.2, color: A.muted }}>{periodLabel}</div>
       </div>
       <ARule thick />
+      <div style={{ padding: '12px 0 0' }}>
+        <PeriodSwitcher compact />
+      </div>
       <div style={{ padding: '14px 0' }}>
-        <ALabel>[01] TOTAL · SPEND · {period}</ALabel>
+        <ALabel>[01] TOTAL · SPEND · {periodLabel}</ALabel>
         <div style={{ fontSize: 32, fontVariantNumeric: 'tabular-nums', letterSpacing: -1, marginTop: 6 }}>
           {fmtMoney(total, 'USD', t.decimals)}
         </div>
         <div style={{ fontSize: 11, marginTop: 2 }}>
-          <span style={{ color: A.neg }}>{fmtSigned(total - 6713, 'USD', t.decimals)}</span>
-          <span style={{ color: A.muted, marginLeft: 8 }}>VS · APR</span>
+          <span style={{ color: total - previousTotal > 0 ? A.neg : t.accent }}>{fmtSigned(total - previousTotal, 'USD', t.decimals)}</span>
+          <span style={{ color: A.muted, marginLeft: 8 }}>VS · {formatShortPeriodLabel(previousPeriod)}</span>
         </div>
       </div>
-      <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
-        {['7D','30D','90D','1Y'].map(p => (
-          <button key={p} onClick={() => setPeriod(p)} style={{
-            all: 'unset', cursor: 'pointer', padding: '4px 10px',
-            border: '1px solid ' + (period === p ? A.ink : A.rule2),
-            background: period === p ? A.ink : 'transparent',
-            color: period === p ? A.bg : A.ink, fontSize: 10, letterSpacing: 1.2,
-          }}>{p}</button>
-        ))}
-      </div>
       <ARule />
+      <div style={{ padding: '14px 0 0' }}>
+        <ALabel>[02] INCOME · EXPENSES</ALabel>
+        <div style={{ marginTop: 12 }}>
+          <IncomeExpenseChart data={incomeExpense} height={120} accent={t.accent} />
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 8, color: A.muted, letterSpacing: 0.5, marginTop: 4 }}>
+          {trendPeriods.map(p => <span key={p}>{formatShortPeriodLabel(p).slice(0, 3)}</span>)}
+        </div>
+      </div>
+      <ARule style={{ marginTop: 14 }} />
+      <div style={{ padding: '14px 0 0' }}>
+        <ALabel>[03] CATEGORY · TREND</ALabel>
+        <div style={{ marginTop: 12 }}>
+          <CategoryTrendChart rows={categoryTrend} periods={trendPeriods} height={120} accent={t.accent} />
+        </div>
+      </div>
+      <ARule style={{ marginTop: 14 }} />
+      <div style={{ padding: '14px 0 0' }}>
+        <ALabel>[04] NET WORTH · TREND</ALabel>
+        <div style={{ marginTop: 12 }}>
+          <LineChart data={netWorthTrend} height={110} stroke={t.accent} fill={t.accent} />
+        </div>
+      </div>
+      <ARule style={{ marginTop: 14 }} />
       <div style={{ padding: '14px 0 0' }}>
         <ALabel>[02] MONTH · OVER · MONTH</ALabel>
         <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4, height: 110, marginTop: 14 }}>
@@ -80,7 +108,7 @@ export function Reports({ t, onBack }) {
             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
               <div style={{ fontSize: 12 }}>{c.glyph} {c.label}</div>
               <div style={{ fontSize: 12, fontVariantNumeric: 'tabular-nums' }}>
-                {fmtMoney(v, 'USD', t.decimals)} <span style={{ color: A.muted }}>· {Math.round(v / total * 100)}%</span>
+                {fmtMoney(v, 'USD', t.decimals)} <span style={{ color: A.muted }}>· {total ? Math.round(v / total * 100) : 0}%</span>
               </div>
             </div>
             <div style={{ marginTop: 6, height: 4, background: A.rule2 }}>
@@ -123,9 +151,13 @@ export function Reports({ t, onBack }) {
 
 // ── Reports Calendar ──────────────────────────────────────────────────────────
 export function ReportsCalendar({ t, onBack }) {
-  const { transactions } = useStore();
-  const cells = Array.from({ length: 30 }, (_, i) => {
-    return transactions.filter(x => x.date && new Date(x.date).getDate() === i && x.amt < 0).reduce((s, x) => s + Math.abs(x.amt), 0);
+  const { periodTransactions, selectedPeriod, periodLabel } = useStore();
+  const dayCount = getDaysInPeriod(selectedPeriod);
+  const cells = Array.from({ length: dayCount }, (_, i) => {
+    const day = String(i + 1).padStart(2, '0');
+    return periodTransactions
+      .filter(x => x.date === `${selectedPeriod}-${day}` && x.amt < 0)
+      .reduce((s, x) => s + Math.abs(x.ccy === 'USD' ? x.amt : x.amt * 1.08), 0);
   });
   const max = Math.max(...cells, 1);
   const total = cells.reduce((a, b) => a + b, 0);
@@ -134,13 +166,16 @@ export function ReportsCalendar({ t, onBack }) {
     <div style={{ padding: '0 18px 20px' }}>
       <div style={{ padding: '10px 0 6px', display: 'flex', justifyContent: 'space-between' }}>
         <button onClick={onBack} style={{ all: 'unset', cursor: 'pointer', fontSize: 10, letterSpacing: 1.2 }}>◂ BACK</button>
-        <div style={{ fontSize: 10, letterSpacing: 1.2, color: A.muted }}>30D</div>
+        <div style={{ fontSize: 10, letterSpacing: 1.2, color: A.muted }}>{periodLabel}</div>
       </div>
       <ARule thick />
+      <div style={{ padding: '12px 0 0' }}>
+        <PeriodSwitcher compact />
+      </div>
       <div style={{ padding: '14px 0' }}>
-        <ALabel>SPEND · CALENDAR · 30D</ALabel>
+        <ALabel>SPEND · CALENDAR · {periodLabel}</ALabel>
         <div style={{ fontSize: 30, fontVariantNumeric: 'tabular-nums', letterSpacing: -1, marginTop: 6 }}>{fmtMoney(total, 'USD', t.decimals)}</div>
-        <div style={{ fontSize: 10, color: A.muted, letterSpacing: 1, marginTop: 2 }}>{fmtMoney(total / 30, 'USD', false)} / DAY · AVG</div>
+        <div style={{ fontSize: 10, color: A.muted, letterSpacing: 1, marginTop: 2 }}>{fmtMoney(total / dayCount, 'USD', false)} / DAY · AVG</div>
       </div>
       <div style={{ marginTop: 8 }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4 }}>
@@ -153,10 +188,9 @@ export function ReportsCalendar({ t, onBack }) {
               <div key={i} style={{
                 aspectRatio: '1',
                 background: v === 0 ? A.rule2 : `color-mix(in oklch, ${t.accent} ${Math.max(15, intensity * 100)}%, ${A.bg})`,
-                border: i === 0 ? '2px solid ' + A.ink : 'none',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
               }}>
-                <span style={{ fontSize: 9, color: intensity > 0.5 ? A.bg : A.ink, fontVariantNumeric: 'tabular-nums' }}>{29 - i}</span>
+                <span style={{ fontSize: 9, color: intensity > 0.5 ? A.bg : A.ink, fontVariantNumeric: 'tabular-nums' }}>{i + 1}</span>
               </div>
             );
           })}
@@ -259,19 +293,35 @@ export function CCDetail({ t, onBack }) {
 }
 
 // ── Goal Detail ───────────────────────────────────────────────────────────────
-export function GoalDetail({ t, goalId = 'g1', onBack }) {
-  const g = GOALS.find(x => x.id === goalId) || GOALS[0];
+export function GoalDetail({ t, goalId = 'g1', goal, onBack }) {
+  const { goals, goalContributions, contributeToGoal, accountsWithBalance, selectedPeriod } = useStore();
+  const actualGoalId = goal || goalId;
+  const g = goals.find(x => x.id === actualGoalId) || goals[0];
+  const [contribAmt, setContribAmt] = React.useState('');
+  const [acct, setAcct] = React.useState(accountsWithBalance.find(a => a.type === 'SAV')?.id || accountsWithBalance[0]?.id || 'chk');
+  const defaultDay = Math.min(new Date().getDate(), getDaysInPeriod(selectedPeriod));
+  const defaultDate = `${selectedPeriod}-${String(defaultDay).padStart(2, '0')}`;
   const pct = g.current / g.target;
   const monthly = 800;
   const remaining = g.target - g.current;
   const monthsLeft = Math.ceil(remaining / monthly);
   const projection = Array.from({ length: 12 }, (_, i) => Math.min(g.current + monthly * i, g.target));
+  const contributions = goalContributions
+    .filter(c => c.goalId === g.id)
+    .sort((a, b) => b.date.localeCompare(a.date));
+  const contribute = () => {
+    const amount = parseFloat(contribAmt);
+    if (!isNaN(amount) && amount > 0) {
+      contributeToGoal(g.id, { amount, date: defaultDate, acct });
+      setContribAmt('');
+    }
+  };
 
   return (
     <div style={{ padding: '0 18px 20px' }}>
       <div style={{ padding: '10px 0 6px', display: 'flex', justifyContent: 'space-between' }}>
         <button onClick={onBack} style={{ all: 'unset', cursor: 'pointer', fontSize: 10, letterSpacing: 1.2 }}>◂ BACK</button>
-        <div style={{ fontSize: 10, letterSpacing: 1.2, color: A.muted }}>GOAL · {goalId.toUpperCase()}</div>
+        <div style={{ fontSize: 10, letterSpacing: 1.2, color: A.muted }}>GOAL · {g.id.toUpperCase()}</div>
       </div>
       <ARule thick />
       <div style={{ padding: '16px 0 8px' }}>
@@ -313,16 +363,30 @@ export function GoalDetail({ t, goalId = 'g1', onBack }) {
       </div>
       <ARule style={{ marginTop: 8 }} />
       <div style={{ padding: '14px 0 4px' }}><ALabel>CONTRIBUTIONS · RECENT</ALabel></div>
-      {[['MAY 01',800,'AUTO'],['APR 01',800,'AUTO'],['MAR 14',500,'MANUAL'],['MAR 01',800,'AUTO'],['FEB 01',800,'AUTO']].map(([d, v, k], i) => (
-        <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '9px 0', borderBottom: '1px solid ' + A.rule2, fontSize: 12 }}>
-          <div style={{ display: 'flex', gap: 14 }}>
-            <span style={{ color: A.muted, width: 50, letterSpacing: 1 }}>{d}</span>
-            <span style={{ fontSize: 9, color: A.muted, letterSpacing: 1, alignSelf: 'center' }}>{k}</span>
+      {contributions.slice(0, 5).map(c => (
+        <div key={c.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '9px 0', borderBottom: '1px solid ' + A.rule2, fontSize: 12 }}>
+          <div style={{ display: 'flex', gap: 14, minWidth: 0 }}>
+            <span style={{ color: A.muted, width: 58, letterSpacing: 1 }}>{dayLabel(c.date)}</span>
+            <span style={{ fontSize: 9, color: A.muted, letterSpacing: 1, alignSelf: 'center', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>TX · {c.txId}</span>
           </div>
-          <div style={{ fontVariantNumeric: 'tabular-nums', color: t.accent }}>+{fmtMoney(v, 'USD', t.decimals)}</div>
+          <div style={{ fontVariantNumeric: 'tabular-nums', color: t.accent }}>+{fmtMoney(c.amount, 'USD', t.decimals)}</div>
         </div>
       ))}
-      <button style={{ all: 'unset', cursor: 'pointer', display: 'block', textAlign: 'center', width: '100%', padding: '14px', background: A.ink, color: A.bg, fontSize: 11, letterSpacing: 2, fontWeight: 700, marginTop: 16 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 110px', gap: 8, marginTop: 16 }}>
+        <input
+          value={contribAmt}
+          onChange={e => setContribAmt(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && contribute()}
+          placeholder="AMOUNT"
+          style={{ fontFamily: A.font, fontSize: 12, padding: '10px', border: '1px solid ' + A.ink, background: A.bg, color: A.ink, outline: 'none' }}
+        />
+        <select value={acct} onChange={e => setAcct(e.target.value)} style={{ fontFamily: A.font, fontSize: 10, border: '1px solid ' + A.rule2, background: A.bg, color: A.ink }}>
+          {accountsWithBalance.filter(a => !['INV','CRY'].includes(a.type)).map(a => (
+            <option key={a.id} value={a.id}>{a.name}</option>
+          ))}
+        </select>
+      </div>
+      <button onClick={contribute} style={{ all: 'unset', cursor: 'pointer', display: 'block', textAlign: 'center', width: '100%', padding: '14px', background: A.ink, color: A.bg, fontSize: 11, letterSpacing: 2, fontWeight: 700, marginTop: 8 }}>
         + CONTRIBUTE
       </button>
     </div>
@@ -331,22 +395,23 @@ export function GoalDetail({ t, goalId = 'g1', onBack }) {
 
 // ── Bills Hub ─────────────────────────────────────────────────────────────────
 export function BillsHub({ t, onBack }) {
-  const { accountsWithBalance: accts } = useStore();
-  const timeline = Array.from({ length: 30 }, (_, i) => BILLS.filter(b => b.day === ((11 + i - 1) % 31) + 1));
-  const monthly = BILLS.reduce((s, b) => s + b.amt, 0);
-  const subsOnly = BILLS.filter(b => b.cat === 'subs');
+  const { accountsWithBalance: accts, billRows, markBillPaid, periodLabel } = useStore();
+  const timeline = Array.from({ length: 30 }, (_, i) => billRows.filter(b => Number(b.dueDate.slice(8, 10)) === i + 1));
+  const monthly = billRows.reduce((s, b) => s + b.amt, 0);
+  const paid = billRows.filter(b => b.status === 'paid').reduce((s, b) => s + b.amt, 0);
+  const subsOnly = billRows.filter(b => b.cat === 'subs');
 
   return (
     <div style={{ padding: '0 18px 20px' }}>
       <div style={{ padding: '10px 0 6px', display: 'flex', justifyContent: 'space-between' }}>
         <button onClick={onBack} style={{ all: 'unset', cursor: 'pointer', fontSize: 10, letterSpacing: 1.2 }}>◂ BACK</button>
-        <div style={{ fontSize: 10, letterSpacing: 1.2, color: A.ink }}>+ ADD</div>
+        <div style={{ fontSize: 10, letterSpacing: 1.2, color: A.muted }}>{periodLabel}</div>
       </div>
       <ARule thick />
       <div style={{ padding: '14px 0 8px' }}>
         <ALabel>[01] MONTHLY · TOTAL</ALabel>
-        <div style={{ fontSize: 32, fontVariantNumeric: 'tabular-nums', letterSpacing: -1, marginTop: 4 }}>{fmtMoney(monthly, 'USD', t.decimals)}</div>
-        <div style={{ fontSize: 10, color: A.muted, marginTop: 2, letterSpacing: 1 }}>{BILLS.length} ACTIVE · {subsOnly.length} SUBSCRIPTIONS</div>
+        <div style={{ fontSize: 32, fontVariantNumeric: 'tabular-nums', letterSpacing: -1, marginTop: 4 }}>{fmtMoney(paid, 'USD', t.decimals)}</div>
+        <div style={{ fontSize: 10, color: A.muted, marginTop: 2, letterSpacing: 1 }}>{fmtMoney(monthly, 'USD', false)} TOTAL · {subsOnly.length} SUBSCRIPTIONS</div>
       </div>
       <ARule />
       <div style={{ padding: '14px 0 0' }}>
@@ -372,25 +437,27 @@ export function BillsHub({ t, onBack }) {
       </div>
       <ARule style={{ marginTop: 14 }} />
       <div style={{ padding: '14px 0 0' }}>
-        <ALabel>[03] BILLS · {BILLS.filter(b => b.cat !== 'subs').length}</ALabel>
-        {BILLS.filter(b => b.cat !== 'subs').map((b, i) => (
-          <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 0', borderBottom: '1px solid ' + A.rule2 }}>
+        <ALabel>[03] BILLS · {billRows.filter(b => b.cat !== 'subs').length}</ALabel>
+        {billRows.filter(b => b.cat !== 'subs').map(b => (
+          <div key={b.key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 0', borderBottom: '1px solid ' + A.rule2, opacity: b.status === 'paid' ? 0.58 : 1 }}>
             <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
-              <div style={{ fontSize: 16, fontVariantNumeric: 'tabular-nums', width: 30, color: A.ink, letterSpacing: -0.5 }}>{String(b.day).padStart(2, '0')}</div>
+              <div style={{ fontSize: 16, fontVariantNumeric: 'tabular-nums', width: 30, color: b.status === 'paid' ? t.accent : b.status === 'upcoming' ? A.ink : A.neg, letterSpacing: -0.5 }}>{b.dueDate.slice(8)}</div>
               <div>
                 <div style={{ fontSize: 13 }}>{b.name}</div>
                 <div style={{ fontSize: 10, color: A.muted, letterSpacing: 0.6, marginTop: 2 }}>{accts.find(a => a.id === b.acct)?.code} · MONTHLY</div>
               </div>
             </div>
-            <div style={{ fontSize: 13, fontVariantNumeric: 'tabular-nums' }}>{fmtMoney(b.amt, 'USD', t.decimals)}</div>
+            {b.status === 'paid'
+              ? <div style={{ fontSize: 10, color: t.accent, letterSpacing: 1 }}>PAID</div>
+              : <button onClick={() => markBillPaid(b)} style={{ all: 'unset', cursor: 'pointer', fontSize: 10, letterSpacing: 1, padding: '5px 8px', background: A.ink, color: A.bg }}>PAY</button>}
           </div>
         ))}
       </div>
       <ARule style={{ marginTop: 14 }} />
       <div style={{ padding: '14px 0 0' }}>
         <ALabel>[04] SUBSCRIPTIONS · {subsOnly.length}</ALabel>
-        {subsOnly.map((b, i) => (
-          <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 0', borderBottom: '1px solid ' + A.rule2 }}>
+        {subsOnly.map(b => (
+          <div key={b.key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 0', borderBottom: '1px solid ' + A.rule2, opacity: b.status === 'paid' ? 0.58 : 1 }}>
             <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
               <div style={{ fontSize: 14, width: 16, textAlign: 'center', color: t.accent }}>∞</div>
               <div>
@@ -415,7 +482,7 @@ export function Settings({ t, onBack, onNavigate }) {
   const groups = [
     { title: 'PROFILE', rows: [['ACCOUNT', 'm@example.com', null], ['CURRENCY', 'USD · €, £ ALSO', null], ['NOTIFICATIONS', 'ON · 4', null]] },
     { title: 'DATA', rows: [['LINKED · INSTITUTIONS', '8', null], ['CATEGORIES', 'EDIT ▸', 'categories'], ['IMPORT · EXPORT', '⇅', 'io'], ['AUTOMATIC · RULES', '12 ACTIVE', null]] },
-    { title: 'BUDGETS', rows: [['BUDGET · PERIOD', 'MONTHLY · 1 → 31', null], ['ROLLOVER', 'OFF', null], ['ALERTS', '80% · LIMIT', null]] },
+    { title: 'BUDGETS', rows: [['BUDGET · PERIOD', 'MONTHLY · 1 → 31', null], ['ROLLOVER', 'ON', null], ['ALERTS', '80% · LIMIT', null]] },
     { title: 'SECURITY', rows: [['FACE · ID', 'ON', null], ['PASSCODE', 'SET', null], ['SESSIONS', '2 DEVICES', null]] },
     { title: 'ABOUT', rows: [['VERSION', 'v1.0 · 11 MAY 26', null], ['HELP', '▸', null], ['LICENSE', 'GPL · 3.0', null]] },
   ];

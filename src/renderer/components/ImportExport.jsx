@@ -43,6 +43,9 @@ export default function ImportExport({ onClose }) {
           if (data.transactions) store.setTransactions(data.transactions);
           if (data.categoryTree) store.setCategoryTree(data.categoryTree);
           if (data.budgets) store.setBudgets(data.budgets);
+          if (data.bills) store.setBills(data.bills);
+          if (data.goals) store.setGoals(data.goals);
+          if (data.goalContributions) store.setGoalContributions(data.goalContributions);
           setStatus({ ok: true, msg: `Backup restored · ${data.transactions?.length ?? 0} transactions` });
         } else {
           if (data.accounts?.length) store.setAccounts(data.accounts);

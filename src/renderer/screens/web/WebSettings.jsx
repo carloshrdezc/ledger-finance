@@ -91,7 +91,7 @@ export default function WebSettings({ t, onNavigate, onAdd }) {
             {[
               ['PROFILE', [['ACCOUNT','m@example.com'],['CURRENCY','USD · EUR · GBP'],['TIMEZONE','AMERICA / NEW_YORK']]],
               ['DATA',    [['LINKED','8 INSTITUTIONS'],['RULES','12 ACTIVE'],['MERCHANTS','47 KNOWN']]],
-              ['BUDGETS', [['PERIOD','MONTHLY · 1→31'],['ROLLOVER','OFF'],['ALERTS','80%']]],
+              ['BUDGETS', [['PERIOD','MONTHLY · 1→31'],['ROLLOVER','ON'],['ALERTS','80%']]],
               ['SECURITY',[['2FA','ON · APP'],['BIOMETRICS','ENABLED'],['SESSIONS','2 DEVICES']]],
               ['EXPORT',  [['CSV · 30D','↓ DOWNLOAD'],['OFX · 90D','↓ DOWNLOAD'],['PDF · STATEMENT','↓ DOWNLOAD']]],
             ].map(([title, rows]) => (
