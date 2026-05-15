@@ -332,7 +332,6 @@ export function GoalDetail({ t, goalId = 'g1', onBack }) {
 // ── Bills Hub ─────────────────────────────────────────────────────────────────
 export function BillsHub({ t, onBack }) {
   const { accountsWithBalance: accts } = useStore();
-  const { accountsWithBalance: accts } = useStore();
   const timeline = Array.from({ length: 30 }, (_, i) => BILLS.filter(b => b.day === ((11 + i - 1) % 31) + 1));
   const monthly = BILLS.reduce((s, b) => s + b.amt, 0);
   const subsOnly = BILLS.filter(b => b.cat === 'subs');
