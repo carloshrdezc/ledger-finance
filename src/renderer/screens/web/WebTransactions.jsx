@@ -17,7 +17,7 @@ function download(name, content) {
 }
 
 export default function WebTransactions({ t, onNavigate, onAdd }) {
-  const { transactions, periodTransactions, accountsWithBalance, periodLabel } = useStore();
+  const { transactions, periodTransactions, deleteTx, deleteTransfer, accountsWithBalance, periodLabel } = useStore();
   const [filter, setFilter] = React.useState('ALL');
   const [search, setSearch] = React.useState('');
   const [editTx, setEditTx] = React.useState(null);
@@ -42,7 +42,7 @@ export default function WebTransactions({ t, onNavigate, onAdd }) {
         <div>
           <ALabel>[01] TRANSACTIONS · {periodLabel}</ALabel>
           <div style={{ fontSize: 48, letterSpacing: -1.5, fontVariantNumeric: 'tabular-nums', lineHeight: 1, marginTop: 6 }}>
-            {visible.length} <span style={{ color: A.muted, fontSize: 24 }}>· {fmtMoney(total, 'USD', false)}</span>
+            {visible.length} <span style={{ color: A.muted, fontSize: 24 }}>· {fmtMoney(total, t.currency, false)}</span>
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
@@ -86,13 +86,13 @@ export default function WebTransactions({ t, onNavigate, onAdd }) {
             onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
           >
             <div style={{ fontSize: 9, color: A.muted, letterSpacing: 1 }}>{dayLabel(tx.date)}</div>
-            <div>{catGlyph(tx.path || [tx.cat])}</div>
+            <div>{tx.cat === 'transfer' ? '⇄' : catGlyph(tx.path || [tx.cat])}</div>
             <div style={{ fontSize: 12 }}>{tx.name}</div>
             <div style={{ color: A.ink2, fontSize: 10, letterSpacing: 0.6, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {catBreadcrumb(tx.path || [tx.cat])}
+              {tx.cat === 'transfer' ? 'TRANSFER' : catBreadcrumb(tx.path || [tx.cat])}
             </div>
             <div style={{ color: A.muted, fontSize: 10 }}>{accountsWithBalance.find(a => a.id === tx.acct)?.code}</div>
-            <div style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: tx.amt >= 0 ? t.accent : A.ink }}>
+            <div style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: tx.cat === 'transfer' ? A.ink2 : (tx.amt >= 0 ? t.accent : A.ink) }}>
               {fmtSigned(tx.amt, tx.ccy, t.decimals)}
             </div>
           </div>

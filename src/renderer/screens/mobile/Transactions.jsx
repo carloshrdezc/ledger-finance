@@ -7,7 +7,7 @@ import { useStore } from '../../store';
 import AddSheet from './AddSheet';
 
 export default function Transactions({ t }) {
-  const { periodTransactions, deleteTx, accountsWithBalance, periodLabel } = useStore();
+  const { periodTransactions, deleteTx, deleteTransfer, accountsWithBalance, periodLabel } = useStore();
   const [filter, setFilter] = React.useState('ALL');
   const [search, setSearch] = React.useState('');
   const [editTx, setEditTx] = React.useState(null);
@@ -34,7 +34,7 @@ export default function Transactions({ t }) {
       <div style={{ padding: '10px 0 6px', display: 'flex', justifyContent: 'space-between' }}>
         <div style={{ fontSize: 12, letterSpacing: 2, fontWeight: 700 }}>TRANSACTIONS</div>
         <div style={{ fontSize: 10, letterSpacing: 1.2 }}>
-          {periodLabel} · {visible.length} · {fmtMoney(visible.reduce((s, x) => s + Math.abs(x.amt), 0), 'USD', false)}
+          {periodLabel} · {visible.length} · {fmtMoney(visible.reduce((s, x) => s + Math.abs(x.amt), 0), t.currency, false)}
         </div>
       </div>
       <ARule thick />
@@ -71,14 +71,14 @@ export default function Transactions({ t }) {
         <div key={date}>
           <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0 4px', borderTop: '1px solid ' + A.rule2 }}>
             <ALabel>{dayLabel(date)}</ALabel>
-            <ALabel>{fmtSigned(byDate[date].reduce((s, x) => s + x.amt, 0), 'USD', t.decimals)}</ALabel>
+            <ALabel>{fmtSigned(byDate[date].reduce((s, x) => s + x.amt, 0), t.currency, t.decimals)}</ALabel>
           </div>
           {byDate[date].map(tx => (
             <SwipeRow
               key={tx.id}
               t={t}
               tx={tx}
-              onDelete={() => deleteTx(tx.id)}
+              onDelete={() => tx.transferId ? deleteTransfer(tx.transferId) : deleteTx(tx.id)}
               onTap={() => setEditTx(tx)}
               accountsWithBalance={accountsWithBalance}
             />
@@ -132,7 +132,7 @@ function SwipeRow({ t, tx, onDelete, onTap, accountsWithBalance }) {
         }}>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', minWidth: 0, flex: 1 }}>
           <span style={{ fontSize: 14, width: 16, textAlign: 'center', flexShrink: 0 }}>
-            {catGlyph(tx.path || [tx.cat])}
+            {tx.cat === 'transfer' ? '⇄' : catGlyph(tx.path || [tx.cat])}
           </span>
           <div style={{ minWidth: 0, flex: 1 }}>
             <div style={{ fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tx.name}</div>
@@ -141,7 +141,7 @@ function SwipeRow({ t, tx, onDelete, onTap, accountsWithBalance }) {
             </div>
           </div>
         </div>
-        <div style={{ fontSize: 13, fontVariantNumeric: 'tabular-nums', color: tx.amt >= 0 ? t.accent : A.ink }}>
+        <div style={{ fontSize: 13, fontVariantNumeric: 'tabular-nums', color: tx.cat === 'transfer' ? A.ink2 : (tx.amt >= 0 ? t.accent : A.ink) }}>
           {fmtSigned(tx.amt, tx.ccy, t.decimals)}
         </div>
       </div>
