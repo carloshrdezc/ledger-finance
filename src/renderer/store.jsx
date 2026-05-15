@@ -1,5 +1,13 @@
 import React from 'react';
-import { TRANSACTIONS, CATEGORY_TREE, BUDGETS, ACCOUNTS } from './data';
+import { TRANSACTIONS, CATEGORY_TREE, BUDGETS, ACCOUNTS, BILLS, GOALS } from './data';
+import {
+  addMonths,
+  buildBudgetRows,
+  filterTransactionsForPeriod,
+  formatPeriodLabel,
+  monthKey,
+} from './period.mjs';
+import { buildBillRows, createBillPaymentTransaction, createGoalContribution } from './planning.mjs';
 
 function useLS(key, def) {
   const [v, setV] = React.useState(() => {
@@ -33,6 +41,10 @@ export function StoreProvider({ children }) {
   const [budgets, setBudgets]  = useLS('ledger:budgets', BUDGETS);
   const [hidden, setHidden]    = useLS('ledger:hidden',  []);
   const [accounts, setAccounts] = useLS('ledger:accounts', ACCOUNTS);
+  const [selectedPeriod, setSelectedPeriod] = useLS('ledger:period', monthKey(new Date()));
+  const [bills, setBills] = useLS('ledger:bills', BILLS);
+  const [goals, setGoals] = useLS('ledger:goals', GOALS);
+  const [goalContributions, setGoalContributions] = useLS('ledger:goalContributions', []);
 
   React.useEffect(() => {
     // Intentional: txs is read from the initial synchronous localStorage load.
@@ -44,6 +56,19 @@ export function StoreProvider({ children }) {
 
   const hiddenSet = React.useMemo(() => new Set(hidden), [hidden]);
   const transactions = React.useMemo(() => txs.filter(t => !hiddenSet.has(t.id)), [txs, hiddenSet]);
+  const periodTransactions = React.useMemo(
+    () => filterTransactionsForPeriod(transactions, selectedPeriod),
+    [transactions, selectedPeriod],
+  );
+  const periodLabel = React.useMemo(() => formatPeriodLabel(selectedPeriod), [selectedPeriod]);
+  const budgetRows = React.useMemo(
+    () => buildBudgetRows(budgets, transactions, selectedPeriod),
+    [budgets, transactions, selectedPeriod],
+  );
+  const billRows = React.useMemo(
+    () => buildBillRows(bills, transactions, selectedPeriod),
+    [bills, transactions, selectedPeriod],
+  );
 
   const accountsWithBalance = React.useMemo(() => {
     const now = new Date();
@@ -91,17 +116,46 @@ export function StoreProvider({ children }) {
     return [...prev, acct];
   }), [setAccounts]);
 
+  const markBillPaid = React.useCallback(bill => {
+    const tx = createBillPaymentTransaction(bill, selectedPeriod);
+    setTxs(prev => prev.some(existing => existing.id === tx.id || existing.billKey === tx.billKey && existing.date === tx.date)
+      ? prev
+      : [...prev, tx]);
+  }, [selectedPeriod, setTxs]);
+
+  const contributeToGoal = React.useCallback((goalId, details) => {
+    const goal = goals.find(g => g.id === goalId);
+    if (!goal) return;
+    const result = createGoalContribution(goal, details);
+    setGoals(prev => prev.map(g => g.id === goalId ? result.goal : g));
+    setGoalContributions(prev => prev.some(c => c.id === result.contribution.id) ? prev : [...prev, result.contribution]);
+    setTxs(prev => prev.some(tx => tx.id === result.transaction.id) ? prev : [...prev, result.transaction]);
+  }, [goals, setGoals, setGoalContributions, setTxs]);
+
+  const goToPreviousPeriod = React.useCallback(() => {
+    setSelectedPeriod(period => addMonths(period, -1));
+  }, [setSelectedPeriod]);
+
+  const goToNextPeriod = React.useCallback(() => {
+    setSelectedPeriod(period => addMonths(period, 1));
+  }, [setSelectedPeriod]);
+
   const reset = React.useCallback(() => {
     setTxs(TRANSACTIONS);
     setCatTree(CATEGORY_TREE);
     setBudgets(BUDGETS);
     setAccounts(ACCOUNTS);
+    setBills(BILLS);
+    setGoals(GOALS);
+    setGoalContributions([]);
+    setSelectedPeriod(monthKey(new Date()));
     setHidden([]);
-  }, [setTxs, setCatTree, setBudgets, setAccounts, setHidden]);
+  }, [setTxs, setCatTree, setBudgets, setAccounts, setBills, setGoals, setGoalContributions, setSelectedPeriod, setHidden]);
 
   return (
     <StoreCtx.Provider value={{
       transactions,
+      periodTransactions,
       allTransactions: txs,
       setTransactions: setTxs,
       addTransactions,
@@ -113,6 +167,21 @@ export function StoreProvider({ children }) {
       addCategory,
       budgets,
       setBudgets,
+      budgetRows,
+      bills,
+      setBills,
+      billRows,
+      markBillPaid,
+      goals,
+      setGoals,
+      goalContributions,
+      setGoalContributions,
+      contributeToGoal,
+      selectedPeriod,
+      setSelectedPeriod,
+      periodLabel,
+      goToPreviousPeriod,
+      goToNextPeriod,
       accounts,
       accountsWithBalance,
       setAccounts,

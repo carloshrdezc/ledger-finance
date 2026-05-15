@@ -1,6 +1,7 @@
 import React from 'react';
 import { A } from '../../theme';
 import { ALabel } from '../../components/Shared';
+import PeriodSwitcher from '../../components/PeriodSwitcher';
 import WebShell from './WebShell';
 import WebAddModal from './WebAddModal';
 import { fmtMoney, fmtSigned, dayLabel, catGlyph, catBreadcrumb } from '../../data';
@@ -16,12 +17,12 @@ function download(name, content) {
 }
 
 export default function WebTransactions({ t, onNavigate, onAdd }) {
-  const { transactions, accountsWithBalance } = useStore();
+  const { transactions, periodTransactions, accountsWithBalance, periodLabel } = useStore();
   const [filter, setFilter] = React.useState('ALL');
   const [search, setSearch] = React.useState('');
   const [editTx, setEditTx] = React.useState(null);
 
-  const visible = transactions.filter(x => {
+  const visible = periodTransactions.filter(x => {
     if (filter !== 'ALL') {
       if (filter === 'EXP' && x.amt >= 0) return false;
       if (filter === 'INC' && x.amt < 0) return false;
@@ -39,12 +40,13 @@ export default function WebTransactions({ t, onNavigate, onAdd }) {
     <WebShell active="tx" t={t} onNavigate={onNavigate} onAdd={onAdd}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
         <div>
-          <ALabel>[01] TRANSACTIONS · MAY 2026</ALabel>
+          <ALabel>[01] TRANSACTIONS · {periodLabel}</ALabel>
           <div style={{ fontSize: 48, letterSpacing: -1.5, fontVariantNumeric: 'tabular-nums', lineHeight: 1, marginTop: 6 }}>
             {visible.length} <span style={{ color: A.muted, fontSize: 24 }}>· {fmtMoney(total, 'USD', false)}</span>
           </div>
         </div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+          <PeriodSwitcher />
           <input value={search} onChange={e => setSearch(e.target.value)}
             placeholder="SEARCH…"
             style={{ fontFamily: A.font, fontSize: 11, padding: '6px 10px', border: '1px solid ' + A.rule2, background: A.bg, color: A.ink, letterSpacing: 1, width: 160, outline: 'none' }} />

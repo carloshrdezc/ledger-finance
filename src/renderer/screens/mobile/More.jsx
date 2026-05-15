@@ -1,9 +1,12 @@
 import React from 'react';
 import { A } from '../../theme';
 import { ARule, ALabel } from '../../components/Shared';
-import { GOALS, BILLS, fmtMoney } from '../../data';
+import { fmtMoney } from '../../data';
+import { useStore } from '../../store';
 
 export default function More({ t, onNavigate }) {
+  const { goals, billRows } = useStore();
+  const billTotal = billRows.reduce((s, b) => s + b.amt, 0);
   const sections = [
     {
       title: 'REPORTS',
@@ -14,7 +17,7 @@ export default function More({ t, onNavigate }) {
     },
     {
       title: 'GOALS',
-      rows: GOALS.map(g => ({
+      rows: goals.map(g => ({
         label: g.name,
         sub: Math.round(g.current / g.target * 100) + '% COMPLETE',
         screen: 'goal',
@@ -30,7 +33,7 @@ export default function More({ t, onNavigate }) {
     {
       title: 'RECURRING',
       rows: [
-        { label: 'BILLS & SUBSCRIPTIONS', sub: BILLS.length + ' ACTIVE · ' + fmtMoney(BILLS.reduce((s, b) => s + b.amt, 0), 'USD', false) + '/MO', screen: 'bills' },
+        { label: 'BILLS & SUBSCRIPTIONS', sub: billRows.length + ' ACTIVE · ' + fmtMoney(billTotal, 'USD', false) + '/MO', screen: 'bills' },
       ],
     },
     {

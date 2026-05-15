@@ -3,14 +3,14 @@ import { A } from '../../theme';
 import { AsciiSpark, ARule, ALabel } from '../../components/Shared';
 import WebShell from './WebShell';
 import {
-  BILLS, CATEGORIES,
+  CATEGORIES,
   SPARK_NW,
   fmtMoney, fmtSigned, fmtPct, dayLabel, catGlyph,
 } from '../../data';
 import { useStore } from '../../store';
 
 export default function Dashboard({ t, onNavigate, onAdd }) {
-  const { transactions, budgets, accountsWithBalance } = useStore();
+  const { transactions, budgetRows, accountsWithBalance, periodLabel, billRows } = useStore();
   const [scrub, setScrub] = React.useState(null);
   const [period, setPeriod] = React.useState('1M');
 
@@ -83,16 +83,16 @@ export default function Dashboard({ t, onNavigate, onAdd }) {
 
         {/* Budgets + Upcoming */}
         <div>
-          <ALabel>[03] MAY · BUDGETS</ALabel>
+          <ALabel>[03] {periodLabel} · BUDGETS</ALabel>
           <div style={{ marginTop: 8, borderTop: '2px solid ' + A.ink }}>
-            {budgets.slice(0, 5).map(b => {
-              const pct = Math.min(b.spent / b.limit, 1.2);
-              const over = b.spent > b.limit;
+            {budgetRows.slice(0, 5).map(b => {
+              const pct = Math.min(b.spent / Math.max(b.available, 1), 1.2);
+              const over = b.left < 0;
               return (
                 <div key={b.cat} style={{ padding: '9px 0', borderBottom: '1px solid ' + A.rule2 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, letterSpacing: 1 }}>
                     <span>{CATEGORIES[b.cat].label}</span>
-                    <span style={{ color: over ? A.neg : A.ink, fontVariantNumeric: 'tabular-nums' }}>{Math.round(b.spent)} / {b.limit}</span>
+                    <span style={{ color: over ? A.neg : A.ink, fontVariantNumeric: 'tabular-nums' }}>{Math.round(b.spent)} / {Math.round(b.available)}</span>
                   </div>
                   <div style={{ marginTop: 5, height: 4, background: A.rule2, position: 'relative' }}>
                     <div style={{ position: 'absolute', inset: 0, width: (Math.min(pct, 1) * 100) + '%', background: over ? A.neg : t.accent }} />
@@ -103,10 +103,10 @@ export default function Dashboard({ t, onNavigate, onAdd }) {
           </div>
           <ALabel style={{ marginTop: 24 }}>[04] UPCOMING · 7D</ALabel>
           <div style={{ marginTop: 8, borderTop: '2px solid ' + A.ink }}>
-            {BILLS.slice(0, 4).map((b, i) => (
-              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '9px 0', fontSize: 11, borderBottom: '1px solid ' + A.rule2 }}>
+            {billRows.filter(b => b.status !== 'paid').slice(0, 4).map(b => (
+              <div key={b.key} style={{ display: 'flex', justifyContent: 'space-between', padding: '9px 0', fontSize: 11, borderBottom: '1px solid ' + A.rule2 }}>
                 <div style={{ display: 'flex', gap: 10 }}>
-                  <span style={{ color: A.muted, width: 24 }}>{String(b.day).padStart(2, '0')}</span>
+                  <span style={{ color: b.status === 'upcoming' ? A.muted : A.neg, width: 24 }}>{b.dueDate.slice(8)}</span>
                   <span>{b.name}</span>
                 </div>
                 <div style={{ fontVariantNumeric: 'tabular-nums' }}>{fmtMoney(b.amt, 'USD', t.decimals)}</div>

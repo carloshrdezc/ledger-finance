@@ -164,6 +164,9 @@ export function exportMMBAK(store) {
     accounts: store.accounts,
     categoryTree: store.categoryTree,
     budgets: store.budgets,
+    bills: store.bills,
+    goals: store.goals,
+    goalContributions: store.goalContributions,
   }, null, 2);
 }
 
