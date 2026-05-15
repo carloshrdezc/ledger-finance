@@ -276,13 +276,15 @@ export default function AddSheet({ t, onClose, editTx = null }) {
         </div>
         </>)}
 
-        <button onClick={handleSave} style={{
-          all: 'unset', cursor: canSave ? 'pointer' : 'default', display: 'block',
-          textAlign: 'center', width: '100%', padding: '14px', marginTop: 6,
-          background: canSave ? t.accent : A.rule2,
-          color: A.bg, fontSize: 12, letterSpacing: 2, fontWeight: 700,
-          boxSizing: 'border-box',
-        }}>SAVE ↵</button>
+        {!(isTransfer && editTx) && (
+          <button onClick={handleSave} style={{
+            all: 'unset', cursor: canSave ? 'pointer' : 'default', display: 'block',
+            textAlign: 'center', width: '100%', padding: '14px', marginTop: 6,
+            background: canSave ? t.accent : A.rule2,
+            color: A.bg, fontSize: 12, letterSpacing: 2, fontWeight: 700,
+            boxSizing: 'border-box',
+          }}>SAVE ↵</button>
+        )}
       </div>
     </div>
   );
