@@ -203,7 +203,7 @@ export default function RecurringFormSheet({ t, onClose, editRule = null }) {
         <div style={{ margin: '12px 0' }}>
           <ALabel>CATEGORY</ALabel>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
-            {Object.entries(CATEGORIES).slice(0, 8).map(([k, c]) => (
+            {Object.entries(CATEGORIES).map(([k, c]) => (
               <button key={k} onClick={() => setCat(k)} style={{
                 all: 'unset', cursor: 'pointer', padding: '5px 9px',
                 border: '1px solid ' + (cat === k ? A.ink : A.rule2),

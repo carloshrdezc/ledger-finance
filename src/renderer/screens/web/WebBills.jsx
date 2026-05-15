@@ -149,7 +149,7 @@ function RecurringPanel({ t, editRule, onClose, onSave, onDelete, accountsWithBa
         <div>
           <ALabel>CATEGORY</ALabel>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }}>
-            {Object.entries(CATEGORIES).slice(0, 8).map(([k, c]) => (
+            {Object.entries(CATEGORIES).map(([k, c]) => (
               <Pill key={k} label={c.glyph + ' ' + c.label} active={cat === k} onClick={() => setCat(k)} />
             ))}
           </div>
