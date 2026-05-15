@@ -3,15 +3,25 @@ import { A } from '../../theme';
 import { ARule, ALabel } from '../../components/Shared';
 import { fmtMoney, fmtSigned, dayLabel, catGlyph, catBreadcrumb } from '../../data';
 import { useStore } from '../../store';
+import AddSheet from './AddSheet';
 
 export default function Transactions({ t }) {
-  const { transactions, hideTx, accountsWithBalance } = useStore();
+  const { transactions, deleteTx, accountsWithBalance } = useStore();
   const [filter, setFilter] = React.useState('ALL');
+  const [search, setSearch] = React.useState('');
+  const [editTx, setEditTx] = React.useState(null);
+
   const visible = transactions.filter(x => {
-    if (filter === 'ALL') return true;
-    if (filter === 'EXP') return x.amt < 0;
-    if (filter === 'INC') return x.amt >= 0;
-    return x.cat === filter.toLowerCase();
+    if (filter !== 'ALL') {
+      if (filter === 'EXP' && x.amt >= 0) return false;
+      if (filter === 'INC' && x.amt < 0) return false;
+      if (!['EXP','INC'].includes(filter) && x.cat !== filter.toLowerCase()) return false;
+    }
+    if (search) {
+      const q = search.toLowerCase();
+      return x.name.toLowerCase().includes(q) || (x.cat || '').includes(q);
+    }
+    return true;
   });
 
   const byDate = {};
@@ -27,7 +37,21 @@ export default function Transactions({ t }) {
         </div>
       </div>
       <ARule thick />
-      <div style={{ display: 'flex', gap: 6, padding: '12px 0', overflowX: 'auto', flexWrap: 'nowrap' }}>
+
+      <div style={{ padding: '10px 0 4px' }}>
+        <input
+          value={search} onChange={e => setSearch(e.target.value)}
+          placeholder="SEARCH…"
+          style={{
+            all: 'unset', display: 'block', width: '100%', boxSizing: 'border-box',
+            fontFamily: A.font, fontSize: 11, letterSpacing: 1,
+            border: '1px solid ' + A.rule2, padding: '7px 10px', color: A.ink,
+            background: A.bg,
+          }}
+        />
+      </div>
+
+      <div style={{ display: 'flex', gap: 6, padding: '8px 0', overflowX: 'auto', flexWrap: 'nowrap' }}>
         {['ALL','EXP','INC','FOOD','DINING','TRANS','SUBS','SHOP'].map(f => (
           <button key={f} onClick={() => setFilter(f)} style={{
             all: 'unset', cursor: 'pointer', padding: '4px 9px',
@@ -38,6 +62,7 @@ export default function Transactions({ t }) {
           }}>{f}</button>
         ))}
       </div>
+
       {dates.map(date => (
         <div key={date}>
           <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0 4px', borderTop: '1px solid ' + A.rule2 }}>
@@ -45,15 +70,26 @@ export default function Transactions({ t }) {
             <ALabel>{fmtSigned(byDate[date].reduce((s, x) => s + x.amt, 0), 'USD', t.decimals)}</ALabel>
           </div>
           {byDate[date].map(tx => (
-            <SwipeRow key={tx.id} t={t} tx={tx} onHide={() => hideTx(tx.id)} />
+            <SwipeRow
+              key={tx.id}
+              t={t}
+              tx={tx}
+              onDelete={() => deleteTx(tx.id)}
+              onTap={() => setEditTx(tx)}
+              accountsWithBalance={accountsWithBalance}
+            />
           ))}
         </div>
       ))}
+
+      {editTx && (
+        <AddSheet t={t} editTx={editTx} onClose={() => setEditTx(null)} />
+      )}
     </div>
   );
 }
 
-function SwipeRow({ t, tx, onHide }) {
+function SwipeRow({ t, tx, onDelete, onTap, accountsWithBalance }) {
   const [dx, setDx] = React.useState(0);
   const [dragging, setDragging] = React.useState(false);
   const ref = React.useRef();
@@ -70,14 +106,16 @@ function SwipeRow({ t, tx, onHide }) {
   };
   const onUp = () => {
     setDragging(false);
-    if (dx < -80) { onHide(); setDx(0); }
+    const wasDrag = Math.abs(dx) > 10;
+    if (dx < -80) { onDelete(); setDx(0); }
+    else if (!wasDrag) { onTap(); setDx(0); }
     else setDx(0);
   };
 
   return (
     <div style={{ position: 'relative', borderBottom: '1px solid ' + A.rule2, background: A.bg, overflow: 'hidden' }}>
       <div style={{ position: 'absolute', inset: 0, display: 'flex', justifyContent: 'flex-end', alignItems: 'center', padding: '0 14px', fontSize: 10, letterSpacing: 1.4 }}>
-        <span style={{ color: A.neg }}>HIDE ▸</span>
+        <span style={{ color: A.neg }}>DELETE ▸</span>
       </div>
       <div ref={ref}
         onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp}
@@ -85,7 +123,7 @@ function SwipeRow({ t, tx, onHide }) {
           background: A.bg, padding: t.density === 'compact' ? '8px 0' : '11px 0',
           transform: `translateX(${dx}px)`,
           transition: dragging ? 'none' : 'transform .2s',
-          touchAction: 'pan-y', cursor: 'grab',
+          touchAction: 'pan-y', cursor: 'pointer',
           display: 'flex', justifyContent: 'space-between', alignItems: 'center',
         }}>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', minWidth: 0, flex: 1 }}>

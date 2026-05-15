@@ -2,6 +2,7 @@ import React from 'react';
 import { A } from '../../theme';
 import { ALabel } from '../../components/Shared';
 import WebShell from './WebShell';
+import WebAddModal from './WebAddModal';
 import { fmtMoney, fmtSigned, dayLabel, catGlyph, catBreadcrumb } from '../../data';
 import { useStore } from '../../store';
 import { exportCSV } from '../../importExport';
@@ -18,6 +19,7 @@ export default function WebTransactions({ t, onNavigate, onAdd }) {
   const { transactions, accountsWithBalance } = useStore();
   const [filter, setFilter] = React.useState('ALL');
   const [search, setSearch] = React.useState('');
+  const [editTx, setEditTx] = React.useState(null);
 
   const visible = transactions.filter(x => {
     if (filter !== 'ALL') {
@@ -25,7 +27,10 @@ export default function WebTransactions({ t, onNavigate, onAdd }) {
       if (filter === 'INC' && x.amt < 0) return false;
       if (!['EXP','INC','ALL'].includes(filter) && x.cat !== filter.toLowerCase()) return false;
     }
-    if (search && !x.name.toLowerCase().includes(search.toLowerCase())) return false;
+    if (search) {
+      const q = search.toLowerCase();
+      return x.name.toLowerCase().includes(q) || (x.cat || '').includes(q);
+    }
     return true;
   });
   const total = visible.reduce((s, x) => s + Math.abs(x.amt), 0);
@@ -66,7 +71,18 @@ export default function WebTransactions({ t, onNavigate, onAdd }) {
           <div>DATE</div><div /><div>MERCHANT</div><div>CATEGORY</div><div>ACCT</div><div style={{ textAlign: 'right' }}>AMOUNT</div>
         </div>
         {visible.map(tx => (
-          <div key={tx.id} style={{ display: 'grid', gridTemplateColumns: '90px 24px 1fr 280px 90px 120px', padding: t.density === 'compact' ? '7px 0' : '10px 0', fontSize: 11, borderBottom: '1px solid ' + A.rule2, alignItems: 'center' }}>
+          <div
+            key={tx.id}
+            onClick={() => setEditTx(tx)}
+            style={{
+              display: 'grid', gridTemplateColumns: '90px 24px 1fr 280px 90px 120px',
+              padding: t.density === 'compact' ? '7px 0' : '10px 0',
+              fontSize: 11, borderBottom: '1px solid ' + A.rule2, alignItems: 'center',
+              cursor: 'pointer',
+            }}
+            onMouseEnter={e => e.currentTarget.style.background = A.bg2}
+            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+          >
             <div style={{ fontSize: 9, color: A.muted, letterSpacing: 1 }}>{dayLabel(tx.date)}</div>
             <div>{catGlyph(tx.path || [tx.cat])}</div>
             <div style={{ fontSize: 12 }}>{tx.name}</div>
@@ -80,6 +96,10 @@ export default function WebTransactions({ t, onNavigate, onAdd }) {
           </div>
         ))}
       </div>
+
+      {editTx && (
+        <WebAddModal t={t} editTx={editTx} onClose={() => setEditTx(null)} />
+      )}
     </WebShell>
   );
 }

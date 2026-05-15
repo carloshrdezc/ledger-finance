@@ -65,6 +65,12 @@ export function StoreProvider({ children }) {
 
   const hideTx = React.useCallback(id => setHidden(h => [...h, id]), [setHidden]);
 
+  const deleteTx = React.useCallback(id => setTxs(prev => prev.filter(tx => tx.id !== id)), [setTxs]);
+
+  const updateTx = React.useCallback((id, changes) => setTxs(prev =>
+    prev.map(tx => tx.id === id ? { ...tx, ...changes } : tx)
+  ), [setTxs]);
+
   const addCategory = React.useCallback((pathParts, label) => {
     setCatTree(prev => {
       const tree = JSON.parse(JSON.stringify(prev));
@@ -100,6 +106,8 @@ export function StoreProvider({ children }) {
       setTransactions: setTxs,
       addTransactions,
       hideTx,
+      deleteTx,
+      updateTx,
       categoryTree: catTree,
       setCategoryTree: setCatTree,
       addCategory,

@@ -4,27 +4,38 @@ import { ALabel, ARule } from '../../components/Shared';
 import { CATEGORIES } from '../../data';
 import { useStore } from '../../store';
 
-export default function WebAddModal({ t, onClose }) {
-  const { addTransactions, accountsWithBalance } = useStore();
-  const [amt, setAmt]           = React.useState('');
-  const [merchant, setMerchant] = React.useState('');
-  const [isExpense, setIsExpense] = React.useState(true);
-  const [cat, setCat]           = React.useState('dining');
-  const [acct, setAcct]         = React.useState('chk');
+export default function WebAddModal({ t, onClose, editTx = null }) {
+  const { addTransactions, updateTx, deleteTx, accountsWithBalance } = useStore();
+
+  const [amt, setAmt]           = React.useState(editTx ? String(Math.abs(editTx.amt)) : '');
+  const [merchant, setMerchant] = React.useState(editTx ? editTx.name : '');
+  const [isExpense, setIsExpense] = React.useState(editTx ? editTx.amt < 0 : true);
+  const [cat, setCat]           = React.useState(editTx ? (editTx.cat || editTx.path?.[0] || 'dining') : 'dining');
+  const [acct, setAcct]         = React.useState(editTx ? editTx.acct : (accountsWithBalance[0]?.id || 'chk'));
+  const [date, setDate]         = React.useState(editTx ? editTx.date : new Date().toISOString().slice(0, 10));
 
   const canSave = amt && parseFloat(amt) > 0 && merchant.trim();
 
   const handleSave = () => {
     if (!canSave) return;
-    addTransactions([{
-      id: 'add_' + Date.now(),
+    const changes = {
       name: merchant.trim(),
       amt: isExpense ? -Math.abs(parseFloat(amt)) : Math.abs(parseFloat(amt)),
-      date: new Date().toISOString().slice(0, 10),
+      date,
       cat,
-      ccy: 'USD',
+      ccy: editTx?.ccy || 'USD',
       acct,
-    }]);
+    };
+    if (editTx) {
+      updateTx(editTx.id, changes);
+    } else {
+      addTransactions([{ id: 'add_' + Date.now(), ...changes }]);
+    }
+    onClose();
+  };
+
+  const handleDelete = () => {
+    deleteTx(editTx.id);
     onClose();
   };
 
@@ -45,8 +56,15 @@ export default function WebAddModal({ t, onClose }) {
         width: 480, padding: 32, fontFamily: A.font,
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 20 }}>
-          <ALabel>NEW · TRANSACTION</ALabel>
-          <button onClick={onClose} style={{ all: 'unset', cursor: 'pointer', fontSize: 20, color: A.muted }}>×</button>
+          <ALabel>{editTx ? 'EDIT · TRANSACTION' : 'NEW · TRANSACTION'}</ALabel>
+          <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
+            {editTx && (
+              <button onClick={handleDelete} style={{ all: 'unset', cursor: 'pointer', fontSize: 10, letterSpacing: 1.2, color: A.neg }}>
+                DELETE
+              </button>
+            )}
+            <button onClick={onClose} style={{ all: 'unset', cursor: 'pointer', fontSize: 20, color: A.muted }}>×</button>
+          </div>
         </div>
 
         <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
@@ -86,6 +104,19 @@ export default function WebAddModal({ t, onClose }) {
             style={{
               all: 'unset', display: 'block', width: '100%', marginTop: 8,
               fontFamily: A.font, fontSize: 14, letterSpacing: 0.6,
+              borderBottom: '1px solid ' + A.rule2, padding: '6px 0', color: A.ink,
+              boxSizing: 'border-box',
+            }}
+          />
+        </div>
+
+        <div style={{ marginBottom: 16 }}>
+          <ALabel>DATE</ALabel>
+          <input
+            type="date" value={date} onChange={e => setDate(e.target.value)}
+            style={{
+              all: 'unset', display: 'block', width: '100%', marginTop: 8,
+              fontFamily: A.font, fontSize: 13, letterSpacing: 0.6,
               borderBottom: '1px solid ' + A.rule2, padding: '6px 0', color: A.ink,
               boxSizing: 'border-box',
             }}
