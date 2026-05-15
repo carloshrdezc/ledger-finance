@@ -86,7 +86,7 @@ export default function AddSheet({ t, onClose, editTx = null }) {
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ fontSize: 12, letterSpacing: 2, fontWeight: 700 }}>
-            {editTx ? 'EDIT · TRANSACTION' : 'NEW · TRANSACTION'}
+            {editTx ? (editTx.cat === 'transfer' ? 'VIEW · TRANSFER' : 'EDIT · TRANSACTION') : 'NEW · TRANSACTION'}
           </div>
           <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
             {editTx && (
@@ -121,7 +121,14 @@ export default function AddSheet({ t, onClose, editTx = null }) {
           <div style={{ marginTop: 12 }}>
             <div style={{ marginBottom: 14 }}>
               <ALabel>FROM</ALabel>
-              <select value={fromAcct} onChange={e => { setFromAcct(e.target.value); if (toAcct === e.target.value) setToAcct(''); }}
+              <select value={fromAcct} onChange={e => {
+                const newFrom = e.target.value;
+                setFromAcct(newFrom);
+                if (toAcct === newFrom) {
+                  const next = accountsWithBalance.find(a => a.id !== newFrom);
+                  setToAcct(next?.id || '');
+                }
+              }}
                 style={{ marginTop: 6, width: '100%', fontFamily: A.font, fontSize: 13, padding: 8, border: '1px solid ' + A.rule2, background: A.bg, color: A.ink }}>
                 {accountsWithBalance.map(a => <option key={a.id} value={a.id}>{a.name} · {a.code}</option>)}
               </select>
