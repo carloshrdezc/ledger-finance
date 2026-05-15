@@ -5,6 +5,7 @@ import PeriodSwitcher from '../../components/PeriodSwitcher';
 import { MERCHANTS, MOM_SPEND, fmtMoney, fmtSigned, fmtPct, dayLabel, catBreadcrumb } from '../../data';
 import { useStore } from '../../store';
 import ImportExport from '../../components/ImportExport';
+import RecurringFormSheet from '../../components/RecurringFormSheet';
 import { addMonths, filterTransactionsForPeriod, formatShortPeriodLabel, getDaysInPeriod } from '../../period.mjs';
 import {
   buildCategoryTrend,
@@ -46,10 +47,10 @@ export function Reports({ t, onBack }) {
       <div style={{ padding: '14px 0' }}>
         <ALabel>[01] TOTAL · SPEND · {periodLabel}</ALabel>
         <div style={{ fontSize: 32, fontVariantNumeric: 'tabular-nums', letterSpacing: -1, marginTop: 6 }}>
-          {fmtMoney(total, 'USD', t.decimals)}
+          {fmtMoney(total, t.currency, t.decimals)}
         </div>
         <div style={{ fontSize: 11, marginTop: 2 }}>
-          <span style={{ color: total - previousTotal > 0 ? A.neg : t.accent }}>{fmtSigned(total - previousTotal, 'USD', t.decimals)}</span>
+          <span style={{ color: total - previousTotal > 0 ? A.neg : t.accent }}>{fmtSigned(total - previousTotal, t.currency, t.decimals)}</span>
           <span style={{ color: A.muted, marginLeft: 8 }}>VS · {formatShortPeriodLabel(previousPeriod)}</span>
         </div>
       </div>
@@ -96,7 +97,7 @@ export function Reports({ t, onBack }) {
           })}
         </div>
         <div style={{ fontSize: 10, color: A.muted, marginTop: 8, letterSpacing: 1 }}>
-          AVG · {fmtMoney(MOM_SPEND.reduce((s, v) => s + v, 0) / MOM_SPEND.length, 'USD', false)} / MO
+          AVG · {fmtMoney(MOM_SPEND.reduce((s, v) => s + v, 0) / MOM_SPEND.length, t.currency, false)} / MO
         </div>
       </div>
       <ARule style={{ marginTop: 14 }} />
@@ -108,7 +109,7 @@ export function Reports({ t, onBack }) {
             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
               <div style={{ fontSize: 12 }}>{c.glyph} {c.label}</div>
               <div style={{ fontSize: 12, fontVariantNumeric: 'tabular-nums' }}>
-                {fmtMoney(v, 'USD', t.decimals)} <span style={{ color: A.muted }}>· {total ? Math.round(v / total * 100) : 0}%</span>
+                {fmtMoney(v, t.currency, t.decimals)} <span style={{ color: A.muted }}>· {total ? Math.round(v / total * 100) : 0}%</span>
               </div>
             </div>
             <div style={{ marginTop: 6, height: 4, background: A.rule2 }}>
@@ -125,7 +126,7 @@ export function Reports({ t, onBack }) {
             <div style={{ padding: '9px 0', fontSize: 12, borderBottom: '1px solid ' + A.rule2 }}>{m.name}</div>
             <div style={{ padding: '9px 0', fontSize: 10, color: A.muted, borderBottom: '1px solid ' + A.rule2, textAlign: 'center' }}>{m.n}×</div>
             <div style={{ padding: '9px 0', fontSize: 12, fontVariantNumeric: 'tabular-nums', textAlign: 'right', borderBottom: '1px solid ' + A.rule2 }}>
-              {fmtMoney(m.amt, 'USD', t.decimals)}
+              {fmtMoney(m.amt, t.currency, t.decimals)}
             </div>
           </React.Fragment>
         ))}
@@ -174,8 +175,8 @@ export function ReportsCalendar({ t, onBack }) {
       </div>
       <div style={{ padding: '14px 0' }}>
         <ALabel>SPEND · CALENDAR · {periodLabel}</ALabel>
-        <div style={{ fontSize: 30, fontVariantNumeric: 'tabular-nums', letterSpacing: -1, marginTop: 6 }}>{fmtMoney(total, 'USD', t.decimals)}</div>
-        <div style={{ fontSize: 10, color: A.muted, letterSpacing: 1, marginTop: 2 }}>{fmtMoney(total / dayCount, 'USD', false)} / DAY · AVG</div>
+        <div style={{ fontSize: 30, fontVariantNumeric: 'tabular-nums', letterSpacing: -1, marginTop: 6 }}>{fmtMoney(total, t.currency, t.decimals)}</div>
+        <div style={{ fontSize: 10, color: A.muted, letterSpacing: 1, marginTop: 2 }}>{fmtMoney(total / dayCount, t.currency, false)} / DAY · AVG</div>
       </div>
       <div style={{ marginTop: 8 }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4 }}>
@@ -205,7 +206,7 @@ export function ReportsCalendar({ t, onBack }) {
             <div style={{ flex: 1, height: 4, background: A.rule2 }}>
               <div style={{ width: (v / 1142.80 * 100) + '%', height: '100%', background: t.accent }} />
             </div>
-            <div style={{ fontSize: 11, fontVariantNumeric: 'tabular-nums', width: 80, textAlign: 'right' }}>{fmtMoney(v, 'USD', t.decimals)}</div>
+            <div style={{ fontSize: 11, fontVariantNumeric: 'tabular-nums', width: 80, textAlign: 'right' }}>{fmtMoney(v, t.currency, t.decimals)}</div>
           </div>
         ))}
       </div>
@@ -229,7 +230,7 @@ export function CCDetail({ t, onBack }) {
       <ARule thick />
       <div style={{ padding: '16px 0 8px' }}>
         <div style={{ fontSize: 11, letterSpacing: 1.4, color: A.muted, textTransform: 'uppercase' }}>{a.name}</div>
-        <div style={{ fontSize: 32, fontVariantNumeric: 'tabular-nums', letterSpacing: -1, marginTop: 4, color: A.neg }}>{fmtMoney(a.balance, 'USD', t.decimals)}</div>
+        <div style={{ fontSize: 32, fontVariantNumeric: 'tabular-nums', letterSpacing: -1, marginTop: 4, color: A.neg }}>{fmtMoney(a.balance, t.currency, t.decimals)}</div>
         <div style={{ fontSize: 10, color: A.muted, marginTop: 2, letterSpacing: 1 }}>STATEMENT DUE · MAY 28</div>
       </div>
       <div style={{ marginTop: 14 }}>
@@ -250,8 +251,8 @@ export function CCDetail({ t, onBack }) {
       <div style={{ marginTop: 14 }}>
         <ALabel>STATEMENT · MAY 28</ALabel>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1, marginTop: 8, border: '1px solid ' + A.rule2, background: A.rule2 }}>
-          <ADetailCell label="STATEMENT BAL" val={fmtMoney(used, 'USD', t.decimals)} />
-          <ADetailCell label="MIN DUE" val={fmtMoney(35, 'USD', t.decimals)} c={A.neg} />
+          <ADetailCell label="STATEMENT BAL" val={fmtMoney(used, t.currency, t.decimals)} />
+          <ADetailCell label="MIN DUE" val={fmtMoney(35, t.currency, t.decimals)} c={A.neg} />
           <ADetailCell label="APR" val="22.74%" />
           <ADetailCell label="DUE IN" val="17 DAYS" />
         </div>
@@ -272,7 +273,7 @@ export function CCDetail({ t, onBack }) {
             <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 60px 90px', padding: '9px 0', borderBottom: '1px solid ' + A.rule2, alignItems: 'baseline' }}>
               <div style={{ fontSize: 11, color: r.color, letterSpacing: 0.4 }}>{r.l}</div>
               <div style={{ fontSize: 10, color: A.muted, textAlign: 'center', letterSpacing: 1 }}>{r.mo ? r.mo + ' MO' : 'NOW'}</div>
-              <div style={{ fontSize: 11, fontVariantNumeric: 'tabular-nums', textAlign: 'right' }}>{fmtMoney(r.paid, 'USD', false)}</div>
+              <div style={{ fontSize: 11, fontVariantNumeric: 'tabular-nums', textAlign: 'right' }}>{fmtMoney(r.paid, t.currency, false)}</div>
             </div>
           ))}
         </div>
@@ -327,11 +328,11 @@ export function GoalDetail({ t, goalId = 'g1', goal, onBack }) {
       <div style={{ padding: '16px 0 8px' }}>
         <ALabel>{g.name}</ALabel>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 6 }}>
-          <div style={{ fontSize: 32, fontVariantNumeric: 'tabular-nums', letterSpacing: -1 }}>{fmtMoney(g.current, 'USD', t.decimals)}</div>
-          <div style={{ fontSize: 14, color: A.muted, fontVariantNumeric: 'tabular-nums' }}>/ {fmtMoney(g.target, 'USD', false)}</div>
+          <div style={{ fontSize: 32, fontVariantNumeric: 'tabular-nums', letterSpacing: -1 }}>{fmtMoney(g.current, t.currency, t.decimals)}</div>
+          <div style={{ fontSize: 14, color: A.muted, fontVariantNumeric: 'tabular-nums' }}>/ {fmtMoney(g.target, t.currency, false)}</div>
         </div>
         <div style={{ fontSize: 11, color: t.accent, marginTop: 4 }}>
-          {Math.round(pct * 100)}% COMPLETE · {fmtMoney(remaining, 'USD', false)} REMAINING
+          {Math.round(pct * 100)}% COMPLETE · {fmtMoney(remaining, t.currency, false)} REMAINING
         </div>
       </div>
       <div style={{ position: 'relative', height: 28, background: A.rule2, border: '1px solid ' + A.rule2, marginTop: 8 }}>
@@ -345,7 +346,7 @@ export function GoalDetail({ t, goalId = 'g1', goal, onBack }) {
       </div>
       <ARule style={{ marginTop: 16 }} />
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1, marginTop: 12, border: '1px solid ' + A.rule2, background: A.rule2 }}>
-        <ADetailCell label="MONTHLY" val={fmtMoney(monthly, 'USD', false)} />
+        <ADetailCell label="MONTHLY" val={fmtMoney(monthly, t.currency, false)} />
         <ADetailCell label="ETA" val={monthsLeft + ' MO'} c={t.accent} />
         <ADetailCell label="OPENED" val="JAN 2024" />
         <ADetailCell label="ON TRACK" val="YES" c={t.accent} />
@@ -357,7 +358,7 @@ export function GoalDetail({ t, goalId = 'g1', goal, onBack }) {
           <AsciiSpark data={projection} width={354} height={100} stroke={t.accent} />
           <div style={{ position: 'absolute', left: 0, right: 0, top: 4, height: 1, background: A.ink, opacity: 0.5 }} />
           <div style={{ position: 'absolute', right: 0, top: -10, fontSize: 9, color: A.muted, letterSpacing: 1 }}>
-            TARGET · {fmtMoney(g.target, 'USD', false)}
+            TARGET · {fmtMoney(g.target, t.currency, false)}
           </div>
         </div>
       </div>
@@ -369,7 +370,7 @@ export function GoalDetail({ t, goalId = 'g1', goal, onBack }) {
             <span style={{ color: A.muted, width: 58, letterSpacing: 1 }}>{dayLabel(c.date)}</span>
             <span style={{ fontSize: 9, color: A.muted, letterSpacing: 1, alignSelf: 'center', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>TX · {c.txId}</span>
           </div>
-          <div style={{ fontVariantNumeric: 'tabular-nums', color: t.accent }}>+{fmtMoney(c.amount, 'USD', t.decimals)}</div>
+          <div style={{ fontVariantNumeric: 'tabular-nums', color: t.accent }}>+{fmtMoney(c.amount, t.currency, t.decimals)}</div>
         </div>
       ))}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 110px', gap: 8, marginTop: 16 }}>
@@ -394,85 +395,115 @@ export function GoalDetail({ t, goalId = 'g1', goal, onBack }) {
 }
 
 // ── Bills Hub ─────────────────────────────────────────────────────────────────
+const FREQ_SHORT = { monthly: 'MONTHLY', weekly: 'WEEKLY', biweekly: 'BI-WEEKLY', annual: 'ANNUAL', custom: 'CUSTOM' };
+
 export function BillsHub({ t, onBack }) {
-  const { accountsWithBalance: accts, billRows, markBillPaid, periodLabel } = useStore();
-  const timeline = Array.from({ length: 30 }, (_, i) => billRows.filter(b => Number(b.dueDate.slice(8, 10)) === i + 1));
-  const monthly = billRows.reduce((s, b) => s + b.amt, 0);
-  const paid = billRows.filter(b => b.status === 'paid').reduce((s, b) => s + b.amt, 0);
-  const subsOnly = billRows.filter(b => b.cat === 'subs');
+  const { accountsWithBalance: accts, billRows, markRecurringPaid, bills } = useStore();
+  const [showForm, setShowForm] = React.useState(false);
+  const [editRule, setEditRule] = React.useState(null);
+
+  const expenseRows = billRows.filter(b => b.type !== 'income');
+  const incomeRows  = billRows.filter(b => b.type === 'income');
+
+  const monthly = expenseRows.reduce((s, b) => s + b.amt, 0);
+  const paid    = expenseRows.filter(b => b.status === 'paid').reduce((s, b) => s + b.amt, 0);
+
+  const timeline = Array.from({ length: 30 }, (_, i) =>
+    billRows.filter(b => Number(b.dueDate.slice(8, 10)) === i + 1)
+  );
+
+  const openEditForm = ruleId => {
+    const rule = bills.find(b => b.id === ruleId);
+    setEditRule(rule || null);
+    setShowForm(true);
+  };
 
   return (
-    <div style={{ padding: '0 18px 20px' }}>
-      <div style={{ padding: '10px 0 6px', display: 'flex', justifyContent: 'space-between' }}>
-        <button onClick={onBack} style={{ all: 'unset', cursor: 'pointer', fontSize: 10, letterSpacing: 1.2 }}>◂ BACK</button>
-        <div style={{ fontSize: 10, letterSpacing: 1.2, color: A.muted }}>{periodLabel}</div>
-      </div>
-      <ARule thick />
-      <div style={{ padding: '14px 0 8px' }}>
-        <ALabel>[01] MONTHLY · TOTAL</ALabel>
-        <div style={{ fontSize: 32, fontVariantNumeric: 'tabular-nums', letterSpacing: -1, marginTop: 4 }}>{fmtMoney(paid, 'USD', t.decimals)}</div>
-        <div style={{ fontSize: 10, color: A.muted, marginTop: 2, letterSpacing: 1 }}>{fmtMoney(monthly, 'USD', false)} TOTAL · {subsOnly.length} SUBSCRIPTIONS</div>
-      </div>
-      <ARule />
-      <div style={{ padding: '14px 0 0' }}>
-        <ALabel>[02] NEXT · 30 · DAYS</ALabel>
-        <div style={{ marginTop: 10, display: 'grid', gridTemplateColumns: 'repeat(30, 1fr)', gap: 2 }}>
-          {timeline.map((day, i) => {
-            const total = day.reduce((s, b) => s + b.amt, 0);
-            const has = day.length > 0;
+    <>
+      {showForm && (
+        <RecurringFormSheet
+          t={t}
+          onClose={() => { setShowForm(false); setEditRule(null); }}
+          editRule={editRule}
+        />
+      )}
+
+      <div style={{ padding: '0 18px 20px' }}>
+        <div style={{ padding: '10px 0 6px', display: 'flex', justifyContent: 'space-between' }}>
+          <button onClick={onBack} style={{ all: 'unset', cursor: 'pointer', fontSize: 10, letterSpacing: 1.2 }}>◂ BACK</button>
+          <button onClick={() => { setEditRule(null); setShowForm(true); }} style={{ all: 'unset', cursor: 'pointer', fontSize: 10, letterSpacing: 1.2, color: t.accent }}>+ ADD</button>
+        </div>
+        <ARule thick />
+
+        <div style={{ padding: '14px 0 8px' }}>
+          <ALabel>[01] MONTHLY · EXPENSES</ALabel>
+          <div style={{ fontSize: 32, fontVariantNumeric: 'tabular-nums', letterSpacing: -1, marginTop: 4 }}>{fmtMoney(paid, t.currency, t.decimals)}</div>
+          <div style={{ fontSize: 10, color: A.muted, marginTop: 2, letterSpacing: 1 }}>{fmtMoney(monthly, t.currency, false)} TOTAL · {expenseRows.length} THIS PERIOD</div>
+        </div>
+
+        <ARule />
+
+        <div style={{ padding: '14px 0 0' }}>
+          <ALabel>[02] NEXT · 30 · DAYS</ALabel>
+          <div style={{ marginTop: 10, display: 'grid', gridTemplateColumns: 'repeat(30, 1fr)', gap: 2 }}>
+            {timeline.map((day, i) => {
+              const total = day.reduce((s, b) => s + b.amt, 0);
+              const has = day.length > 0;
+              return (
+                <div key={i} style={{
+                  height: 36, background: has ? t.accent : A.rule2,
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end',
+                  paddingBottom: 2, opacity: has ? Math.min(1, 0.4 + (total / 2500)) : 1,
+                }}>
+                  {has && <div style={{ fontSize: 8, color: A.bg, fontWeight: 700 }}>{day.length}</div>}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        <ARule style={{ marginTop: 14 }} />
+
+        <div style={{ padding: '14px 0 0' }}>
+          <ALabel>[03] RECURRING · {billRows.length} THIS PERIOD</ALabel>
+          {billRows.map(b => {
+            const isIncome = b.type === 'income';
+            const amtColor = isIncome ? t.accent : (b.status === 'paid' ? A.muted : A.neg);
             return (
-              <div key={i} style={{
-                height: 36, background: has ? t.accent : A.rule2,
-                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end',
-                paddingBottom: 2, opacity: has ? Math.min(1, 0.4 + (total / 2500)) : 1,
-              }}>
-                {has && <div style={{ fontSize: 8, color: A.bg, fontWeight: 700 }}>{day.length}</div>}
+              <div key={b.key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 0', borderBottom: '1px solid ' + A.rule2, opacity: b.status === 'paid' ? 0.58 : 1 }}>
+                <div style={{ display: 'flex', gap: 14, alignItems: 'center', flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 16, fontVariantNumeric: 'tabular-nums', width: 30, color: b.status === 'paid' ? t.accent : b.status === 'upcoming' ? A.ink : A.neg, letterSpacing: -0.5, flexShrink: 0 }}>
+                    {b.dueDate.slice(8)}
+                  </div>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.name}</div>
+                    <div style={{ fontSize: 10, color: A.muted, letterSpacing: 0.6, marginTop: 2 }}>
+                      {accts.find(a => a.id === b.acct)?.code} · {FREQ_SHORT[b.freq] || 'MONTHLY'}
+                    </div>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexShrink: 0 }}>
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontSize: 13, fontVariantNumeric: 'tabular-nums', color: amtColor }}>
+                      {isIncome ? '↑' : ''}{fmtMoney(b.amt, t.currency, t.decimals)}
+                    </div>
+                  </div>
+                  {b.status === 'paid'
+                    ? <div style={{ fontSize: 10, color: t.accent, letterSpacing: 1, minWidth: 36, textAlign: 'right' }}>PAID</div>
+                    : (
+                      <button onClick={() => markRecurringPaid(b, b.dueDate)} style={{ all: 'unset', cursor: 'pointer', fontSize: 10, letterSpacing: 1, padding: '5px 8px', background: A.ink, color: A.bg }}>
+                        PAY
+                      </button>
+                    )
+                  }
+                  <button onClick={() => openEditForm(b.id)} style={{ all: 'unset', cursor: 'pointer', fontSize: 11, color: A.muted }}>✎</button>
+                </div>
               </div>
             );
           })}
         </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 9, color: A.muted, marginTop: 6, letterSpacing: 1 }}>
-          <span>MAY 11</span><span>MAY 25</span><span>JUN 10</span>
-        </div>
       </div>
-      <ARule style={{ marginTop: 14 }} />
-      <div style={{ padding: '14px 0 0' }}>
-        <ALabel>[03] BILLS · {billRows.filter(b => b.cat !== 'subs').length}</ALabel>
-        {billRows.filter(b => b.cat !== 'subs').map(b => (
-          <div key={b.key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 0', borderBottom: '1px solid ' + A.rule2, opacity: b.status === 'paid' ? 0.58 : 1 }}>
-            <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
-              <div style={{ fontSize: 16, fontVariantNumeric: 'tabular-nums', width: 30, color: b.status === 'paid' ? t.accent : b.status === 'upcoming' ? A.ink : A.neg, letterSpacing: -0.5 }}>{b.dueDate.slice(8)}</div>
-              <div>
-                <div style={{ fontSize: 13 }}>{b.name}</div>
-                <div style={{ fontSize: 10, color: A.muted, letterSpacing: 0.6, marginTop: 2 }}>{accts.find(a => a.id === b.acct)?.code} · MONTHLY</div>
-              </div>
-            </div>
-            {b.status === 'paid'
-              ? <div style={{ fontSize: 10, color: t.accent, letterSpacing: 1 }}>PAID</div>
-              : <button onClick={() => markBillPaid(b)} style={{ all: 'unset', cursor: 'pointer', fontSize: 10, letterSpacing: 1, padding: '5px 8px', background: A.ink, color: A.bg }}>PAY</button>}
-          </div>
-        ))}
-      </div>
-      <ARule style={{ marginTop: 14 }} />
-      <div style={{ padding: '14px 0 0' }}>
-        <ALabel>[04] SUBSCRIPTIONS · {subsOnly.length}</ALabel>
-        {subsOnly.map(b => (
-          <div key={b.key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 0', borderBottom: '1px solid ' + A.rule2, opacity: b.status === 'paid' ? 0.58 : 1 }}>
-            <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
-              <div style={{ fontSize: 14, width: 16, textAlign: 'center', color: t.accent }}>∞</div>
-              <div>
-                <div style={{ fontSize: 13 }}>{b.name}</div>
-                <div style={{ fontSize: 10, color: A.muted, letterSpacing: 0.6, marginTop: 2 }}>RENEWS · {String(b.day).padStart(2, '0')} EACH MONTH</div>
-              </div>
-            </div>
-            <div style={{ textAlign: 'right' }}>
-              <div style={{ fontSize: 13, fontVariantNumeric: 'tabular-nums' }}>{fmtMoney(b.amt, 'USD', t.decimals)}</div>
-              <div style={{ fontSize: 9, color: A.muted, marginTop: 2, letterSpacing: 1 }}>{fmtMoney(b.amt * 12, 'USD', false)} / YR</div>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
+    </>
   );
 }
 
