@@ -1,5 +1,5 @@
 import React from 'react';
-import { A } from '../../theme';
+import { A, ACCENTS } from '../../theme';
 import { AsciiSpark, ARule, ALabel, ADetailCell, CategoryTrendChart, IncomeExpenseChart, LineChart } from '../../components/Shared';
 import PeriodSwitcher from '../../components/PeriodSwitcher';
 import { MERCHANTS, MOM_SPEND, fmtMoney, fmtSigned, fmtPct, dayLabel, catBreadcrumb } from '../../data';
@@ -477,15 +477,35 @@ export function BillsHub({ t, onBack }) {
 }
 
 // ── Settings ──────────────────────────────────────────────────────────────────
-export function Settings({ t, onBack, onNavigate }) {
+export function Settings({ t, onBack, onNavigate, setAccent, setDensity, setDecimals, setCurrency }) {
+  const { budgetStartDay, setBudgetStartDay, reset } = useStore();
   const [showIO, setShowIO] = React.useState(false);
-  const groups = [
-    { title: 'PROFILE', rows: [['ACCOUNT', 'm@example.com', null], ['CURRENCY', 'USD · €, £ ALSO', null], ['NOTIFICATIONS', 'ON · 4', null]] },
-    { title: 'DATA', rows: [['LINKED · INSTITUTIONS', '8', null], ['CATEGORIES', 'EDIT ▸', 'categories'], ['IMPORT · EXPORT', '⇅', 'io'], ['AUTOMATIC · RULES', '12 ACTIVE', null]] },
-    { title: 'BUDGETS', rows: [['BUDGET · PERIOD', 'MONTHLY · 1 → 31', null], ['ROLLOVER', 'ON', null], ['ALERTS', '80% · LIMIT', null]] },
-    { title: 'SECURITY', rows: [['FACE · ID', 'ON', null], ['PASSCODE', 'SET', null], ['SESSIONS', '2 DEVICES', null]] },
-    { title: 'ABOUT', rows: [['VERSION', 'v1.0 · 11 MAY 26', null], ['HELP', '▸', null], ['LICENSE', 'GPL · 3.0', null]] },
-  ];
+  const [confirmReset, setConfirmReset] = React.useState(false);
+  const [editingDay, setEditingDay] = React.useState(false);
+  const [dayInput, setDayInput] = React.useState(String(budgetStartDay));
+
+  const CURRENCIES = ['USD', 'EUR', 'GBP', 'JPY', 'CAD', 'AUD', 'CHF', 'MXN'];
+
+  const cycleCurrency = () => {
+    const idx = CURRENCIES.indexOf(t.currency);
+    setCurrency(CURRENCIES[(idx + 1) % CURRENCIES.length]);
+  };
+
+  const commitDay = () => {
+    const v = Math.max(1, Math.min(28, parseInt(dayInput, 10) || 1));
+    setDayInput(String(v));
+    setBudgetStartDay(v);
+    setEditingDay(false);
+  };
+
+  const handleReset = () => {
+    if (!confirmReset) {
+      setConfirmReset(true);
+    } else {
+      reset();
+      onBack();
+    }
+  };
 
   return (
     <div style={{ padding: '0 18px 20px' }}>
@@ -494,23 +514,108 @@ export function Settings({ t, onBack, onNavigate }) {
         <div style={{ fontSize: 10, letterSpacing: 1.2, color: A.muted }}>v1.0</div>
       </div>
       <ARule thick />
-      {groups.map(g => (
-        <div key={g.title} style={{ marginTop: 14 }}>
-          <ALabel>{g.title}</ALabel>
-          <div style={{ marginTop: 6 }}>
-            {g.rows.map(([k, v, action], i) => (
-              <button key={i}
-                onClick={() => action === 'io' ? setShowIO(true) : (action && onNavigate(action))}
-                style={{ all: 'unset', cursor: action ? 'pointer' : 'default', display: 'block', width: '100%' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '11px 0', borderBottom: '1px solid ' + A.rule2 }}>
-                  <span style={{ fontSize: 12 }}>{k}</span>
-                  <span style={{ fontSize: 11, color: A.muted }}>{v}</span>
-                </div>
-              </button>
-            ))}
+
+      {/* DISPLAY */}
+      <div style={{ marginTop: 14 }}>
+        <ALabel>DISPLAY</ALabel>
+        <div style={{ marginTop: 6 }}>
+          <div style={{ padding: '11px 0', borderBottom: '1px solid ' + A.rule2 }}>
+            <div style={{ fontSize: 10, color: A.muted, marginBottom: 8, letterSpacing: 0.6 }}>ACCENT COLOR</div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              {ACCENTS.map(a => (
+                <button key={a.val} onClick={() => setAccent(a.val)} style={{
+                  all: 'unset', cursor: 'pointer',
+                  width: 18, height: 18, background: a.val,
+                  border: t.accent === a.val ? '2px solid ' + A.ink : '1px solid ' + A.rule2,
+                }} />
+              ))}
+            </div>
           </div>
+          <button onClick={() => setDensity(t.density === 'comfortable' ? 'compact' : 'comfortable')}
+            style={{ all: 'unset', cursor: 'pointer', display: 'block', width: '100%' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: t.density === 'compact' ? '9px 0' : '11px 0', borderBottom: '1px solid ' + A.rule2 }}>
+              <span style={{ fontSize: 12 }}>DENSITY</span>
+              <span style={{ fontSize: 11, color: A.muted }}>{t.density.toUpperCase()}</span>
+            </div>
+          </button>
+          <button onClick={() => setDecimals(!t.decimals)}
+            style={{ all: 'unset', cursor: 'pointer', display: 'block', width: '100%' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: t.density === 'compact' ? '9px 0' : '11px 0', borderBottom: '1px solid ' + A.rule2 }}>
+              <span style={{ fontSize: 12 }}>DECIMALS</span>
+              <span style={{ fontSize: 11, color: A.muted }}>{t.decimals ? 'SHOW' : 'HIDE'}</span>
+            </div>
+          </button>
+          <button onClick={cycleCurrency}
+            style={{ all: 'unset', cursor: 'pointer', display: 'block', width: '100%' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: t.density === 'compact' ? '9px 0' : '11px 0', borderBottom: '1px solid ' + A.rule2 }}>
+              <span style={{ fontSize: 12 }}>CURRENCY</span>
+              <span style={{ fontSize: 11, color: A.muted }}>{t.currency}</span>
+            </div>
+          </button>
         </div>
-      ))}
+      </div>
+
+      {/* BUDGETS */}
+      <div style={{ marginTop: 14 }}>
+        <ALabel>BUDGETS</ALabel>
+        <div style={{ marginTop: 6 }}>
+          {editingDay ? (
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '11px 0', borderBottom: '1px solid ' + A.rule2 }}>
+              <span style={{ fontSize: 12 }}>BUDGET · START DAY</span>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <input
+                  autoFocus
+                  type="number" min="1" max="28"
+                  value={dayInput}
+                  onChange={e => setDayInput(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') commitDay(); if (e.key === 'Escape') setEditingDay(false); }}
+                  style={{ all: 'unset', width: 32, fontSize: 11, textAlign: 'right', borderBottom: '1px solid ' + A.ink, color: A.ink }}
+                />
+                <button onClick={commitDay} style={{ all: 'unset', cursor: 'pointer', fontSize: 14, color: t.accent }}>✓</button>
+              </div>
+            </div>
+          ) : (
+            <button onClick={() => { setDayInput(String(budgetStartDay)); setEditingDay(true); }}
+              style={{ all: 'unset', cursor: 'pointer', display: 'block', width: '100%' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: t.density === 'compact' ? '9px 0' : '11px 0', borderBottom: '1px solid ' + A.rule2 }}>
+                <span style={{ fontSize: 12 }}>BUDGET · START DAY</span>
+                <span style={{ fontSize: 11, color: A.muted }}>DAY {budgetStartDay}</span>
+              </div>
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* DATA */}
+      <div style={{ marginTop: 14 }}>
+        <ALabel>DATA</ALabel>
+        <div style={{ marginTop: 6 }}>
+          <button onClick={() => onNavigate('categories')}
+            style={{ all: 'unset', cursor: 'pointer', display: 'block', width: '100%' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: t.density === 'compact' ? '9px 0' : '11px 0', borderBottom: '1px solid ' + A.rule2 }}>
+              <span style={{ fontSize: 12 }}>CATEGORIES</span>
+              <span style={{ fontSize: 11, color: A.muted }}>EDIT ▸</span>
+            </div>
+          </button>
+          <button onClick={() => setShowIO(true)}
+            style={{ all: 'unset', cursor: 'pointer', display: 'block', width: '100%' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: t.density === 'compact' ? '9px 0' : '11px 0', borderBottom: '1px solid ' + A.rule2 }}>
+              <span style={{ fontSize: 12 }}>IMPORT · EXPORT</span>
+              <span style={{ fontSize: 11, color: A.muted }}>⇅</span>
+            </div>
+          </button>
+          <button onClick={handleReset}
+            style={{ all: 'unset', cursor: 'pointer', display: 'block', width: '100%' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: t.density === 'compact' ? '9px 0' : '11px 0', borderBottom: '1px solid ' + A.rule2 }}>
+              <span style={{ fontSize: 12 }}>RESET ALL DATA</span>
+              <span style={{ fontSize: 11, color: confirmReset ? A.neg : A.muted }}>
+                {confirmReset ? 'TAP AGAIN ↩' : 'RESET ▸'}
+              </span>
+            </div>
+          </button>
+        </div>
+      </div>
+
       {showIO && <ImportExport onClose={() => setShowIO(false)} />}
     </div>
   );
