@@ -3,10 +3,13 @@ import { A } from '../../theme';
 import { ARule, ALabel } from '../../components/Shared';
 import { fmtMoney } from '../../data';
 import { useStore } from '../../store';
+import RecurringFormSheet from '../../components/RecurringFormSheet';
 
 export default function More({ t, onNavigate }) {
-  const { goals, billRows } = useStore();
-  const billTotal = billRows.reduce((s, b) => s + b.amt, 0);
+  const { goals, billRows, bills } = useStore();
+  const activeRules = bills.filter(b => b.active !== false).length;
+  const billTotal = billRows.filter(b => b.type !== 'income').reduce((s, b) => s + b.amt, 0);
+  const [showAddRecurring, setShowAddRecurring] = React.useState(false);
   const sections = [
     {
       title: 'REPORTS',
@@ -33,7 +36,7 @@ export default function More({ t, onNavigate }) {
     {
       title: 'RECURRING',
       rows: [
-        { label: 'BILLS & SUBSCRIPTIONS', sub: billRows.length + ' ACTIVE · ' + fmtMoney(billTotal, 'USD', false) + '/MO', screen: 'bills' },
+        { label: 'BILLS & SUBSCRIPTIONS', sub: activeRules + ' RULES · ' + fmtMoney(billTotal, t.currency, false) + '/MO', screen: 'bills' },
       ],
     },
     {
@@ -53,7 +56,12 @@ export default function More({ t, onNavigate }) {
       <ARule thick />
       {sections.map(sec => (
         <div key={sec.title} style={{ marginTop: 14 }}>
-          <ALabel>{sec.title}</ALabel>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <ALabel>{sec.title}</ALabel>
+            {sec.title === 'RECURRING' && (
+              <button onClick={() => setShowAddRecurring(true)} style={{ all: 'unset', cursor: 'pointer', fontSize: 10, letterSpacing: 1.2, color: t.accent }}>+ ADD</button>
+            )}
+          </div>
           <div style={{ marginTop: 6 }}>
             {sec.rows.map((row, i) => (
               <button key={i}
@@ -75,6 +83,12 @@ export default function More({ t, onNavigate }) {
           </div>
         </div>
       ))}
+      {showAddRecurring && (
+        <RecurringFormSheet
+          t={t}
+          onClose={() => setShowAddRecurring(false)}
+        />
+      )}
     </div>
   );
 }
