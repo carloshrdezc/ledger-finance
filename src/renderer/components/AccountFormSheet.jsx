@@ -55,6 +55,12 @@ export default function AccountFormSheet({ t, onClose, editAccount = null }) {
 
   const handleDelete = () => { deleteAccount(editAccount.id); onClose(); };
 
+  React.useEffect(() => {
+    const handler = e => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [onClose]);
+
   const input = {
     width: '100%', background: 'transparent', border: 'none',
     borderBottom: '1px solid ' + A.ink, color: A.ink,
