@@ -1,12 +1,12 @@
 ﻿export const ACCOUNTS = [
-  { id: 'chk',  name: 'CHASE CHECKING',   type: 'CHK', code: '··4218', openingBal:  -1223.33, ccy: 'USD' },
-  { id: 'sav',  name: 'ALLY SAVINGS',     type: 'SAV', code: '··9931', openingBal:  24618.00, ccy: 'USD' },
-  { id: 'amex', name: 'AMEX PLATINUM',    type: 'CC',  code: '··1009', openingBal:    150.46, ccy: 'USD' },
-  { id: 'csp',  name: 'CHASE SAPPHIRE',   type: 'CC',  code: '··7720', openingBal:    453.40, ccy: 'USD' },
-  { id: 'vti',  name: 'VANGUARD VTI',     type: 'INV', code: 'BROK',   openingBal: 187201.00, ccy: 'USD' },
-  { id: '401k', name: 'FIDELITY 401(K)',  type: 'INV', code: 'IRA',    openingBal:  92140.00, ccy: 'USD' },
-  { id: 'btc',  name: 'COINBASE BTC',     type: 'CRY', code: '0.612',  openingBal:  42180.00, ccy: 'USD' },
-  { id: 'eur',  name: 'WISE EUR',         type: 'FX',  code: 'EUR',    openingBal:   1316.25, ccy: 'EUR' },
+  { id: 'chk',  name: 'CHASE CHECKING',  type: 'CHK', code: '··4218', openingBal:  -1223.33, ccy: 'USD', archived: false, order: 0 },
+  { id: 'sav',  name: 'ALLY SAVINGS',    type: 'SAV', code: '··9931', openingBal:  24618.00, ccy: 'USD', archived: false, order: 1 },
+  { id: 'amex', name: 'AMEX PLATINUM',   type: 'CC',  code: '··1009', openingBal:    150.46, ccy: 'USD', archived: false, order: 2 },
+  { id: 'csp',  name: 'CHASE SAPPHIRE',  type: 'CC',  code: '··7720', openingBal:    453.40, ccy: 'USD', archived: false, order: 3 },
+  { id: 'vti',  name: 'VANGUARD VTI',    type: 'INV', code: 'BROK',   openingBal: 187201.00, ccy: 'USD', archived: false, order: 4 },
+  { id: '401k', name: 'FIDELITY 401(K)', type: 'INV', code: 'IRA',    openingBal:  92140.00, ccy: 'USD', archived: false, order: 5 },
+  { id: 'btc',  name: 'COINBASE BTC',    type: 'CRY', code: '0.612',  openingBal:  42180.00, ccy: 'USD', archived: false, order: 6 },
+  { id: 'eur',  name: 'WISE EUR',        type: 'FX',  code: 'EUR',    openingBal:   1316.25, ccy: 'EUR', archived: false, order: 7 },
 ];
 
 export const CATEGORIES = {
