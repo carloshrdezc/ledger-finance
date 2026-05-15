@@ -99,23 +99,25 @@ export default function AddSheet({ t, onClose, editTx = null }) {
         </div>
         <ARule thick style={{ marginTop: 8 }} />
 
-        <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-          {[['EXPENSE', 'exp'], ['INCOME', 'inc'], ['TRANSFER', 'xfer']].map(([label, mode]) => {
-            const active = mode === 'xfer' ? isTransfer : (!isTransfer && (mode === 'exp') === isExpense);
-            return (
-              <button key={label} onClick={() => {
-                if (mode === 'xfer') { setIsTransfer(true); }
-                else { setIsTransfer(false); setIsExpense(mode === 'exp'); }
-              }} style={{
-                all: 'unset', cursor: 'pointer', flex: 1, textAlign: 'center',
-                padding: '7px', fontSize: 10, letterSpacing: 1.4,
-                border: '1px solid ' + (active ? A.ink : A.rule2),
-                background: active ? A.ink : 'transparent',
-                color: active ? A.bg : A.ink,
-              }}>{label}</button>
-            );
-          })}
-        </div>
+        {!editTx && (
+          <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+            {[['EXPENSE', 'exp'], ['INCOME', 'inc'], ['TRANSFER', 'xfer']].map(([label, mode]) => {
+              const active = mode === 'xfer' ? isTransfer : (!isTransfer && (mode === 'exp') === isExpense);
+              return (
+                <button key={label} onClick={() => {
+                  if (mode === 'xfer') { setIsTransfer(true); }
+                  else { setIsTransfer(false); setIsExpense(mode === 'exp'); }
+                }} style={{
+                  all: 'unset', cursor: 'pointer', flex: 1, textAlign: 'center',
+                  padding: '7px', fontSize: 10, letterSpacing: 1.4,
+                  border: '1px solid ' + (active ? A.ink : A.rule2),
+                  background: active ? A.ink : 'transparent',
+                  color: active ? A.bg : A.ink,
+                }}>{label}</button>
+              );
+            })}
+          </div>
+        )}
 
         {isTransfer && !editTx && (
           <div style={{ marginTop: 12 }}>
