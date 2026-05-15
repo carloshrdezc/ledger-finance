@@ -477,18 +477,21 @@ export function BillsHub({ t, onBack }) {
 }
 
 // ── Settings ──────────────────────────────────────────────────────────────────
+const SETTINGS_CURRENCIES = ['USD', 'EUR', 'GBP', 'JPY', 'CAD', 'AUD', 'CHF', 'MXN'];
+
 export function Settings({ t, onBack, onNavigate, setAccent, setDensity, setDecimals, setCurrency }) {
   const { budgetStartDay, setBudgetStartDay, reset } = useStore();
   const [showIO, setShowIO] = React.useState(false);
   const [confirmReset, setConfirmReset] = React.useState(false);
   const [editingDay, setEditingDay] = React.useState(false);
   const [dayInput, setDayInput] = React.useState(String(budgetStartDay));
+  const resetTimerRef = React.useRef(null);
 
-  const CURRENCIES = ['USD', 'EUR', 'GBP', 'JPY', 'CAD', 'AUD', 'CHF', 'MXN'];
+  React.useEffect(() => () => clearTimeout(resetTimerRef.current), []);
 
   const cycleCurrency = () => {
-    const idx = CURRENCIES.indexOf(t.currency);
-    setCurrency(CURRENCIES[(idx + 1) % CURRENCIES.length]);
+    const idx = SETTINGS_CURRENCIES.indexOf(t.currency);
+    setCurrency(SETTINGS_CURRENCIES[(idx + 1) % SETTINGS_CURRENCIES.length]);
   };
 
   const commitDay = () => {
@@ -501,7 +504,9 @@ export function Settings({ t, onBack, onNavigate, setAccent, setDensity, setDeci
   const handleReset = () => {
     if (!confirmReset) {
       setConfirmReset(true);
+      resetTimerRef.current = setTimeout(() => setConfirmReset(false), 3000);
     } else {
+      clearTimeout(resetTimerRef.current);
       reset();
       onBack();
     }
