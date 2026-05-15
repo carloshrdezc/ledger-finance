@@ -57,3 +57,29 @@ test('buildBudgetRows computes monthly spend and carries previous rollover', () 
   assert.equal(rows[1].spent, 80);
   assert.equal(rows[1].rollover, 100);
 });
+
+test('filterTransactionsForPeriod with startDay=1 matches existing behavior', () => {
+  assert.deepEqual(
+    filterTransactionsForPeriod(txs, '2026-05', 1).map(tx => tx.id),
+    ['may-food', 'may-dining', 'may-eur'],
+  );
+});
+
+test('filterTransactionsForPeriod with startDay=5 includes May 5 through Jun 4', () => {
+  // may-food is 2026-05-04 — before start day 5, excluded
+  // may-dining is 2026-05-05 — on start day, included
+  // may-eur is 2026-05-06 — after start, included
+  // jun-food is 2026-06-01 — before end (Jun 4), included
+  assert.deepEqual(
+    filterTransactionsForPeriod(txs, '2026-05', 5).map(tx => tx.id),
+    ['may-dining', 'may-eur', 'jun-food'],
+  );
+});
+
+test('formatPeriodLabel with startDay=1 matches existing behavior', () => {
+  assert.equal(formatPeriodLabel('2026-05', 1), 'MAY 2026');
+});
+
+test('formatPeriodLabel with startDay=15 shows date range', () => {
+  assert.equal(formatPeriodLabel('2026-05', 15), 'MAY 15 – JUN 14, 2026');
+});

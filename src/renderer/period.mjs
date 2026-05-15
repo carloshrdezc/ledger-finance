@@ -11,11 +11,19 @@ export function addMonths(period, amount) {
   return monthKey(date);
 }
 
-export function formatPeriodLabel(period) {
-  return new Date(`${period}-01T00:00:00`).toLocaleDateString('en-US', {
-    month: 'short',
-    year: 'numeric',
-  }).toUpperCase();
+export function formatPeriodLabel(period, startDay = 1) {
+  if (startDay <= 1) {
+    return new Date(`${period}-01T00:00:00`).toLocaleDateString('en-US', {
+      month: 'short',
+      year: 'numeric',
+    }).toUpperCase();
+  }
+  const [year, month] = period.split('-').map(Number);
+  const startDate = new Date(year, month - 1, startDay);
+  const endDate = new Date(year, month, startDay - 1);
+  const startStr = startDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }).toUpperCase();
+  const endStr = endDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).toUpperCase();
+  return `${startStr} – ${endStr}`;
 }
 
 export function formatShortPeriodLabel(period) {
@@ -29,8 +37,13 @@ export function getDaysInPeriod(period) {
   return new Date(year, month, 0).getDate();
 }
 
-export function filterTransactionsForPeriod(transactions, period) {
-  return transactions.filter(tx => tx.date?.startsWith(period));
+export function filterTransactionsForPeriod(transactions, period, startDay = 1) {
+  if (startDay <= 1) return transactions.filter(tx => tx.date?.startsWith(period));
+  const [year, month] = period.split('-').map(Number);
+  const start = `${period}-${String(startDay).padStart(2, '0')}`;
+  const nextPeriod = monthKey(new Date(year, month, 1));
+  const end = `${nextPeriod}-${String(startDay - 1).padStart(2, '0')}`;
+  return transactions.filter(tx => tx.date >= start && tx.date <= end);
 }
 
 function toUsd(amount, ccy = 'USD') {
