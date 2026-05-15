@@ -1,18 +1,43 @@
 import React from 'react';
-import { A } from '../../theme';
+import { A, ACCENTS } from '../../theme';
 import { ALabel } from '../../components/Shared';
 import WebShell from './WebShell';
 import { useStore } from '../../store';
 import ImportExport from '../../components/ImportExport';
 
-export default function WebSettings({ t, onNavigate, onAdd }) {
-  const { categoryTree, addCategory } = useStore();
+const CURRENCIES = ['USD', 'EUR', 'GBP', 'JPY', 'CAD', 'AUD', 'CHF', 'MXN'];
+
+export default function WebSettings({ t, onNavigate, onAdd, setAccent, setDensity, setDecimals, setCurrency }) {
+  const { categoryTree, addCategory, budgetStartDay, setBudgetStartDay, reset } = useStore();
   const [expanded, setExpanded] = React.useState({ edu: true, 'edu.school': true, 'edu.school.supplies': true, food: true });
   const [adding, setAdding] = React.useState(null);
   const [newName, setNewName] = React.useState('');
   const [showIO, setShowIO] = React.useState(false);
+  const [confirmReset, setConfirmReset] = React.useState(false);
+  const [dayInput, setDayInput] = React.useState(String(budgetStartDay));
+  const resetTimerRef = React.useRef(null);
+
+  React.useEffect(() => { setDayInput(String(budgetStartDay)); }, [budgetStartDay]);
+  React.useEffect(() => () => clearTimeout(resetTimerRef.current), []);
 
   const toggle = k => setExpanded(e => ({ ...e, [k]: !e[k] }));
+
+  const commitDay = () => {
+    const v = Math.max(1, Math.min(28, parseInt(dayInput, 10) || 1));
+    setDayInput(String(v));
+    setBudgetStartDay(v);
+  };
+
+  const handleResetClick = () => {
+    if (!confirmReset) {
+      setConfirmReset(true);
+      resetTimerRef.current = setTimeout(() => setConfirmReset(false), 3000);
+    } else {
+      clearTimeout(resetTimerRef.current);
+      reset();
+      setConfirmReset(false);
+    }
+  };
 
   const renderNode = (key, node, path, depth) => {
     const id = path.join('.');
@@ -42,7 +67,7 @@ export default function WebSettings({ t, onNavigate, onAdd }) {
               onKeyDown={e => {
                 if (e.key === 'Enter' && newName.trim()) {
                   addCategory(path, newName.trim().toUpperCase());
-                  setExpanded(e => ({ ...e, [id]: true }));
+                  setExpanded(ex => ({ ...ex, [id]: true }));
                   setNewName(''); setAdding(null);
                 }
                 if (e.key === 'Escape') { setNewName(''); setAdding(null); }
@@ -79,34 +104,131 @@ export default function WebSettings({ t, onNavigate, onAdd }) {
           <div style={{ marginTop: 12, borderTop: '2px solid ' + A.ink }}>
             {Object.entries(categoryTree).map(([k, n]) => renderNode(k, n, [k], 0))}
           </div>
-          <div style={{ marginTop: 16, padding: '10px 14px', border: '1.5px dashed ' + A.ink, fontSize: 10, color: A.ink2, letterSpacing: 1.2, textAlign: 'center', cursor: 'pointer' }}>
-            + ADD · TOP · LEVEL · CATEGORY
-          </div>
+
+          {adding === '__root__' ? (
+            <div style={{ display: 'flex', gap: 8, marginTop: 12, padding: '8px 0', borderTop: '1px dashed ' + A.ink }}>
+              <input autoFocus value={newName} onChange={e => setNewName(e.target.value)}
+                placeholder="NEW · TOP · LEVEL · CATEGORY"
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && newName.trim()) {
+                    addCategory([], newName.trim().toUpperCase());
+                    setNewName(''); setAdding(null);
+                  }
+                  if (e.key === 'Escape') { setNewName(''); setAdding(null); }
+                }}
+                style={{ flex: 1, fontFamily: A.font, fontSize: 11, background: 'transparent', border: 'none', borderBottom: '1px solid ' + A.ink, outline: 'none', padding: '4px 0', color: A.ink, letterSpacing: 0.8 }}
+              />
+              <button onClick={() => { setNewName(''); setAdding(null); }}
+                style={{ all: 'unset', cursor: 'pointer', fontSize: 10, color: A.muted, letterSpacing: 1 }}>× CANCEL</button>
+            </div>
+          ) : (
+            <div
+              onClick={() => setAdding('__root__')}
+              style={{ marginTop: 16, padding: '10px 14px', border: '1.5px dashed ' + A.ink, fontSize: 10, color: A.ink2, letterSpacing: 1.2, textAlign: 'center', cursor: 'pointer' }}>
+              + ADD · TOP · LEVEL · CATEGORY
+            </div>
+          )}
         </div>
 
         {/* Preferences */}
         <div>
-          <ALabel>[03] PREFERENCES</ALabel>
+          {/* DISPLAY */}
+          <ALabel>[03] DISPLAY</ALabel>
           <div style={{ marginTop: 12, borderTop: '2px solid ' + A.ink }}>
-            {[
-              ['PROFILE', [['ACCOUNT','m@example.com'],['CURRENCY','USD · EUR · GBP'],['TIMEZONE','AMERICA / NEW_YORK']]],
-              ['DATA',    [['LINKED','8 INSTITUTIONS'],['RULES','12 ACTIVE'],['MERCHANTS','47 KNOWN']]],
-              ['BUDGETS', [['PERIOD','MONTHLY · 1→31'],['ROLLOVER','ON'],['ALERTS','80%']]],
-              ['SECURITY',[['2FA','ON · APP'],['BIOMETRICS','ENABLED'],['SESSIONS','2 DEVICES']]],
-              ['EXPORT',  [['CSV · 30D','↓ DOWNLOAD'],['OFX · 90D','↓ DOWNLOAD'],['PDF · STATEMENT','↓ DOWNLOAD']]],
-            ].map(([title, rows]) => (
-              <div key={title} style={{ paddingTop: 16, paddingBottom: 4 }}>
-                <ALabel>{title}</ALabel>
-                <div style={{ marginTop: 4 }}>
-                  {rows.map(([k, v], i) => (
-                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', fontSize: 11, borderBottom: '1px solid ' + A.rule2 }}>
-                      <span style={{ letterSpacing: 0.4 }}>{k}</span>
-                      <span style={{ color: A.muted }}>{v}</span>
-                    </div>
-                  ))}
+            {/* Accent color */}
+            <div style={{ padding: '10px 0', borderBottom: '1px solid ' + A.rule2 }}>
+              <div style={{ fontSize: 9, color: A.muted, letterSpacing: 1, marginBottom: 8 }}>ACCENT COLOR</div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                {ACCENTS.map(a => (
+                  <button key={a.val} onClick={() => setAccent(a.val)} title={a.label} style={{
+                    all: 'unset', cursor: 'pointer',
+                    width: 18, height: 18, background: a.val,
+                    border: t.accent === a.val ? '2px solid ' + A.ink : '1px solid ' + A.rule2,
+                  }} />
+                ))}
+              </div>
+            </div>
+            {/* Density */}
+            <div style={{ padding: '10px 0', borderBottom: '1px solid ' + A.rule2 }}>
+              <div style={{ fontSize: 9, color: A.muted, letterSpacing: 1, marginBottom: 8 }}>DENSITY</div>
+              <div style={{ display: 'flex', gap: 6 }}>
+                {['comfortable', 'compact'].map(d => (
+                  <button key={d} onClick={() => setDensity(d)} style={{
+                    all: 'unset', cursor: 'pointer', fontSize: 10, letterSpacing: 1.2,
+                    padding: '5px 10px', border: '1px solid ' + (t.density === d ? A.ink : A.rule2),
+                    background: t.density === d ? A.ink : 'transparent',
+                    color: t.density === d ? A.bg : A.ink,
+                  }}>{d.toUpperCase()}</button>
+                ))}
+              </div>
+            </div>
+            {/* Decimals */}
+            <div style={{ padding: '10px 0', borderBottom: '1px solid ' + A.rule2 }}>
+              <div style={{ fontSize: 9, color: A.muted, letterSpacing: 1, marginBottom: 8 }}>DECIMALS</div>
+              <div style={{ display: 'flex', gap: 6 }}>
+                {[['SHOW', true], ['HIDE', false]].map(([label, val]) => (
+                  <button key={label} onClick={() => setDecimals(val)} style={{
+                    all: 'unset', cursor: 'pointer', fontSize: 10, letterSpacing: 1.2,
+                    padding: '5px 10px', border: '1px solid ' + (t.decimals === val ? A.ink : A.rule2),
+                    background: t.decimals === val ? A.ink : 'transparent',
+                    color: t.decimals === val ? A.bg : A.ink,
+                  }}>{label}</button>
+                ))}
+              </div>
+            </div>
+            {/* Currency */}
+            <div style={{ padding: '10px 0', borderBottom: '1px solid ' + A.rule2 }}>
+              <div style={{ fontSize: 9, color: A.muted, letterSpacing: 1, marginBottom: 8 }}>CURRENCY</div>
+              <select value={t.currency} onChange={e => setCurrency(e.target.value)} style={{
+                fontFamily: A.font, fontSize: 11, padding: '4px 8px',
+                border: '1px solid ' + A.ink, background: A.bg, color: A.ink, cursor: 'pointer',
+              }}>
+                {CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+          </div>
+
+          {/* BUDGETS */}
+          <div style={{ marginTop: 20 }}>
+            <ALabel>BUDGETS</ALabel>
+            <div style={{ marginTop: 12, borderTop: '2px solid ' + A.ink }}>
+              <div style={{ padding: '10px 0', borderBottom: '1px solid ' + A.rule2 }}>
+                <div style={{ fontSize: 9, color: A.muted, letterSpacing: 1, marginBottom: 8 }}>BUDGET · PERIOD · START DAY</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <input
+                    type="number" min="1" max="28"
+                    value={dayInput}
+                    onChange={e => setDayInput(e.target.value)}
+                    onBlur={commitDay}
+                    onKeyDown={e => e.key === 'Enter' && commitDay()}
+                    style={{
+                      fontFamily: A.font, fontSize: 13, width: 48,
+                      border: 'none', borderBottom: '1px solid ' + A.ink,
+                      background: 'transparent', color: A.ink, outline: 'none', padding: '2px 0',
+                      textAlign: 'center',
+                    }}
+                  />
+                  <span style={{ fontSize: 10, color: A.muted, letterSpacing: 0.8 }}>OF EACH MONTH</span>
                 </div>
               </div>
-            ))}
+            </div>
+          </div>
+
+          {/* DATA */}
+          <div style={{ marginTop: 20 }}>
+            <ALabel>DATA</ALabel>
+            <div style={{ marginTop: 12, borderTop: '2px solid ' + A.ink }}>
+              <div style={{ padding: '10px 0', borderBottom: '1px solid ' + A.rule2 }}>
+                <div style={{ fontSize: 9, color: A.muted, letterSpacing: 1, marginBottom: 8 }}>RESET · ALL · DATA</div>
+                <button onClick={handleResetClick} style={{
+                  all: 'unset', cursor: 'pointer', fontSize: 10, letterSpacing: 1.2,
+                  padding: '5px 12px', border: '1px solid ' + A.neg, color: confirmReset ? A.bg : A.neg,
+                  background: confirmReset ? A.neg : 'transparent',
+                }}>
+                  {confirmReset ? 'CLICK AGAIN TO CONFIRM ↩' : 'RESET ALL DATA'}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
