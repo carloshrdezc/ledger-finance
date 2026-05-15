@@ -70,18 +70,26 @@ export function StoreProvider({ children }) {
     [bills, transactions, selectedPeriod],
   );
 
-  const accountsWithBalance = React.useMemo(() => {
+  const allAccountsWithBalance = React.useMemo(() => {
     const now = new Date();
     const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-    return accounts.map(acct => {
-      const acctTxs = transactions.filter(tx => tx.acct === acct.id);
-      const balance = acct.openingBal + acctTxs.reduce((s, tx) => s + tx.amt, 0);
-      const delta = acctTxs
-        .filter(tx => tx.date?.startsWith(thisMonth))
-        .reduce((s, tx) => s + tx.amt, 0);
-      return { ...acct, balance, delta };
-    });
+    return accounts
+      .slice()
+      .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+      .map(acct => {
+        const acctTxs = transactions.filter(tx => tx.acct === acct.id);
+        const balance = acct.openingBal + acctTxs.reduce((s, tx) => s + tx.amt, 0);
+        const delta = acctTxs
+          .filter(tx => tx.date?.startsWith(thisMonth))
+          .reduce((s, tx) => s + tx.amt, 0);
+        return { ...acct, balance, delta };
+      });
   }, [accounts, transactions]);
+
+  const accountsWithBalance = React.useMemo(
+    () => allAccountsWithBalance.filter(a => !a.archived),
+    [allAccountsWithBalance],
+  );
 
   const addTransactions = React.useCallback(incoming => setTxs(prev => {
     const keys = new Set(prev.map(t => `${t.name}|${t.amt}|${t.date}`));
@@ -110,10 +118,28 @@ export function StoreProvider({ children }) {
     });
   }, [setCatTree]);
 
-  const addAccount = React.useCallback(acct => setAccounts(prev => {
-    const idx = prev.findIndex(a => a.id === acct.id);
-    if (idx >= 0) { const next = [...prev]; next[idx] = acct; return next; }
-    return [...prev, acct];
+  const addAccount = React.useCallback(acct => setAccounts(prev => [
+    ...prev,
+    { archived: false, order: prev.filter(a => !a.archived).length, ...acct },
+  ]), [setAccounts]);
+
+  const updateAccount = React.useCallback((id, patch) => setAccounts(prev =>
+    prev.map(a => a.id === id ? { ...a, ...patch } : a)
+  ), [setAccounts]);
+
+  const archiveAccount = React.useCallback(id => setAccounts(prev =>
+    prev.map(a => a.id === id ? { ...a, archived: true } : a)
+  ), [setAccounts]);
+
+  const deleteAccount = React.useCallback(id => setAccounts(prev =>
+    prev.filter(a => a.id !== id)
+  ), [setAccounts]);
+
+  const reorderAccounts = React.useCallback(orderedIds => setAccounts(prev => {
+    const byId = Object.fromEntries(prev.map(a => [a.id, a]));
+    const reordered = orderedIds.map((id, i) => ({ ...byId[id], order: i }));
+    const untouched = prev.filter(a => !orderedIds.includes(a.id));
+    return [...reordered, ...untouched];
   }), [setAccounts]);
 
   const markBillPaid = React.useCallback(bill => {
@@ -184,8 +210,13 @@ export function StoreProvider({ children }) {
       goToNextPeriod,
       accounts,
       accountsWithBalance,
+      allAccountsWithBalance,
       setAccounts,
       addAccount,
+      updateAccount,
+      archiveAccount,
+      deleteAccount,
+      reorderAccounts,
       reset,
     }}>
       {children}
