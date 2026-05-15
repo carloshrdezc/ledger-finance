@@ -123,7 +123,8 @@ export const TRANSACTIONS = [
   { id: 't14', date: '2026-05-07', name: 'KAISER · COPAY',      acct: 'amex', cat: 'health', path:['health','medical'],                 amt:  -45.00, ccy: 'USD' },
   { id: 't15', date: '2026-05-06', name: 'APPLE STORE',         acct: 'amex', cat: 'shop',   path:['shop','tech'],                      amt: -249.00, ccy: 'USD' },
   { id: 't16', date: '2026-05-05', name: 'TARTINE BAKERY',      acct: 'csp',  cat: 'dining', path:['dining','cafe'],                    amt:  -18.40, ccy: 'USD' },
-  { id: 't17', date: '2026-05-04', name: 'TRANSFER → SAVINGS',  acct: 'chk',  cat: 'income', path:['income','payroll'],                 amt:-1000.00, ccy: 'USD' },
+  { id: 'xfer_seed01_out', date: '2026-05-04', name: 'TRANSFER → ALLY SAVINGS',    acct: 'chk', ccy: 'USD', cat: 'transfer', path: [], amt: -1000.00, transferId: 'xfer_seed01', transferPeer: 'xfer_seed01_in'  },
+  { id: 'xfer_seed01_in',  date: '2026-05-04', name: 'TRANSFER ← CHASE CHECKING',  acct: 'sav', ccy: 'USD', cat: 'transfer', path: [], amt:  1000.00, transferId: 'xfer_seed01', transferPeer: 'xfer_seed01_out' },
   { id: 't18', date: '2026-05-03', name: 'RENT · GREENPOINT',   acct: 'chk',  cat: 'rent',   path:['rent'],                             amt:-2400.00, ccy: 'USD' },
   { id: 't19', date: '2026-05-02', name: 'LUFTHANSA · SFO→BER', acct: 'csp',  cat: 'travel', path:['travel','flights'],                 amt: -812.40, ccy: 'USD' },
   { id: 't20', date: '2026-05-01', name: 'BERLIN · KAFFEE',     acct: 'eur',  cat: 'dining', path:['dining','cafe'],                    amt:   -4.20, ccy: 'EUR' },
@@ -206,7 +207,10 @@ export const SPARK_SPEND = [
 ];
 
 // ── formatters ──────────────────────────────────────────────────────────────
-const CCY_SYM = { USD: '$', EUR: '€', GBP: '£' };
+export const CCY_SYM = {
+  USD: '$', EUR: '€', GBP: '£', JPY: '¥',
+  CAD: 'C$', AUD: 'A$', CHF: 'Fr', MXN: 'MX$',
+};
 
 export function fmtMoney(v, ccy = 'USD', decimals = true) {
   const sym = CCY_SYM[ccy] || '$';

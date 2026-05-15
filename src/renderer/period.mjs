@@ -72,6 +72,7 @@ function priorPeriods(transactions, selectedPeriod) {
 }
 
 export function buildBudgetRows(budgets, transactions, selectedPeriod) {
+  transactions = transactions.filter(tx => tx.cat !== 'transfer');
   const periods = priorPeriods(transactions, selectedPeriod);
   return budgets.map(budget => {
     const rollover = periods.reduce((sum, period) => {
