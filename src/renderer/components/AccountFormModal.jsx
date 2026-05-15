@@ -48,7 +48,7 @@ export default function AccountFormModal({ t, onClose, editAccount = null }) {
     } else if (editAccount) {
       updateAccount(editAccount.id, fields);
     } else {
-      addAccount({ id: 'acct_' + Date.now(), ...fields });
+      addAccount({ id: crypto.randomUUID(), ...fields });
     }
     onClose();
   };
