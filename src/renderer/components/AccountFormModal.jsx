@@ -43,6 +43,7 @@ export default function AccountFormModal({ t, onClose, editAccount = null }) {
       code: editAccount?.code ?? '',
     };
     if (archiving) {
+      updateAccount(editAccount.id, fields);
       archiveAccount(editAccount.id);
     } else if (editAccount) {
       updateAccount(editAccount.id, fields);
@@ -132,7 +133,7 @@ export default function AccountFormModal({ t, onClose, editAccount = null }) {
           <button onClick={handleSave} disabled={!canSave} style={{
             all: 'unset', cursor: canSave ? 'pointer' : 'default', fontSize: 11,
             letterSpacing: 1.5, padding: '8px 20px',
-            background: canSave ? A.ink : A.rule2,
+            background: canSave ? t.accent : A.rule2,
             color: canSave ? A.bg : A.muted,
           }}>
             {archiving ? 'ARCHIVE' : 'SAVE'}
