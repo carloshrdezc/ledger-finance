@@ -403,8 +403,6 @@ export function BillsHub({ t, onBack }) {
   const [editRule, setEditRule] = React.useState(null);
 
   const expenseRows = billRows.filter(b => b.type !== 'income');
-  const incomeRows  = billRows.filter(b => b.type === 'income');
-
   const monthly = expenseRows.reduce((s, b) => s + b.amt, 0);
   const paid    = expenseRows.filter(b => b.status === 'paid').reduce((s, b) => s + b.amt, 0);
 
@@ -459,6 +457,9 @@ export function BillsHub({ t, onBack }) {
                 </div>
               );
             })}
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 9, color: A.muted, marginTop: 6, letterSpacing: 1 }}>
+            <span>1</span><span>10</span><span>20</span><span>30</span>
           </div>
         </div>
 
