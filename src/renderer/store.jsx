@@ -45,6 +45,7 @@ export function StoreProvider({ children }) {
   const [bills, setBills] = useLS('ledger:bills', BILLS);
   const [goals, setGoals] = useLS('ledger:goals', GOALS);
   const [goalContributions, setGoalContributions] = useLS('ledger:goalContributions', []);
+  const [budgetStartDay, setBudgetStartDay] = useLS('ledger:budgetStartDay', 1);
 
   React.useEffect(() => {
     // Intentional: txs is read from the initial synchronous localStorage load.
@@ -57,10 +58,10 @@ export function StoreProvider({ children }) {
   const hiddenSet = React.useMemo(() => new Set(hidden), [hidden]);
   const transactions = React.useMemo(() => txs.filter(t => !hiddenSet.has(t.id)), [txs, hiddenSet]);
   const periodTransactions = React.useMemo(
-    () => filterTransactionsForPeriod(transactions, selectedPeriod),
-    [transactions, selectedPeriod],
+    () => filterTransactionsForPeriod(transactions, selectedPeriod, budgetStartDay),
+    [transactions, selectedPeriod, budgetStartDay],
   );
-  const periodLabel = React.useMemo(() => formatPeriodLabel(selectedPeriod), [selectedPeriod]);
+  const periodLabel = React.useMemo(() => formatPeriodLabel(selectedPeriod, budgetStartDay), [selectedPeriod, budgetStartDay]);
   const budgetRows = React.useMemo(
     () => buildBudgetRows(budgets, transactions, selectedPeriod),
     [budgets, transactions, selectedPeriod],
@@ -107,6 +108,10 @@ export function StoreProvider({ children }) {
   const addCategory = React.useCallback((pathParts, label) => {
     setCatTree(prev => {
       const tree = JSON.parse(JSON.stringify(prev));
+      if (pathParts.length === 0) {
+        tree['c_' + Date.now()] = { label };
+        return tree;
+      }
       let node = tree;
       for (let i = 0; i < pathParts.length; i++) {
         node = i === 0 ? node[pathParts[i]] : (node.children || {})[pathParts[i]];
@@ -178,7 +183,8 @@ export function StoreProvider({ children }) {
     setGoalContributions([]);
     setSelectedPeriod(monthKey(new Date()));
     setHidden([]);
-  }, [setTxs, setCatTree, setBudgets, setAccounts, setBills, setGoals, setGoalContributions, setSelectedPeriod, setHidden]);
+    setBudgetStartDay(1);
+  }, [setTxs, setCatTree, setBudgets, setAccounts, setBills, setGoals, setGoalContributions, setSelectedPeriod, setHidden, setBudgetStartDay]);
 
   return (
     <StoreCtx.Provider value={{
@@ -220,6 +226,8 @@ export function StoreProvider({ children }) {
       deleteAccount,
       reorderAccounts,
       reset,
+      budgetStartDay,
+      setBudgetStartDay,
     }}>
       {children}
     </StoreCtx.Provider>
