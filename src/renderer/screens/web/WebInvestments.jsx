@@ -2,9 +2,12 @@ import React from 'react';
 import { A } from '../../theme';
 import { AsciiSpark, ALabel } from '../../components/Shared';
 import WebShell from './WebShell';
-import { INVESTMENTS, NET_WORTH, SPARK_NW, fmtMoney, fmtSigned, fmtPct } from '../../data';
+import { INVESTMENTS, SPARK_NW, fmtMoney, fmtSigned, fmtPct } from '../../data';
+import { useStore } from '../../store';
 
 export default function WebInvestments({ t, onNavigate, onAdd }) {
+  const { accountsWithBalance } = useStore();
+  const NET_WORTH = accountsWithBalance.reduce((s, a) => s + (a.ccy === 'USD' ? a.balance : a.balance * 1.08), 0);
   const totalPort = INVESTMENTS.reduce((s, i) => s + i.shares * i.price, 0);
   const dayChg = INVESTMENTS.reduce((s, i) => s + i.shares * i.price * i.chg / 100, 0);
   const alloc = INVESTMENTS.map(i => ({ ...i, val: i.shares * i.price, pct: (i.shares * i.price) / totalPort }));

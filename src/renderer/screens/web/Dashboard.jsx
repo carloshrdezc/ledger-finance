@@ -122,7 +122,7 @@ export default function Dashboard({ t, onNavigate, onAdd }) {
         <div style={{ marginTop: 8, borderTop: '2px solid ' + A.ink }}>
           {transactions.slice(0, 8).map(tx => (
             <div key={tx.id} style={{ display: 'grid', gridTemplateColumns: '80px 16px 1fr 100px 100px', padding: t.density === 'compact' ? '7px 0' : '9px 0', fontSize: 11, borderBottom: '1px solid ' + A.rule2, alignItems: 'center' }}>
-              <div style={{ fontSize: 9, color: A.muted, letterSpacing: 1 }}>{dayLabel(tx.d)}</div>
+              <div style={{ fontSize: 9, color: A.muted, letterSpacing: 1 }}>{dayLabel(tx.date)}</div>
               <div>{catGlyph(tx.path || [tx.cat])}</div>
               <div>{tx.name}<span style={{ color: A.muted, marginLeft: 8, fontSize: 10 }}>{CATEGORIES[tx.cat]?.label}</span></div>
               <div style={{ color: A.muted, fontSize: 10 }}>{accountsWithBalance.find(a => a.id === tx.acct)?.code}</div>

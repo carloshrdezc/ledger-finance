@@ -1,11 +1,11 @@
 import React from 'react';
 import { A } from '../../theme';
 import { ARule, ALabel } from '../../components/Shared';
-import { ACCOUNTS, fmtMoney, fmtSigned, dayLabel, catGlyph, catBreadcrumb } from '../../data';
+import { fmtMoney, fmtSigned, dayLabel, catGlyph, catBreadcrumb } from '../../data';
 import { useStore } from '../../store';
 
 export default function Transactions({ t }) {
-  const { transactions, hideTx } = useStore();
+  const { transactions, hideTx, accountsWithBalance } = useStore();
   const [filter, setFilter] = React.useState('ALL');
   const visible = transactions.filter(x => {
     if (filter === 'ALL') return true;
@@ -95,7 +95,7 @@ function SwipeRow({ t, tx, onHide }) {
           <div style={{ minWidth: 0, flex: 1 }}>
             <div style={{ fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tx.name}</div>
             <div style={{ fontSize: 10, color: A.muted, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {catBreadcrumb(tx.path || [tx.cat])} · {ACCOUNTS.find(a => a.id === tx.acct)?.code}
+              {catBreadcrumb(tx.path || [tx.cat])} · {accountsWithBalance.find(a => a.id === tx.acct)?.code}
             </div>
           </div>
         </div>

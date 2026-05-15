@@ -2,7 +2,7 @@ import React from 'react';
 import { A } from '../../theme';
 import { ALabel } from '../../components/Shared';
 import WebShell from './WebShell';
-import { ACCOUNTS, fmtMoney, fmtSigned, dayLabel, catGlyph, catBreadcrumb } from '../../data';
+import { fmtMoney, fmtSigned, dayLabel, catGlyph, catBreadcrumb } from '../../data';
 import { useStore } from '../../store';
 import { exportCSV } from '../../importExport';
 
@@ -15,7 +15,7 @@ function download(name, content) {
 }
 
 export default function WebTransactions({ t, onNavigate, onAdd }) {
-  const { transactions } = useStore();
+  const { transactions, accountsWithBalance } = useStore();
   const [filter, setFilter] = React.useState('ALL');
   const [search, setSearch] = React.useState('');
 
@@ -67,13 +67,13 @@ export default function WebTransactions({ t, onNavigate, onAdd }) {
         </div>
         {visible.map(tx => (
           <div key={tx.id} style={{ display: 'grid', gridTemplateColumns: '90px 24px 1fr 280px 90px 120px', padding: t.density === 'compact' ? '7px 0' : '10px 0', fontSize: 11, borderBottom: '1px solid ' + A.rule2, alignItems: 'center' }}>
-            <div style={{ fontSize: 9, color: A.muted, letterSpacing: 1 }}>{dayLabel(tx.d)}</div>
+            <div style={{ fontSize: 9, color: A.muted, letterSpacing: 1 }}>{dayLabel(tx.date)}</div>
             <div>{catGlyph(tx.path || [tx.cat])}</div>
             <div style={{ fontSize: 12 }}>{tx.name}</div>
             <div style={{ color: A.ink2, fontSize: 10, letterSpacing: 0.6, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {catBreadcrumb(tx.path || [tx.cat])}
             </div>
-            <div style={{ color: A.muted, fontSize: 10 }}>{ACCOUNTS.find(a => a.id === tx.acct)?.code}</div>
+            <div style={{ color: A.muted, fontSize: 10 }}>{accountsWithBalance.find(a => a.id === tx.acct)?.code}</div>
             <div style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: tx.amt >= 0 ? t.accent : A.ink }}>
               {fmtSigned(tx.amt, tx.ccy, t.decimals)}
             </div>

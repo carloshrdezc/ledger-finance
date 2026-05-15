@@ -19,7 +19,7 @@ export default function WebReports({ t, onNavigate, onAdd }) {
   const maxCat = cats[0] ? cats[0][1] : 1;
 
   const cells = Array.from({ length: 30 }, (_, i) =>
-    transactions.filter(x => x.d === i && x.amt < 0).reduce((s, x) => s + Math.abs(x.amt), 0)
+    transactions.filter(x => x.date && new Date(x.date).getDate() === i && x.amt < 0).reduce((s, x) => s + Math.abs(x.amt), 0)
   );
   const cellMax = Math.max(...cells, 1);
 

@@ -2,7 +2,7 @@ import React from 'react';
 import { A } from '../../theme';
 import { AsciiSpark, ARule, ALabel, ADetailCell } from '../../components/Shared';
 import {
-  ACCOUNTS, GOALS, BILLS, MERCHANTS, MOM_SPEND,
+  GOALS, BILLS, MERCHANTS, MOM_SPEND,
   fmtMoney, fmtSigned, fmtPct, dayLabel, catBreadcrumb,
 } from '../../data';
 import { useStore } from '../../store';
@@ -125,7 +125,7 @@ export function Reports({ t, onBack }) {
 export function ReportsCalendar({ t, onBack }) {
   const { transactions } = useStore();
   const cells = Array.from({ length: 30 }, (_, i) => {
-    return transactions.filter(x => x.d === i && x.amt < 0).reduce((s, x) => s + Math.abs(x.amt), 0);
+    return transactions.filter(x => x.date && new Date(x.date).getDate() === i && x.amt < 0).reduce((s, x) => s + Math.abs(x.amt), 0);
   });
   const max = Math.max(...cells, 1);
   const total = cells.reduce((a, b) => a + b, 0);
@@ -181,9 +181,9 @@ export function ReportsCalendar({ t, onBack }) {
 
 // ── Credit Card Detail ────────────────────────────────────────────────────────
 export function CCDetail({ t, onBack }) {
-  const { transactions } = useStore();
-  const a = ACCOUNTS.find(x => x.id === 'amex');
-  const limit = 10000, used = Math.abs(a.bal), util = used / limit;
+  const { transactions, accountsWithBalance } = useStore();
+  const a = accountsWithBalance.find(x => x.id === 'amex') || {};
+  const limit = 10000, used = Math.abs(a.balance), util = used / limit;
   const txns = transactions.filter(x => x.acct === 'amex').slice(0, 8);
 
   return (
@@ -195,7 +195,7 @@ export function CCDetail({ t, onBack }) {
       <ARule thick />
       <div style={{ padding: '16px 0 8px' }}>
         <div style={{ fontSize: 11, letterSpacing: 1.4, color: A.muted, textTransform: 'uppercase' }}>{a.name}</div>
-        <div style={{ fontSize: 32, fontVariantNumeric: 'tabular-nums', letterSpacing: -1, marginTop: 4, color: A.neg }}>{fmtMoney(a.bal, 'USD', t.decimals)}</div>
+        <div style={{ fontSize: 32, fontVariantNumeric: 'tabular-nums', letterSpacing: -1, marginTop: 4, color: A.neg }}>{fmtMoney(a.balance, 'USD', t.decimals)}</div>
         <div style={{ fontSize: 10, color: A.muted, marginTop: 2, letterSpacing: 1 }}>STATEMENT DUE · MAY 28</div>
       </div>
       <div style={{ marginTop: 14 }}>
@@ -249,7 +249,7 @@ export function CCDetail({ t, onBack }) {
         <div key={tx.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '9px 0', borderBottom: '1px solid ' + A.rule2 }}>
           <div style={{ minWidth: 0, flex: 1, paddingRight: 8 }}>
             <div style={{ fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tx.name}</div>
-            <div style={{ fontSize: 10, color: A.muted, letterSpacing: 0.6, marginTop: 2 }}>{dayLabel(tx.d)} · {catBreadcrumb(tx.path || [tx.cat])}</div>
+            <div style={{ fontSize: 10, color: A.muted, letterSpacing: 0.6, marginTop: 2 }}>{dayLabel(tx.date)} · {catBreadcrumb(tx.path || [tx.cat])}</div>
           </div>
           <div style={{ fontSize: 12, fontVariantNumeric: 'tabular-nums', color: A.ink }}>{fmtSigned(tx.amt, tx.ccy, t.decimals)}</div>
         </div>
@@ -331,6 +331,8 @@ export function GoalDetail({ t, goalId = 'g1', onBack }) {
 
 // ── Bills Hub ─────────────────────────────────────────────────────────────────
 export function BillsHub({ t, onBack }) {
+  const { accountsWithBalance: accts } = useStore();
+  const { accountsWithBalance: accts } = useStore();
   const timeline = Array.from({ length: 30 }, (_, i) => BILLS.filter(b => b.day === ((11 + i - 1) % 31) + 1));
   const monthly = BILLS.reduce((s, b) => s + b.amt, 0);
   const subsOnly = BILLS.filter(b => b.cat === 'subs');
@@ -378,7 +380,7 @@ export function BillsHub({ t, onBack }) {
               <div style={{ fontSize: 16, fontVariantNumeric: 'tabular-nums', width: 30, color: A.ink, letterSpacing: -0.5 }}>{String(b.day).padStart(2, '0')}</div>
               <div>
                 <div style={{ fontSize: 13 }}>{b.name}</div>
-                <div style={{ fontSize: 10, color: A.muted, letterSpacing: 0.6, marginTop: 2 }}>{ACCOUNTS.find(a => a.id === b.acct)?.code} · MONTHLY</div>
+                <div style={{ fontSize: 10, color: A.muted, letterSpacing: 0.6, marginTop: 2 }}>{accts.find(a => a.id === b.acct)?.code} · MONTHLY</div>
               </div>
             </div>
             <div style={{ fontSize: 13, fontVariantNumeric: 'tabular-nums' }}>{fmtMoney(b.amt, 'USD', t.decimals)}</div>

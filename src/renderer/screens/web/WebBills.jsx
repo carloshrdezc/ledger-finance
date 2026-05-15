@@ -2,9 +2,11 @@ import React from 'react';
 import { A } from '../../theme';
 import { ALabel } from '../../components/Shared';
 import WebShell from './WebShell';
-import { BILLS, ACCOUNTS, CATEGORIES, fmtMoney } from '../../data';
+import { useStore } from '../../store';
+import { BILLS, CATEGORIES, fmtMoney } from '../../data';
 
 export default function WebBills({ t, onNavigate, onAdd }) {
+  const { accountsWithBalance } = useStore();
   const sorted = [...BILLS].sort((a, b) => a.day - b.day);
   const totalMonthly = BILLS.reduce((s, b) => s + b.amt, 0);
 
@@ -52,7 +54,7 @@ export default function WebBills({ t, onNavigate, onAdd }) {
               <div>DAY</div><div>NAME</div><div>ACCT</div><div>CATEGORY</div><div style={{ textAlign: 'right' }}>AMOUNT</div>
             </div>
             {sorted.map((b, i) => {
-              const acct = ACCOUNTS.find(a => a.id === b.acct);
+              const acct = accountsWithBalance.find(a => a.id === b.acct);
               const cat  = CATEGORIES[b.cat];
               const isDue = b.day === today;
               const isPast = b.day < today;

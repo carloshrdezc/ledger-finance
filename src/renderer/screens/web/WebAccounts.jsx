@@ -80,7 +80,7 @@ export default function WebAccounts({ t, onNavigate, onAdd }) {
               )}
               {acctTxs.map(tx => (
                 <div key={tx.id} style={{ display: 'grid', gridTemplateColumns: '70px 18px 1fr 90px', padding: t.density === 'compact' ? '7px 0' : '9px 0', fontSize: 11, borderBottom: '1px solid ' + A.rule2, alignItems: 'center' }}>
-                  <div style={{ fontSize: 9, color: A.muted, letterSpacing: 1 }}>{dayLabel(tx.d)}</div>
+                  <div style={{ fontSize: 9, color: A.muted, letterSpacing: 1 }}>{dayLabel(tx.date)}</div>
                   <div style={{ fontSize: 11 }}>{catGlyph(tx.path || [tx.cat])}</div>
                   <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tx.name}</div>
                   <div style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: tx.amt >= 0 ? t.accent : A.ink }}>

@@ -1,11 +1,11 @@
 import React from 'react';
 import { A } from '../../theme';
 import { ALabel, ARule } from '../../components/Shared';
-import { ACCOUNTS, CATEGORIES } from '../../data';
+import { CATEGORIES } from '../../data';
 import { useStore } from '../../store';
 
 export default function WebAddModal({ t, onClose }) {
-  const { addTransactions } = useStore();
+  const { addTransactions, accountsWithBalance } = useStore();
   const [amt, setAmt]           = React.useState('');
   const [merchant, setMerchant] = React.useState('');
   const [isExpense, setIsExpense] = React.useState(true);
@@ -20,7 +20,7 @@ export default function WebAddModal({ t, onClose }) {
       id: 'add_' + Date.now(),
       name: merchant.trim(),
       amt: isExpense ? -Math.abs(parseFloat(amt)) : Math.abs(parseFloat(amt)),
-      d: new Date().getDate(),
+      date: new Date().toISOString().slice(0, 10),
       cat,
       ccy: 'USD',
       acct,
@@ -118,7 +118,7 @@ export default function WebAddModal({ t, onClose }) {
             fontSize: 13, padding: 8,
             border: '1px solid ' + A.ink, background: A.bg, color: A.ink,
           }}>
-            {ACCOUNTS.filter(a => !['INV','CRY'].includes(a.type)).map(a => (
+            {accountsWithBalance.filter(a => !['INV','CRY'].includes(a.type)).map(a => (
               <option key={a.id} value={a.id}>{a.name} · {a.code}</option>
             ))}
           </select>
