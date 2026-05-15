@@ -7,7 +7,7 @@ import {
   formatPeriodLabel,
   monthKey,
 } from './period.mjs';
-import { buildBillRows, createBillPaymentTransaction, createGoalContribution } from './planning.mjs';
+import { buildBillRows, markRecurringPaid as createRecurringPayment, getBillDueDate, slug, createGoalContribution } from './planning.mjs';
 
 function useLS(key, def) {
   const [v, setV] = React.useState(() => {
@@ -33,6 +33,18 @@ function migrateTransactions(txs) {
   });
 }
 
+function migrateBills(bills) {
+  return bills.map(b => b.id ? b : {
+    ...b,
+    id: slug(b.name) + '_' + (b.day || 1) + '_' + (b.acct || ''),
+    type: 'expense',
+    freq: 'monthly',
+    path: b.path || [b.cat || 'bills'],
+    ccy: b.ccy || 'USD',
+    active: true,
+  });
+}
+
 export const StoreCtx = React.createContext(null);
 
 export function StoreProvider({ children }) {
@@ -43,6 +55,9 @@ export function StoreProvider({ children }) {
   const [accounts, setAccounts] = useLS('ledger:accounts', ACCOUNTS);
   const [selectedPeriod, setSelectedPeriod] = useLS('ledger:period', monthKey(new Date()));
   const [bills, setBills] = useLS('ledger:bills', BILLS);
+  React.useEffect(() => {
+    setBills(prev => migrateBills(prev));
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [goals, setGoals] = useLS('ledger:goals', GOALS);
   const [goalContributions, setGoalContributions] = useLS('ledger:goalContributions', []);
   const [budgetStartDay, setBudgetStartDay] = useLS('ledger:budgetStartDay', 1);
@@ -178,12 +193,31 @@ export function StoreProvider({ children }) {
     return [...reordered, ...untouched];
   }), [setAccounts]);
 
+  const addRecurring = React.useCallback(rule => {
+    const id = slug(rule.name) + '_' + Date.now();
+    setBills(prev => [...prev, { ...rule, id, active: rule.active !== false }]);
+  }, [setBills]);
+
+  const updateRecurring = React.useCallback((id, patch) => {
+    setBills(prev => prev.map(b => b.id === id ? { ...b, ...patch } : b));
+  }, [setBills]);
+
+  const deleteRecurring = React.useCallback(id => {
+    setBills(prev => prev.filter(b => b.id !== id));
+  }, [setBills]);
+
+  const markRecurringPaid = React.useCallback((rule, occurrenceDate) => {
+    const tx = createRecurringPayment(rule, occurrenceDate);
+    setTxs(prev => {
+      if (prev.some(ex => ex.billKey === tx.billKey)) return prev;
+      return [...prev, tx];
+    });
+  }, [setTxs]);
+
   const markBillPaid = React.useCallback(bill => {
-    const tx = createBillPaymentTransaction(bill, selectedPeriod);
-    setTxs(prev => prev.some(existing => existing.id === tx.id || existing.billKey === tx.billKey && existing.date === tx.date)
-      ? prev
-      : [...prev, tx]);
-  }, [selectedPeriod, setTxs]);
+    const occDate = getBillDueDate(bill, selectedPeriod);
+    markRecurringPaid(bill, occDate);
+  }, [markRecurringPaid, selectedPeriod]);
 
   const contributeToGoal = React.useCallback((goalId, details) => {
     const goal = goals.find(g => g.id === goalId);
@@ -237,6 +271,10 @@ export function StoreProvider({ children }) {
       setBills,
       billRows,
       markBillPaid,
+      addRecurring,
+      updateRecurring,
+      deleteRecurring,
+      markRecurringPaid,
       goals,
       setGoals,
       goalContributions,
