@@ -163,14 +163,40 @@ export const GOALS = [
 ];
 
 export const BILLS = [
-  { name: 'RENT · GREENPOINT', amt: 2400.00, day:  1, acct: 'chk',  cat: 'rent'   },
-  { name: 'COMCAST XFINITY',   amt:   89.00, day:  6, acct: 'chk',  cat: 'bills'  },
-  { name: 'PG&E ELECTRIC',     amt:  112.00, day:  2, acct: 'chk',  cat: 'bills'  },
-  { name: 'NETFLIX',           amt:   15.49, day:  1, acct: 'chk',  cat: 'subs'   },
-  { name: 'SPOTIFY FAMILY',    amt:   16.99, day:  1, acct: 'amex', cat: 'subs'   },
-  { name: 'NYTIMES',           amt:   17.00, day: 15, acct: 'amex', cat: 'subs'   },
-  { name: 'EQUINOX',           amt:  245.00, day: 22, acct: 'amex', cat: 'health' },
-  { name: 'CLAUDE PRO',        amt:   20.00, day: 21, acct: 'amex', cat: 'subs'   },
+  { id: 'rent-greenpoint_1_chk',  name: 'RENT · GREENPOINT', type: 'expense', freq: 'monthly', active: true, amt: 2400.00, day:  1, acct: 'chk',  cat: 'rent',   path: ['rent'],   ccy: 'USD' },
+  { id: 'comcast-xfinity_6_chk', name: 'COMCAST XFINITY',   type: 'expense', freq: 'monthly', active: true, amt:   89.00, day:  6, acct: 'chk',  cat: 'bills',  path: ['bills'],  ccy: 'USD' },
+  { id: 'pge-electric_2_chk',    name: 'PG&E ELECTRIC',     type: 'expense', freq: 'monthly', active: true, amt:  112.00, day:  2, acct: 'chk',  cat: 'bills',  path: ['bills'],  ccy: 'USD' },
+  { id: 'netflix_1_chk',         name: 'NETFLIX',           type: 'expense', freq: 'monthly', active: true, amt:   15.49, day:  1, acct: 'chk',  cat: 'subs',   path: ['subs'],   ccy: 'USD' },
+  { id: 'spotify-family_1_amex', name: 'SPOTIFY FAMILY',    type: 'expense', freq: 'monthly', active: true, amt:   16.99, day:  1, acct: 'amex', cat: 'subs',   path: ['subs'],   ccy: 'USD' },
+  { id: 'nytimes_15_amex',       name: 'NYTIMES',           type: 'expense', freq: 'monthly', active: true, amt:   17.00, day: 15, acct: 'amex', cat: 'subs',   path: ['subs'],   ccy: 'USD' },
+  { id: 'equinox_22_amex',       name: 'EQUINOX',           type: 'expense', freq: 'monthly', active: true, amt:  245.00, day: 22, acct: 'amex', cat: 'health', path: ['health'], ccy: 'USD' },
+  { id: 'claude-pro_21_amex',    name: 'CLAUDE PRO',        type: 'expense', freq: 'monthly', active: true, amt:   20.00, day: 21, acct: 'amex', cat: 'subs',   path: ['subs'],   ccy: 'USD' },
+  {
+    id: 'payroll-biweekly_chk',
+    name: 'PAYROLL · DIRECT DEPOSIT',
+    type: 'income',
+    freq: 'biweekly',
+    active: true,
+    startDate: '2026-05-02',
+    amt: 3800.00,
+    acct: 'chk',
+    cat: 'income',
+    path: ['income', 'payroll'],
+    ccy: 'USD',
+  },
+  {
+    id: 'freelance-weekly_chk',
+    name: 'FREELANCE · RETAINER',
+    type: 'income',
+    freq: 'weekly',
+    active: true,
+    day: 5,
+    amt: 450.00,
+    acct: 'chk',
+    cat: 'income',
+    path: ['income'],
+    ccy: 'USD',
+  },
 ];
 
 export const INVESTMENTS = [
