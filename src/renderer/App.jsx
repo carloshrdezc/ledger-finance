@@ -1,6 +1,5 @@
 import React from 'react';
-import { A } from './theme';
-import { ALabel } from './components/Shared';
+import { A, ACCENTS } from './theme';
 import { StoreProvider } from './store';
 import ImportExport from './components/ImportExport';
 
@@ -30,14 +29,6 @@ import WebAddModal from './screens/web/WebAddModal';
 
 // ─── Tweaks ────────────────────────────────────────────────────────────────
 
-const ACCENTS = [
-  { label: 'GREEN',  val: '#1f6b3a' },
-  { label: 'BLUE',   val: '#1a4f8a' },
-  { label: 'AMBER',  val: '#b06000' },
-  { label: 'VIOLET', val: '#5b2d8e' },
-  { label: 'SLATE',  val: '#2f4858' },
-];
-
 function useLS(key, def) {
   const [v, setV] = React.useState(() => {
     try { const s = localStorage.getItem(key); return s !== null ? JSON.parse(s) : def; }
@@ -52,62 +43,11 @@ function useLS(key, def) {
 }
 
 function useTweaks() {
-  const [accent, setAccent]   = useLS('ledger:accent',   ACCENTS[0].val);
-  const [density, setDensity] = useLS('ledger:density',  'comfortable');
+  const [accent, setAccent]     = useLS('ledger:accent',   ACCENTS[0].val);
+  const [density, setDensity]   = useLS('ledger:density',  'comfortable');
   const [decimals, setDecimals] = useLS('ledger:decimals', true);
-  return { accent, setAccent, density, setDensity, decimals, setDecimals };
-}
-
-function TweaksPanel({ t, setAccent, setDensity, setDecimals, onClose }) {
-  return (
-    <div style={{
-      position: 'fixed', top: 0, right: 0, bottom: 0, width: 280,
-      background: A.bg, borderLeft: '2px solid ' + A.ink,
-      zIndex: 1000, padding: 24, overflowY: 'auto', fontFamily: A.font,
-    }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 24 }}>
-        <ALabel>TWEAKS</ALabel>
-        <button onClick={onClose} style={{ all: 'unset', cursor: 'pointer', fontSize: 18, color: A.muted }}>×</button>
-      </div>
-
-      <ALabel>ACCENT</ALabel>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8, marginBottom: 20 }}>
-        {ACCENTS.map(a => (
-          <button key={a.val} onClick={() => setAccent(a.val)} style={{
-            all: 'unset', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10,
-            padding: '6px 0', borderBottom: '1px solid ' + A.rule2,
-          }}>
-            <div style={{ width: 14, height: 14, background: a.val, border: t.accent === a.val ? '2px solid ' + A.ink : '1px solid ' + A.rule2 }} />
-            <span style={{ fontSize: 11, letterSpacing: 1, color: t.accent === a.val ? A.ink : A.muted }}>{a.label}</span>
-          </button>
-        ))}
-      </div>
-
-      <ALabel>DENSITY</ALabel>
-      <div style={{ display: 'flex', gap: 6, marginTop: 8, marginBottom: 20 }}>
-        {['comfortable', 'compact'].map(d => (
-          <button key={d} onClick={() => setDensity(d)} style={{
-            all: 'unset', cursor: 'pointer', fontSize: 10, letterSpacing: 1.2,
-            padding: '5px 10px', border: '1px solid ' + (t.density === d ? A.ink : A.rule2),
-            background: t.density === d ? A.ink : 'transparent',
-            color: t.density === d ? A.bg : A.ink,
-          }}>{d.toUpperCase()}</button>
-        ))}
-      </div>
-
-      <ALabel>DECIMALS</ALabel>
-      <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
-        {[['ON', true], ['OFF', false]].map(([label, val]) => (
-          <button key={label} onClick={() => setDecimals(val)} style={{
-            all: 'unset', cursor: 'pointer', fontSize: 10, letterSpacing: 1.2,
-            padding: '5px 10px', border: '1px solid ' + (t.decimals === val ? A.ink : A.rule2),
-            background: t.decimals === val ? A.ink : 'transparent',
-            color: t.decimals === val ? A.bg : A.ink,
-          }}>{label}</button>
-        ))}
-      </div>
-    </div>
-  );
+  const [currency, setCurrency] = useLS('ledger:currency', 'USD');
+  return { accent, setAccent, density, setDensity, decimals, setDecimals, currency, setCurrency };
 }
 
 // ─── Mobile ────────────────────────────────────────────────────────────────
@@ -147,11 +87,10 @@ function ATabs({ active, onTab }) {
   );
 }
 
-function MobileApp({ t, setAccent, setDensity, setDecimals }) {
+function MobileApp({ t, setAccent, setDensity, setDecimals, setCurrency }) {
   const [tab, setTab] = React.useState('home');
   const [navStack, setNavStack] = React.useState([]);
   const [showAdd, setShowAdd] = React.useState(false);
-  const [showTweaks, setShowTweaks] = React.useState(false);
 
   const push = (screen, params = {}) => setNavStack(s => [...s, { screen, params }]);
   const pop = () => setNavStack(s => s.slice(0, -1));
@@ -169,7 +108,7 @@ function MobileApp({ t, setAccent, setDensity, setDecimals }) {
       case 'goal':       return <GoalDetail {...props} goal={params.goal} />;
       case 'cc':         return <CCDetail {...props} acct={params.acct} />;
       case 'bills':      return <BillsHub {...props} />;
-      case 'settings':   return <Settings {...props} />;
+      case 'settings':   return <Settings {...props} setAccent={setAccent} setDensity={setDensity} setDecimals={setDecimals} setCurrency={setCurrency} />;
       case 'categories': return <CategoriesEditor {...props} />;
       default: return null;
     }
@@ -203,22 +142,18 @@ function MobileApp({ t, setAccent, setDensity, setDecimals }) {
       )}
 
       {showAdd && <AddSheet t={t} onClose={() => setShowAdd(false)} />}
-
-      {showTweaks && (
-        <TweaksPanel t={t} setAccent={setAccent} setDensity={setDensity} setDecimals={setDecimals} onClose={() => setShowTweaks(false)} />
-      )}
     </div>
   );
 }
 
 // ─── Desktop ───────────────────────────────────────────────────────────────
 
-function DesktopApp({ t, setAccent, setDensity, setDecimals }) {
+function DesktopApp({ t, setAccent, setDensity, setDecimals, setCurrency }) {
   const [page, setPage] = React.useState('dashboard');
-  const [showTweaks, setShowTweaks] = React.useState(false);
   const [showIO, setShowIO] = React.useState(false);
   const [showAdd, setShowAdd] = React.useState(false);
 
+  const settingsProps = { setAccent, setDensity, setDecimals, setCurrency };
   const props = { t, onNavigate: setPage, onAdd: () => setShowAdd(true) };
 
   const renderPage = () => {
@@ -231,7 +166,7 @@ function DesktopApp({ t, setAccent, setDensity, setDecimals }) {
       case 'bills':        return <WebBills {...props} />;
       case 'reports':      return <WebReports {...props} />;
       case 'investments':  return <WebInvestments {...props} />;
-      case 'settings':     return <WebSettings {...props} />;
+      case 'settings':     return <WebSettings {...props} {...settingsProps} />;
       default:             return <Dashboard {...props} />;
     }
   };
@@ -242,14 +177,10 @@ function DesktopApp({ t, setAccent, setDensity, setDecimals }) {
 
       <div style={{ position: 'fixed', bottom: 20, right: 20, zIndex: 500, display: 'flex', gap: 8 }}>
         <button onClick={() => setShowIO(v => !v)} style={{ all: 'unset', cursor: 'pointer', width: 36, height: 36, border: '1.5px solid ' + A.ink, background: A.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, color: A.ink }}>⇅</button>
-        <button onClick={() => setShowTweaks(v => !v)} style={{ all: 'unset', cursor: 'pointer', width: 36, height: 36, border: '1.5px solid ' + A.ink, background: A.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, color: A.ink }}>⚙</button>
       </div>
 
       {showIO && <ImportExport onClose={() => setShowIO(false)} />}
       {showAdd && <WebAddModal t={t} onClose={() => setShowAdd(false)} />}
-      {showTweaks && (
-        <TweaksPanel t={t} setAccent={setAccent} setDensity={setDensity} setDecimals={setDecimals} onClose={() => setShowTweaks(false)} />
-      )}
     </div>
   );
 }
@@ -257,7 +188,7 @@ function DesktopApp({ t, setAccent, setDensity, setDecimals }) {
 // ─── Root ──────────────────────────────────────────────────────────────────
 
 export default function App() {
-  const { accent, setAccent, density, setDensity, decimals, setDecimals } = useTweaks();
+  const { accent, setAccent, density, setDensity, decimals, setDecimals, currency, setCurrency } = useTweaks();
   const [isMobile, setIsMobile] = React.useState(window.innerWidth < 1024);
 
   React.useEffect(() => {
@@ -266,8 +197,8 @@ export default function App() {
     return () => window.removeEventListener('resize', handler);
   }, []);
 
-  const t = { accent, density, decimals };
-  const tweakProps = { setAccent, setDensity, setDecimals };
+  const t = { accent, density, decimals, currency };
+  const tweakProps = { setAccent, setDensity, setDecimals, setCurrency };
 
   return (
     <StoreProvider>
