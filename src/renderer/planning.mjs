@@ -39,7 +39,8 @@ export function getOccurrences(rule, period) {
   }
 
   // biweekly or custom: all dates = startDate + k*interval for integer k >= 0
-  const interval = rule.freq === 'biweekly' ? 14 : (rule.interval || 1);
+  const interval = rule.freq === 'biweekly' ? 14 : Number(rule.interval);
+  if (!interval || interval < 1) return [];
   const anchor = new Date((rule.startDate || period + '-01') + 'T00:00:00');
   const periodStart = new Date(year, month - 1, 1);
   const periodEnd = new Date(year, month - 1, daysInMonth);
