@@ -118,10 +118,10 @@ export function StoreProvider({ children }) {
     });
   }, [setCatTree]);
 
-  const addAccount = React.useCallback(acct => setAccounts(prev => [
-    ...prev,
-    { archived: false, order: prev.filter(a => !a.archived).length, ...acct },
-  ]), [setAccounts]);
+  const addAccount = React.useCallback(acct => setAccounts(prev => {
+    if (prev.some(a => a.id === acct.id)) return prev;
+    return [...prev, { archived: false, order: prev.filter(a => !a.archived).length, ...acct }];
+  }), [setAccounts]);
 
   const updateAccount = React.useCallback((id, patch) => setAccounts(prev =>
     prev.map(a => a.id === id ? { ...a, ...patch } : a)
@@ -131,13 +131,15 @@ export function StoreProvider({ children }) {
     prev.map(a => a.id === id ? { ...a, archived: true } : a)
   ), [setAccounts]);
 
-  const deleteAccount = React.useCallback(id => setAccounts(prev =>
-    prev.filter(a => a.id !== id)
-  ), [setAccounts]);
+  const deleteAccount = React.useCallback(id => setAccounts(prev => {
+    const next = prev.filter(a => a.id !== id);
+    let i = 0;
+    return next.map(a => a.archived ? a : { ...a, order: i++ });
+  }), [setAccounts]);
 
   const reorderAccounts = React.useCallback(orderedIds => setAccounts(prev => {
     const byId = Object.fromEntries(prev.map(a => [a.id, a]));
-    const reordered = orderedIds.map((id, i) => ({ ...byId[id], order: i }));
+    const reordered = orderedIds.filter(id => byId[id]).map((id, i) => ({ ...byId[id], order: i }));
     const untouched = prev.filter(a => !orderedIds.includes(a.id));
     return [...reordered, ...untouched];
   }), [setAccounts]);
