@@ -21,7 +21,7 @@ function migrateTransactions(txs) {
   return txs.map(tx => {
     if (tx.date) return tx;
     const { d, ...rest } = tx;
-    return { ...rest, date: `1970-01-${String(d || 1).padStart(2, '0')}` };
+    return { ...rest, date: `${yyyy}-${mm}-${String(d || 1).padStart(2, '0')}` };
   });
 }
 
