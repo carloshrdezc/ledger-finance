@@ -1,12 +1,12 @@
 import React from 'react';
 import { A } from '../../theme';
 import { ARule, ALabel } from '../../components/Shared';
-import { CATEGORIES } from '../../data';
+import { CATEGORIES, CCY_SYM } from '../../data';
 import { useStore } from '../../store';
 import { getDaysInPeriod } from '../../period.mjs';
 
 export default function AddSheet({ t, onClose, editTx = null }) {
-  const { addTransactions, updateTx, deleteTx, accountsWithBalance, selectedPeriod } = useStore();
+  const { addTransactions, updateTx, deleteTx, deleteTransfer, createTransfer, accountsWithBalance, selectedPeriod } = useStore();
   const defaultDay = Math.min(new Date().getDate(), getDaysInPeriod(selectedPeriod));
   const defaultDate = `${selectedPeriod}-${String(defaultDay).padStart(2, '0')}`;
 
@@ -17,28 +17,58 @@ export default function AddSheet({ t, onClose, editTx = null }) {
   const [acct, setAcct]         = React.useState(editTx ? editTx.acct : (accountsWithBalance[0]?.id || 'chk'));
   const [date, setDate]         = React.useState(editTx ? editTx.date : defaultDate);
 
-  const canSave = amt && parseFloat(amt) > 0 && merchant.trim();
+  const [isTransfer, setIsTransfer] = React.useState(editTx?.cat === 'transfer');
+  const [fromAcct, setFromAcct]     = React.useState(editTx?.acct || accountsWithBalance[0]?.id || 'chk');
+  const [toAcct, setToAcct]         = React.useState(() => {
+    const others = accountsWithBalance.filter(a => a.id !== (editTx?.acct || accountsWithBalance[0]?.id));
+    return others[0]?.id || '';
+  });
+  const [amtFrom, setAmtFrom]       = React.useState('');
+  const [amtTo, setAmtTo]           = React.useState('');
+  const [transferNote, setTransferNote] = React.useState('');
+
+  const fromAcctObj = accountsWithBalance.find(a => a.id === fromAcct);
+  const toAcctObj   = accountsWithBalance.find(a => a.id === toAcct);
+  const isCrossCcy  = fromAcctObj?.ccy !== toAcctObj?.ccy;
+  const impliedRate = isCrossCcy && parseFloat(amtFrom) > 0 && parseFloat(amtTo) > 0
+    ? (parseFloat(amtTo) / parseFloat(amtFrom)).toFixed(4)
+    : null;
+
+  const canSave = isTransfer
+    ? parseFloat(amtFrom) > 0 && parseFloat(amtTo) > 0 && fromAcct && toAcct && fromAcct !== toAcct
+    : amt && parseFloat(amt) > 0 && merchant.trim();
 
   const handleSave = () => {
     if (!canSave) return;
-    const changes = {
-      name: merchant.trim(),
-      amt: isExpense ? -Math.abs(parseFloat(amt)) : Math.abs(parseFloat(amt)),
-      date,
-      cat,
-      ccy: editTx?.ccy || 'USD',
-      acct,
-    };
-    if (editTx) {
-      updateTx(editTx.id, changes);
+    if (isTransfer) {
+      createTransfer({
+        fromAcct, toAcct,
+        amtFrom: parseFloat(amtFrom),
+        amtTo: parseFloat(isCrossCcy ? amtTo : amtFrom),
+        date,
+        note: transferNote.trim() || undefined,
+      });
     } else {
-      addTransactions([{ id: 'add_' + Date.now(), ...changes }]);
+      const changes = {
+        name: merchant.trim(),
+        amt: isExpense ? -Math.abs(parseFloat(amt)) : Math.abs(parseFloat(amt)),
+        date, cat, ccy: editTx?.ccy || 'USD', acct,
+      };
+      if (editTx) {
+        updateTx(editTx.id, changes);
+      } else {
+        addTransactions([{ id: 'add_' + Date.now(), ...changes }]);
+      }
     }
     onClose();
   };
 
   const handleDelete = () => {
-    deleteTx(editTx.id);
+    if (editTx?.transferId) {
+      deleteTransfer(editTx.transferId);
+    } else {
+      deleteTx(editTx.id);
+    }
     onClose();
   };
 
@@ -70,21 +100,104 @@ export default function AddSheet({ t, onClose, editTx = null }) {
         <ARule thick style={{ marginTop: 8 }} />
 
         <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-          {[['EXPENSE', true], ['INCOME', false]].map(([label, val]) => (
-            <button key={label} onClick={() => setIsExpense(val)} style={{
-              all: 'unset', cursor: 'pointer', flex: 1, textAlign: 'center',
-              padding: '7px', fontSize: 10, letterSpacing: 1.4,
-              border: '1px solid ' + (isExpense === val ? A.ink : A.rule2),
-              background: isExpense === val ? A.ink : 'transparent',
-              color: isExpense === val ? A.bg : A.ink,
-            }}>{label}</button>
-          ))}
+          {[['EXPENSE', 'exp'], ['INCOME', 'inc'], ['TRANSFER', 'xfer']].map(([label, mode]) => {
+            const active = mode === 'xfer' ? isTransfer : (!isTransfer && (mode === 'exp') === isExpense);
+            return (
+              <button key={label} onClick={() => {
+                if (mode === 'xfer') { setIsTransfer(true); }
+                else { setIsTransfer(false); setIsExpense(mode === 'exp'); }
+              }} style={{
+                all: 'unset', cursor: 'pointer', flex: 1, textAlign: 'center',
+                padding: '7px', fontSize: 10, letterSpacing: 1.4,
+                border: '1px solid ' + (active ? A.ink : A.rule2),
+                background: active ? A.ink : 'transparent',
+                color: active ? A.bg : A.ink,
+              }}>{label}</button>
+            );
+          })}
         </div>
 
+        {isTransfer && !editTx && (
+          <div style={{ marginTop: 12 }}>
+            <div style={{ marginBottom: 14 }}>
+              <ALabel>FROM</ALabel>
+              <select value={fromAcct} onChange={e => { setFromAcct(e.target.value); if (toAcct === e.target.value) setToAcct(''); }}
+                style={{ marginTop: 6, width: '100%', fontFamily: A.font, fontSize: 13, padding: 8, border: '1px solid ' + A.rule2, background: A.bg, color: A.ink }}>
+                {accountsWithBalance.map(a => <option key={a.id} value={a.id}>{a.name} · {a.code}</option>)}
+              </select>
+            </div>
+            <div style={{ marginBottom: 14 }}>
+              <ALabel>TO</ALabel>
+              <select value={toAcct} onChange={e => setToAcct(e.target.value)}
+                style={{ marginTop: 6, width: '100%', fontFamily: A.font, fontSize: 13, padding: 8, border: '1px solid ' + A.rule2, background: A.bg, color: A.ink }}>
+                {accountsWithBalance.filter(a => a.id !== fromAcct).map(a => <option key={a.id} value={a.id}>{a.name} · {a.code}</option>)}
+              </select>
+            </div>
+            <div style={{ marginBottom: 14 }}>
+              <ALabel>{'AMOUNT · ' + (fromAcctObj?.ccy || 'USD')}</ALabel>
+              <input autoFocus type="number" min="0" step="0.01" placeholder="0.00"
+                value={amtFrom} onChange={e => { setAmtFrom(e.target.value); if (!isCrossCcy) setAmtTo(e.target.value); }}
+                style={{ all: 'unset', display: 'block', width: '100%', marginTop: 6, fontFamily: A.font, fontSize: 28, fontVariantNumeric: 'tabular-nums', borderBottom: '1px solid ' + A.rule2, padding: '6px 0', color: A.ink, boxSizing: 'border-box' }} />
+            </div>
+            {isCrossCcy && (
+              <div style={{ marginBottom: 14 }}>
+                <ALabel>{'RECEIVED · ' + (toAcctObj?.ccy || '')}</ALabel>
+                <input type="number" min="0" step="0.01" placeholder="0.00"
+                  value={amtTo} onChange={e => setAmtTo(e.target.value)}
+                  style={{ all: 'unset', display: 'block', width: '100%', marginTop: 6, fontFamily: A.font, fontSize: 28, fontVariantNumeric: 'tabular-nums', borderBottom: '1px solid ' + A.rule2, padding: '6px 0', color: A.ink, boxSizing: 'border-box' }} />
+                {impliedRate && (
+                  <div style={{ fontSize: 10, color: A.muted, marginTop: 4, letterSpacing: 0.8 }}>
+                    {'1 ' + fromAcctObj.ccy + ' = ' + impliedRate + ' ' + toAcctObj.ccy}
+                  </div>
+                )}
+              </div>
+            )}
+            <div style={{ marginBottom: 14 }}>
+              <ALabel>DATE</ALabel>
+              <input type="date" value={date} onChange={e => setDate(e.target.value)}
+                style={{ all: 'unset', display: 'block', width: '100%', marginTop: 6, fontFamily: A.font, fontSize: 13, borderBottom: '1px solid ' + A.rule2, padding: '6px 0', color: A.ink, boxSizing: 'border-box' }} />
+            </div>
+            <div style={{ marginBottom: 14 }}>
+              <ALabel>NOTE (OPTIONAL)</ALabel>
+              <input value={transferNote} onChange={e => setTransferNote(e.target.value)}
+                placeholder="e.g. RENT SAVINGS"
+                style={{ all: 'unset', display: 'block', width: '100%', marginTop: 6, fontFamily: A.font, fontSize: 13, letterSpacing: 0.6, borderBottom: '1px solid ' + A.rule2, padding: '6px 0', color: A.ink, boxSizing: 'border-box' }} />
+            </div>
+          </div>
+        )}
+
+        {isTransfer && editTx && (
+          <div style={{ marginTop: 16 }}>
+            <div style={{ fontSize: 12, color: A.muted, letterSpacing: 1, marginBottom: 12 }}>TRANSFER DETAIL</div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid ' + A.rule2 }}>
+              <span style={{ fontSize: 10, color: A.muted, letterSpacing: 1 }}>NAME</span>
+              <span style={{ fontSize: 12 }}>{editTx.name}</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid ' + A.rule2 }}>
+              <span style={{ fontSize: 10, color: A.muted, letterSpacing: 1 }}>DATE</span>
+              <span style={{ fontSize: 12 }}>{editTx.date}</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid ' + A.rule2 }}>
+              <span style={{ fontSize: 10, color: A.muted, letterSpacing: 1 }}>AMOUNT</span>
+              <span style={{ fontSize: 12, fontVariantNumeric: 'tabular-nums' }}>{Math.abs(editTx.amt).toFixed(2)} {editTx.ccy}</span>
+            </div>
+            {editTx.note && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid ' + A.rule2 }}>
+                <span style={{ fontSize: 10, color: A.muted, letterSpacing: 1 }}>NOTE</span>
+                <span style={{ fontSize: 12 }}>{editTx.note}</span>
+              </div>
+            )}
+            <div style={{ fontSize: 10, color: A.muted, letterSpacing: 0.8, marginTop: 12, lineHeight: 1.5 }}>
+              Editing transfers is not supported. Delete both legs and re-enter to correct.
+            </div>
+          </div>
+        )}
+
+        {!isTransfer && (<>
         <div style={{ padding: '14px 0 6px' }}>
-          <ALabel>AMOUNT · USD</ALabel>
+          <ALabel>{'AMOUNT · ' + t.currency}</ALabel>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 6 }}>
-            <span style={{ fontSize: 32, color: A.muted }}>$</span>
+            <span style={{ fontSize: 32, color: A.muted }}>{CCY_SYM[t.currency] || '$'}</span>
             <input
               autoFocus type="number" min="0" step="0.01" placeholder="0.00"
               value={amt} onChange={e => setAmt(e.target.value)}
@@ -154,6 +267,7 @@ export default function AddSheet({ t, onClose, editTx = null }) {
             ))}
           </select>
         </div>
+        </>)}
 
         <button onClick={handleSave} style={{
           all: 'unset', cursor: canSave ? 'pointer' : 'default', display: 'block',
