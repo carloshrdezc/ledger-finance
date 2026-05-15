@@ -22,6 +22,12 @@ export default function WebAccounts({ t, onNavigate, onAdd }) {
   const [dragIdx, setDragIdx]         = React.useState(null);
   const [overIdx, setOverIdx]         = React.useState(null);
 
+  React.useEffect(() => {
+    if (selected && !accountsWithBalance.some(a => a.id === selected)) {
+      setSelected(null);
+    }
+  }, [accountsWithBalance, selected]);
+
   const archivedAccounts = (allAccountsWithBalance || []).filter(a => a.archived);
   const archivedCount    = archivedAccounts.length;
 
@@ -32,7 +38,10 @@ export default function WebAccounts({ t, onNavigate, onAdd }) {
   const acctTxs = selected ? transactions.filter(tx => tx.acct === selected) : [];
 
   // Flat sorted active accounts (used for reorder mode and drag logic)
-  const flatSorted = [...accountsWithBalance].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  const flatSorted = React.useMemo(
+    () => [...accountsWithBalance].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)),
+    [accountsWithBalance],
+  );
 
   const handleDragStart = idx => setDragIdx(idx);
   const handleDragOver  = (e, idx) => { e.preventDefault(); setOverIdx(idx); };
