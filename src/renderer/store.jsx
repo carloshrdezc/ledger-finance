@@ -101,6 +101,35 @@ export function StoreProvider({ children }) {
 
   const deleteTx = React.useCallback(id => setTxs(prev => prev.filter(tx => tx.id !== id)), [setTxs]);
 
+  const createTransfer = React.useCallback(({ fromAcct, toAcct, amtFrom, amtTo, date, note }) => {
+    const id = 'xfer_' + Date.now();
+    const fromAcctObj = accounts.find(a => a.id === fromAcct);
+    const toAcctObj   = accounts.find(a => a.id === toAcct);
+    const outName = note || ('TRANSFER → ' + (toAcctObj?.name   || toAcct));
+    const inName  = note || ('TRANSFER ← ' + (fromAcctObj?.name || fromAcct));
+    const outLeg = {
+      id: id + '_out', name: outName,
+      amt: -Math.abs(amtFrom), date, acct: fromAcct,
+      ccy: fromAcctObj?.ccy || 'USD',
+      cat: 'transfer', path: [],
+      transferId: id, transferPeer: id + '_in',
+      ...(note ? { note } : {}),
+    };
+    const inLeg = {
+      id: id + '_in', name: inName,
+      amt: Math.abs(amtTo), date, acct: toAcct,
+      ccy: toAcctObj?.ccy || 'USD',
+      cat: 'transfer', path: [],
+      transferId: id, transferPeer: id + '_out',
+      ...(note ? { note } : {}),
+    };
+    setTxs(prev => [...prev, outLeg, inLeg]);
+  }, [accounts, setTxs]);
+
+  const deleteTransfer = React.useCallback(transferId => {
+    setTxs(prev => prev.filter(tx => tx.transferId !== transferId));
+  }, [setTxs]);
+
   const updateTx = React.useCallback((id, changes) => setTxs(prev =>
     prev.map(tx => tx.id === id ? { ...tx, ...changes } : tx)
   ), [setTxs]);
@@ -195,6 +224,8 @@ export function StoreProvider({ children }) {
       addTransactions,
       hideTx,
       deleteTx,
+      createTransfer,
+      deleteTransfer,
       updateTx,
       categoryTree: catTree,
       setCategoryTree: setCatTree,
