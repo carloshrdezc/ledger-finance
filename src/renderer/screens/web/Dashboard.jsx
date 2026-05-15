@@ -9,8 +9,18 @@ import {
 } from '../../data';
 import { useStore } from '../../store';
 
+const PERIOD_DAYS  = { '1D': 1, '1W': 7, '1M': 30, '3M': 90, '1Y': 365 };
+const PERIOD_LABEL = { '1D': '1D', '1W': '7D', '1M': '30D', '3M': '90D', '1Y': '1Y', 'MAX': 'ALL' };
+
+function windowStart(period) {
+  if (period === 'MAX') return null;
+  const d = new Date();
+  d.setDate(d.getDate() - PERIOD_DAYS[period]);
+  return d.toISOString().slice(0, 10);
+}
+
 export default function Dashboard({ t, onNavigate, onAdd }) {
-  const { transactions, budgetRows, accountsWithBalance, periodLabel, billRows } = useStore();
+  const { transactions, budgetRows, accountsWithBalance, periodLabel, billRows, goals } = useStore();
   const [scrub, setScrub] = React.useState(null);
   const [period, setPeriod] = React.useState('1M');
 
@@ -21,6 +31,20 @@ export default function Dashboard({ t, onNavigate, onAdd }) {
   const NW_PCT     = NET_WORTH ? (NW_DELTA / Math.abs(NET_WORTH - NW_DELTA)) * 100 : 0;
   const todayLabel = now.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }).toUpperCase();
 
+  const { inflow, outflow, net, deltaByAcct } = React.useMemo(() => {
+    const cutoff = windowStart(period);
+    const filtered = cutoff ? transactions.filter(tx => tx.date >= cutoff) : transactions;
+    let inflow = 0, outflow = 0;
+    const deltaByAcct = new Map();
+    for (const tx of filtered) {
+      const usd = tx.ccy === 'USD' ? tx.amt : tx.amt * 1.08;
+      if (usd > 0) inflow += usd;
+      else outflow += usd;
+      deltaByAcct.set(tx.acct, (deltaByAcct.get(tx.acct) ?? 0) + usd);
+    }
+    return { inflow, outflow, net: inflow + outflow, deltaByAcct };
+  }, [period, transactions]);
+
   const heroVal = scrub != null ? SPARK_NW[scrub] : NET_WORTH;
 
   return (
@@ -30,11 +54,11 @@ export default function Dashboard({ t, onNavigate, onAdd }) {
         <div>
           <ALabel>[01] NET WORTH · {todayLabel}</ALabel>
           <div style={{ fontSize: 64, letterSpacing: -2, fontVariantNumeric: 'tabular-nums', lineHeight: 1, marginTop: 8 }}>
-            {fmtMoney(heroVal, 'USD', t.decimals)}
+            {fmtMoney(heroVal, t.currency, t.decimals)}
           </div>
           <div style={{ fontSize: 12, marginTop: 6 }}>
-            <span style={{ color: t.accent }}>{fmtSigned(NW_DELTA, 'USD', t.decimals)} · {fmtPct(NW_PCT)}</span>
-            <span style={{ color: A.muted, marginLeft: 12 }}>30D</span>
+            <span style={{ color: t.accent }}>{fmtSigned(NW_DELTA, t.currency, t.decimals)} · {fmtPct(NW_PCT)}</span>
+            <span style={{ color: A.muted, marginLeft: 12 }}>{PERIOD_LABEL[period]}</span>
           </div>
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
@@ -57,33 +81,55 @@ export default function Dashboard({ t, onNavigate, onAdd }) {
         </div>
       </div>
 
+      {/* Cash flow */}
+      <div style={{ marginTop: 20, marginBottom: 8 }}>
+        <ALabel>[03] {PERIOD_LABEL[period]} · CASH FLOW</ALabel>
+        <div style={{ marginTop: 8, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 1, background: A.rule2, border: '1px solid ' + A.rule2 }}>
+          {[
+            { l: 'IN',  v: inflow,  c: t.accent },
+            { l: 'OUT', v: outflow, c: A.neg    },
+            { l: 'NET', v: net,     c: A.ink    },
+          ].map(x => (
+            <div key={x.l} style={{ background: A.bg, padding: '14px 16px' }}>
+              <div style={{ fontSize: 9, color: A.muted, letterSpacing: 1.2 }}>{x.l}</div>
+              <div style={{ fontSize: 18, fontVariantNumeric: 'tabular-nums', color: x.c, marginTop: 6 }}>
+                {fmtSigned(x.v, t.currency, t.decimals)}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
       {/* Two columns */}
       <div style={{ marginTop: 28, display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 28 }}>
         {/* Accounts table */}
         <div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
             <ALabel>[02] ACCOUNTS</ALabel>
-            <ALabel>{fmtMoney(NET_WORTH, 'USD', false)}</ALabel>
+            <ALabel>{fmtMoney(NET_WORTH, t.currency, false)}</ALabel>
           </div>
           <div style={{ marginTop: 8, borderTop: '2px solid ' + A.ink }}>
             <div style={{ display: 'grid', gridTemplateColumns: '30px 1fr 80px 110px 80px', padding: '8px 0', fontSize: 9, color: A.muted, letterSpacing: 1.2, borderBottom: '1px solid ' + A.rule2 }}>
-              <div /><div>NAME</div><div>CODE</div><div style={{ textAlign: 'right' }}>BALANCE</div><div style={{ textAlign: 'right' }}>30D</div>
+              <div /><div>NAME</div><div>CODE</div><div style={{ textAlign: 'right' }}>BALANCE</div><div style={{ textAlign: 'right' }}>{PERIOD_LABEL[period]}</div>
             </div>
-            {accountsWithBalance.map(a => (
-              <div key={a.id} style={{ display: 'grid', gridTemplateColumns: '30px 1fr 80px 110px 80px', padding: t.density === 'compact' ? '7px 0' : '10px 0', fontSize: 11, borderBottom: '1px solid ' + A.rule2, alignItems: 'center' }}>
-                <div style={{ fontSize: 9, color: A.muted, letterSpacing: 0.8 }}>{a.type}</div>
-                <div>{a.name}</div>
-                <div style={{ color: A.muted, fontSize: 10 }}>{a.code}</div>
-                <div style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: a.balance < 0 ? A.neg : A.ink }}>{fmtMoney(a.balance, a.ccy, t.decimals)}</div>
-                <div style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: a.delta < 0 ? A.neg : t.accent, fontSize: 10 }}>{fmtSigned(a.delta, a.ccy, t.decimals)}</div>
-              </div>
-            ))}
+            {accountsWithBalance.map(a => {
+              const acctDelta = deltaByAcct.get(a.id) ?? a.delta;
+              return (
+                <div key={a.id} style={{ display: 'grid', gridTemplateColumns: '30px 1fr 80px 110px 80px', padding: t.density === 'compact' ? '7px 0' : '10px 0', fontSize: 11, borderBottom: '1px solid ' + A.rule2, alignItems: 'center' }}>
+                  <div style={{ fontSize: 9, color: A.muted, letterSpacing: 0.8 }}>{a.type}</div>
+                  <div>{a.name}</div>
+                  <div style={{ color: A.muted, fontSize: 10 }}>{a.code}</div>
+                  <div style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: a.balance < 0 ? A.neg : A.ink }}>{fmtMoney(a.balance, a.ccy, t.decimals)}</div>
+                  <div style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: acctDelta < 0 ? A.neg : t.accent, fontSize: 10 }}>{fmtSigned(acctDelta, a.ccy, t.decimals)}</div>
+                </div>
+              );
+            })}
           </div>
         </div>
 
         {/* Budgets + Upcoming */}
         <div>
-          <ALabel>[03] {periodLabel} · BUDGETS</ALabel>
+          <ALabel>[04] {periodLabel} · BUDGETS</ALabel>
           <div style={{ marginTop: 8, borderTop: '2px solid ' + A.ink }}>
             {budgetRows.slice(0, 5).map(b => {
               const pct = Math.min(b.spent / Math.max(b.available, 1), 1.2);
@@ -101,7 +147,7 @@ export default function Dashboard({ t, onNavigate, onAdd }) {
               );
             })}
           </div>
-          <ALabel style={{ marginTop: 24 }}>[04] UPCOMING · 7D</ALabel>
+          <ALabel style={{ marginTop: 24 }}>[05] UPCOMING · 7D</ALabel>
           <div style={{ marginTop: 8, borderTop: '2px solid ' + A.ink }}>
             {billRows.filter(b => b.status !== 'paid').slice(0, 4).map(b => (
               <div key={b.key} style={{ display: 'flex', justifyContent: 'space-between', padding: '9px 0', fontSize: 11, borderBottom: '1px solid ' + A.rule2 }}>
@@ -109,7 +155,23 @@ export default function Dashboard({ t, onNavigate, onAdd }) {
                   <span style={{ color: b.status === 'upcoming' ? A.muted : A.neg, width: 24 }}>{b.dueDate.slice(8)}</span>
                   <span>{b.name}</span>
                 </div>
-                <div style={{ fontVariantNumeric: 'tabular-nums' }}>{fmtMoney(b.amt, 'USD', t.decimals)}</div>
+                <div style={{ fontVariantNumeric: 'tabular-nums' }}>{fmtMoney(b.amt, t.currency, t.decimals)}</div>
+              </div>
+            ))}
+          </div>
+          <ALabel style={{ marginTop: 24 }}>[06] GOALS</ALabel>
+          <div style={{ marginTop: 8, borderTop: '2px solid ' + A.ink }}>
+            {goals.map(g => (
+              <div key={g.id} style={{ padding: '9px 0', borderBottom: '1px solid ' + A.rule2 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, letterSpacing: 1 }}>
+                  <span>{g.name}</span>
+                  <span style={{ fontVariantNumeric: 'tabular-nums' }}>
+                    {fmtMoney(g.current, t.currency, false)} / {fmtMoney(g.target, t.currency, false)}
+                  </span>
+                </div>
+                <div style={{ marginTop: 5, height: 4, background: A.rule2, position: 'relative' }}>
+                  <div style={{ position: 'absolute', inset: 0, width: Math.min(g.current / g.target * 100, 100) + '%', background: t.accent }} />
+                </div>
               </div>
             ))}
           </div>
@@ -118,7 +180,7 @@ export default function Dashboard({ t, onNavigate, onAdd }) {
 
       {/* Recent transactions */}
       <div style={{ marginTop: 28 }}>
-        <ALabel>[05] RECENT · TRANSACTIONS</ALabel>
+        <ALabel>[07] RECENT · TRANSACTIONS</ALabel>
         <div style={{ marginTop: 8, borderTop: '2px solid ' + A.ink }}>
           {transactions.slice(0, 8).map(tx => (
             <div key={tx.id} style={{ display: 'grid', gridTemplateColumns: '80px 16px 1fr 100px 100px', padding: t.density === 'compact' ? '7px 0' : '9px 0', fontSize: 11, borderBottom: '1px solid ' + A.rule2, alignItems: 'center' }}>
