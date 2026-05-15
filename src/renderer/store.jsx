@@ -1,5 +1,5 @@
 import React from 'react';
-import { TRANSACTIONS, CATEGORY_TREE, BUDGETS, ACCOUNTS, BILLS, GOALS } from './data';
+import { TRANSACTIONS, CATEGORY_TREE, BUDGETS, ACCOUNTS, BILLS, GOALS, INVESTMENTS, TRADES } from './data';
 import {
   addMonths,
   buildBudgetRows,
@@ -61,6 +61,8 @@ export function StoreProvider({ children }) {
   const [goals, setGoals] = useLS('ledger:goals', GOALS);
   const [goalContributions, setGoalContributions] = useLS('ledger:goalContributions', []);
   const [budgetStartDay, setBudgetStartDay] = useLS('ledger:budgetStartDay', 1);
+  const [investments, setInvestments] = useLS('ledger:investments', INVESTMENTS);
+  const [trades, setTrades]           = useLS('ledger:trades', TRADES);
 
   React.useEffect(() => {
     // Intentional: txs is read from the initial synchronous localStorage load.
@@ -236,6 +238,28 @@ export function StoreProvider({ children }) {
     setSelectedPeriod(period => addMonths(period, 1));
   }, [setSelectedPeriod]);
 
+  const addTrade = React.useCallback(trade => {
+    const newTrade = { ...trade, id: 'tr_' + Date.now() };
+    setTrades(prev => [...prev, newTrade]);
+    setInvestments(prev => {
+      const shareDelta = trade.type === 'buy' ? trade.shares : -trade.shares;
+      const existing = prev.find(h => h.ticker === trade.ticker);
+      if (existing) {
+        return prev.map(h => h.ticker === trade.ticker ? { ...h, shares: h.shares + shareDelta } : h);
+      }
+      return [...prev, { ticker: trade.ticker, name: trade.ticker, shares: shareDelta, price: trade.price, chg: 0 }];
+    });
+  }, [setTrades, setInvestments]);
+
+  const updateHolding = React.useCallback((ticker, fields) => {
+    setInvestments(prev => prev.map(h => h.ticker === ticker ? { ...h, ...fields } : h));
+  }, [setInvestments]);
+
+  const removeHolding = React.useCallback(ticker => {
+    setInvestments(prev => prev.filter(h => h.ticker !== ticker));
+    setTrades(prev => prev.filter(t => t.ticker !== ticker));
+  }, [setInvestments, setTrades]);
+
   const reset = React.useCallback(() => {
     setTxs(TRANSACTIONS);
     setCatTree(CATEGORY_TREE);
@@ -247,7 +271,9 @@ export function StoreProvider({ children }) {
     setSelectedPeriod(monthKey(new Date()));
     setHidden([]);
     setBudgetStartDay(1);
-  }, [setTxs, setCatTree, setBudgets, setAccounts, setBills, setGoals, setGoalContributions, setSelectedPeriod, setHidden, setBudgetStartDay]);
+    setInvestments(INVESTMENTS);
+    setTrades(TRADES);
+  }, [setTxs, setCatTree, setBudgets, setAccounts, setBills, setGoals, setGoalContributions, setSelectedPeriod, setHidden, setBudgetStartDay, setInvestments, setTrades]);
 
   return (
     <StoreCtx.Provider value={{
@@ -297,6 +323,12 @@ export function StoreProvider({ children }) {
       reset,
       budgetStartDay,
       setBudgetStartDay,
+      investments,
+      setInvestments,
+      trades,
+      addTrade,
+      updateHolding,
+      removeHolding,
     }}>
       {children}
     </StoreCtx.Provider>
