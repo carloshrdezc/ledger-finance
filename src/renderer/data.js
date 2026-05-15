@@ -207,6 +207,18 @@ export const INVESTMENTS = [
   { ticker: 'BTC',  name: 'BITCOIN',            shares:    0.612,price: 68920.00,chg: +3.40 },
 ];
 
+export const TRADES = [
+  { id: 'tr1', ticker: 'VTI',  shares: 200.00, price: 265.00, date: '2026-02-10', type: 'buy' },
+  { id: 'tr2', ticker: 'VXUS', shares: 100.00, price:  65.20, date: '2026-02-10', type: 'buy' },
+  { id: 'tr3', ticker: 'BND',  shares: 140.00, price:  72.50, date: '2026-02-15', type: 'buy' },
+  { id: 'tr4', ticker: 'VTI',  shares: 150.00, price: 271.00, date: '2026-03-05', type: 'buy' },
+  { id: 'tr5', ticker: 'VXUS', shares:  80.00, price:  66.80, date: '2026-03-18', type: 'buy' },
+  { id: 'tr6', ticker: 'AAPL', shares:  48.00, price: 218.50, date: '2026-03-25', type: 'buy' },
+  { id: 'tr7', ticker: 'VTI',  shares:  62.20, price: 277.00, date: '2026-04-08', type: 'buy' },
+  { id: 'tr8', ticker: 'VXUS', shares:  40.00, price:  67.50, date: '2026-04-20', type: 'buy' },
+  { id: 'tr9', ticker: 'BTC',  shares:   0.612,price: 65000.00,date: '2026-05-01', type: 'buy' },
+];
+
 export const MERCHANTS = [
   { name: 'WHOLE FOODS',   amt: -181.52, n: 2, cat: 'food'   },
   { name: 'TARTINE BAKERY',amt:  -40.50, n: 2, cat: 'dining' },
