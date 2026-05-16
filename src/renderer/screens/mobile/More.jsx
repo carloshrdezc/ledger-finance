@@ -6,7 +6,7 @@ import { useStore } from '../../store';
 import RecurringFormSheet from '../../components/RecurringFormSheet';
 
 export default function More({ t, onNavigate }) {
-  const { goals, billRows, bills } = useStore();
+  const { goals, billRows, bills, alertRows } = useStore();
   const activeRules = bills.filter(b => b.active !== false).length;
   const billTotal = billRows.filter(b => b.type !== 'income').reduce((s, b) => s + b.amt, 0);
   const [showAddRecurring, setShowAddRecurring] = React.useState(false);
@@ -14,6 +14,7 @@ export default function More({ t, onNavigate }) {
     {
       title: 'REPORTS',
       rows: [
+        { label: 'ALERTS', sub: alertRows.length + ' ACTIVE', screen: 'alerts' },
         { label: 'SPENDING BREAKDOWN', sub: 'CATEGORIES & TRENDS', screen: 'reports' },
         { label: 'CALENDAR VIEW', sub: '30-DAY HEATMAP', screen: 'reports-cal' },
       ],

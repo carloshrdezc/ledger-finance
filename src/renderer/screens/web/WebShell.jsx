@@ -3,6 +3,7 @@ import { A } from '../../theme';
 
 const NAV_ITEMS = [
   ['DASHBOARD',     'dashboard'],
+  ['ALERTS',        'alerts'],
   ['ACCOUNTS',      'accounts'],
   ['TRANSACTIONS',  'tx'],
   ['BUDGETS',       'budgets'],

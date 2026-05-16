@@ -8,6 +8,7 @@ import {
   monthKey,
 } from './period.mjs';
 import { buildBillRows, markRecurringPaid as createRecurringPayment, getBillDueDate, slug, createGoalContribution } from './planning.mjs';
+import { buildAlertRows } from './alerts.mjs';
 
 function useLS(key, def) {
   const [v, setV] = React.useState(() => {
@@ -63,6 +64,7 @@ export function StoreProvider({ children }) {
   const [budgetStartDay, setBudgetStartDay] = useLS('ledger:budgetStartDay', 1);
   const [investments, setInvestments] = useLS('ledger:investments', INVESTMENTS);
   const [trades, setTrades]           = useLS('ledger:trades', TRADES);
+  const [dismissedAlertIds, setDismissedAlertIds] = useLS('ledger:dismissedAlerts', []);
 
   React.useEffect(() => {
     // Intentional: txs is read from the initial synchronous localStorage load.
@@ -87,7 +89,6 @@ export function StoreProvider({ children }) {
     () => buildBillRows(bills, transactions, selectedPeriod),
     [bills, transactions, selectedPeriod],
   );
-
   const allAccountsWithBalance = React.useMemo(() => {
     const now = new Date();
     const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -107,6 +108,18 @@ export function StoreProvider({ children }) {
   const accountsWithBalance = React.useMemo(
     () => allAccountsWithBalance.filter(a => !a.archived),
     [allAccountsWithBalance],
+  );
+
+  const alertRowsWithAccounts = React.useMemo(
+    () => buildAlertRows({
+      billRows,
+      budgetRows,
+      goals,
+      accountsWithBalance,
+      investments,
+      dismissedAlertIds,
+    }),
+    [billRows, budgetRows, goals, accountsWithBalance, investments, dismissedAlertIds],
   );
 
   const addTransactions = React.useCallback(incoming => setTxs(prev => {
@@ -260,6 +273,14 @@ export function StoreProvider({ children }) {
     setTrades(prev => prev.filter(t => t.ticker !== ticker));
   }, [setInvestments, setTrades]);
 
+  const dismissAlert = React.useCallback(id => {
+    setDismissedAlertIds(prev => prev.includes(id) ? prev : [...prev, id]);
+  }, [setDismissedAlertIds]);
+
+  const restoreAlerts = React.useCallback(() => {
+    setDismissedAlertIds([]);
+  }, [setDismissedAlertIds]);
+
   const reset = React.useCallback(() => {
     setTxs(TRANSACTIONS);
     setCatTree(CATEGORY_TREE);
@@ -273,7 +294,8 @@ export function StoreProvider({ children }) {
     setBudgetStartDay(1);
     setInvestments(INVESTMENTS);
     setTrades(TRADES);
-  }, [setTxs, setCatTree, setBudgets, setAccounts, setBills, setGoals, setGoalContributions, setSelectedPeriod, setHidden, setBudgetStartDay, setInvestments, setTrades]);
+    setDismissedAlertIds([]);
+  }, [setTxs, setCatTree, setBudgets, setAccounts, setBills, setGoals, setGoalContributions, setSelectedPeriod, setHidden, setBudgetStartDay, setInvestments, setTrades, setDismissedAlertIds]);
 
   return (
     <StoreCtx.Provider value={{
@@ -296,6 +318,10 @@ export function StoreProvider({ children }) {
       bills,
       setBills,
       billRows,
+      alertRows: alertRowsWithAccounts,
+      dismissedAlertIds,
+      dismissAlert,
+      restoreAlerts,
       markBillPaid,
       addRecurring,
       updateRecurring,
