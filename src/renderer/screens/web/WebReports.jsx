@@ -64,13 +64,13 @@ export default function WebReports({ t, onNavigate, onAdd }) {
         <div>
           <ALabel>[01] REPORTS · {periodLabel}</ALabel>
           <div style={{ fontSize: 48, letterSpacing: -1.5, fontVariantNumeric: 'tabular-nums', lineHeight: 1, marginTop: 6 }}>
-            {fmtMoney(total, 'USD', t.decimals)}{' '}
+            {fmtMoney(total, t.currency, t.decimals)}{' '}
             <span style={{ fontSize: 18, color: total - previousTotal > 0 ? A.neg : t.accent }}>
-              {fmtSigned(total - previousTotal, 'USD', false)}
+              {fmtSigned(total - previousTotal, t.currency, false)}
             </span>
           </div>
           <div style={{ fontSize: 11, color: A.muted, marginTop: 6, letterSpacing: 1 }}>
-            SPENT · VS · {formatShortPeriodLabel(previousPeriod)} · {fmtMoney(previousTotal, 'USD', false)}
+            SPENT · VS · {formatShortPeriodLabel(previousPeriod)} · {fmtMoney(previousTotal, t.currency, false)}
           </div>
         </div>
         <PeriodSwitcher />
@@ -100,7 +100,7 @@ export default function WebReports({ t, onNavigate, onAdd }) {
                   <div style={{ display: 'grid', gridTemplateColumns: '20px 1fr 80px 60px', alignItems: 'center', gap: 8 }}>
                     <div style={{ color: t.accent }}>{c.glyph}</div>
                     <div style={{ fontSize: 12 }}>{c.label}</div>
-                    <div style={{ fontSize: 11, fontVariantNumeric: 'tabular-nums', textAlign: 'right' }}>{fmtMoney(v, 'USD', t.decimals)}</div>
+                    <div style={{ fontSize: 11, fontVariantNumeric: 'tabular-nums', textAlign: 'right' }}>{fmtMoney(v, t.currency, t.decimals)}</div>
                     <div style={{ fontSize: 10, color: A.muted, textAlign: 'right' }}>{total ? Math.round(v / total * 100) : 0}%</div>
                   </div>
                   <div style={{ marginTop: 6, marginLeft: 28, height: 4, background: A.rule2 }}>
@@ -116,8 +116,8 @@ export default function WebReports({ t, onNavigate, onAdd }) {
           <div style={{ marginTop: 12, borderTop: '2px solid ' + A.ink, paddingTop: 16 }}>
             <LineChart data={netWorthTrend} stroke={t.accent} fill={t.accent} height={140} />
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 9, color: A.muted, letterSpacing: 1, marginTop: 6 }}>
-              <span>{fmtMoney(netWorthTrend[0]?.value || 0, 'USD', false)}</span>
-              <span>{fmtMoney(netWorthTrend[netWorthTrend.length - 1]?.value || 0, 'USD', false)}</span>
+              <span>{fmtMoney(netWorthTrend[0]?.value || 0, t.currency, false)}</span>
+              <span>{fmtMoney(netWorthTrend[netWorthTrend.length - 1]?.value || 0, t.currency, false)}</span>
             </div>
           </div>
 
@@ -140,7 +140,7 @@ export default function WebReports({ t, onNavigate, onAdd }) {
 
           <ALabel style={{ marginTop: 28 }}>[06] DETECTED · INSIGHTS</ALabel>
           <div style={{ marginTop: 8, borderTop: '2px solid ' + A.ink }}>
-            {[['SPEND', `${periodTransactions.length} TXS · ${fmtMoney(total, 'USD', false)}`],['BUDGET', 'ROLLOVER ACTIVE'],['PERIOD', periodLabel],['COMPARE', `${formatShortPeriodLabel(previousPeriod)} · ${fmtMoney(previousTotal, 'USD', false)}`]].map(([k, v], i) => (
+            {[['SPEND', `${periodTransactions.length} TXS · ${fmtMoney(total, t.currency, false)}`],['BUDGET', 'ROLLOVER ACTIVE'],['PERIOD', periodLabel],['COMPARE', `${formatShortPeriodLabel(previousPeriod)} · ${fmtMoney(previousTotal, t.currency, false)}`]].map(([k, v], i) => (
               <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid ' + A.rule2, fontSize: 11 }}>
                 <span style={{ letterSpacing: 1.2 }}>{k}</span>
                 <span style={{ color: A.muted, letterSpacing: 0.6 }}>{v}</span>
@@ -160,8 +160,8 @@ export default function WebReports({ t, onNavigate, onAdd }) {
             <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 80px 80px 120px', padding: t.density === 'compact' ? '7px 0' : '10px 0', fontSize: 11, borderBottom: '1px solid ' + A.rule2 }}>
               <div>{m.name}</div>
               <div style={{ color: A.muted }}>{m.n}x</div>
-              <div style={{ fontVariantNumeric: 'tabular-nums', color: A.muted }}>{fmtMoney(m.amt / m.n, 'USD', false)}</div>
-              <div style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{fmtMoney(m.amt, 'USD', t.decimals)}</div>
+              <div style={{ fontVariantNumeric: 'tabular-nums', color: A.muted }}>{fmtMoney(m.amt / m.n, t.currency, false)}</div>
+              <div style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{fmtMoney(m.amt, t.currency, t.decimals)}</div>
             </div>
           ))}
         </div>

@@ -2,11 +2,11 @@ import React from 'react';
 import { A } from '../theme';
 import { ALabel } from './Shared';
 import { useStore } from '../store';
-import { parseQIF, parseCSV, parseMMBAK, exportQIF, exportCSV, exportMMBAK } from '../importExport';
+import { parseQIF, parseCSV, parseXLSX, parseMMBAK, exportQIF, exportCSV, exportXLSX, exportMMBAK } from '../importExport';
 
-function download(name, content) {
+function download(name, content, mime = 'text/plain') {
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([content], { type: 'text/plain' }));
+  a.href = URL.createObjectURL(new Blob([content], { type: mime }));
   a.download = name;
   a.click();
   URL.revokeObjectURL(a.href);
@@ -36,6 +36,16 @@ export default function ImportExport({ onClose }) {
         const txs = parseCSV(text);
         store.addTransactions(txs);
         setStatus({ ok: true, msg: `Imported ${txs.length} transactions from CSV` });
+      } else if (ext === 'xlsx') {
+        const data = parseXLSX(buffer);
+        if (data.accounts?.length) store.setAccounts(data.accounts);
+        if (data.categoryTree && Object.keys(data.categoryTree).length) store.setCategoryTree(data.categoryTree);
+        if (data.bills?.length) store.setBills(data.bills);
+        store.addTransactions(data.transactions);
+        const acctNote = data.accounts?.length ? ` · ${data.accounts.length} accounts` : '';
+        const catNote = data.categoryTree && Object.keys(data.categoryTree).length ? ' · categories' : '';
+        const billNote = data.bills?.length ? ` · ${data.bills.length} recurring rules` : '';
+        setStatus({ ok: true, msg: `Imported ${data.transactions.length} transactions${acctNote}${catNote}${billNote} from XLSX` });
       } else if (ext === 'mmbak') {
         const data = await parseMMBAK(text, buffer);
         if (data.isLedgerBackup) {
@@ -49,9 +59,13 @@ export default function ImportExport({ onClose }) {
           setStatus({ ok: true, msg: `Backup restored · ${data.transactions?.length ?? 0} transactions` });
         } else {
           if (data.accounts?.length) store.setAccounts(data.accounts);
+          if (data.categoryTree && Object.keys(data.categoryTree).length) store.setCategoryTree(data.categoryTree);
+          if (data.bills?.length) store.setBills(data.bills);
           store.addTransactions(data.transactions);
           const acctNote = data.accounts?.length ? ` · ${data.accounts.length} accounts` : '';
-          setStatus({ ok: true, msg: `Imported ${data.transactions.length} transactions${acctNote} from MoneyMoney` });
+          const catNote = data.categoryTree && Object.keys(data.categoryTree).length ? ` · categories` : '';
+          const billNote = data.bills?.length ? ` · ${data.bills.length} recurring rules` : '';
+          setStatus({ ok: true, msg: `Imported ${data.transactions.length} transactions${acctNote}${catNote}${billNote} from MoneyMoney` });
         }
       } else {
         setStatus({ ok: false, msg: 'Unsupported format — use .qif, .csv, or .mmbak' });
@@ -64,6 +78,7 @@ export default function ImportExport({ onClose }) {
   const exports = [
     ['QIF',   'QUICKEN FORMAT', () => download(`ledger-${ts()}.qif`,   exportQIF(store.transactions))],
     ['CSV',   'SPREADSHEET',    () => download(`ledger-${ts()}.csv`,   exportCSV(store.transactions))],
+    ['XLSX',  'WORKBOOK',       () => download(`ledger-${ts()}.xlsx`,  exportXLSX(store), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')],
     ['MMBAK', 'FULL BACKUP',    () => download(`ledger-${ts()}.mmbak`, exportMMBAK(store))],
   ];
 
@@ -87,8 +102,8 @@ export default function ImportExport({ onClose }) {
           onDragOver={e => e.preventDefault()}
         >
           <div style={{ fontSize: 11, letterSpacing: 1.4, color: A.muted }}>DROP FILE · OR · CLICK TO BROWSE</div>
-          <div style={{ fontSize: 9, color: A.muted, marginTop: 6, letterSpacing: 1 }}>ACCEPTS · .QIF · .CSV · .MMBAK</div>
-          <input ref={inputRef} type="file" accept=".qif,.csv,.mmbak" style={{ display: 'none' }}
+          <div style={{ fontSize: 9, color: A.muted, marginTop: 6, letterSpacing: 1 }}>ACCEPTS · .QIF · .CSV · .XLSX · .MMBAK</div>
+          <input ref={inputRef} type="file" accept=".qif,.csv,.xlsx,.mmbak" style={{ display: 'none' }}
             onChange={e => { handleFile(e.target.files[0]); e.target.value = ''; }} />
         </div>
 

@@ -31,8 +31,8 @@ export default function WebGoals({ t, onNavigate, onAdd }) {
       <div>
         <ALabel>[01] GOALS · {goals.length} ACTIVE</ALabel>
         <div style={{ fontSize: 48, letterSpacing: -1.5, fontVariantNumeric: 'tabular-nums', lineHeight: 1, marginTop: 6 }}>
-          {fmtMoney(totalCurrent, 'USD', t.decimals)}
-          <span style={{ color: A.muted, fontSize: 24 }}> · {fmtMoney(totalTarget, 'USD', false)}</span>
+          {fmtMoney(totalCurrent, t.currency, t.decimals)}
+          <span style={{ color: A.muted, fontSize: 24 }}> · {fmtMoney(totalTarget, t.currency, false)}</span>
         </div>
         <div style={{ fontSize: 11, color: A.muted, marginTop: 4, letterSpacing: 1 }}>SAVED · TARGET · {goalContributions.length} CONTRIBUTIONS</div>
       </div>
@@ -53,10 +53,10 @@ export default function WebGoals({ t, onNavigate, onAdd }) {
               </div>
 
               <div style={{ marginTop: 12, fontSize: 28, fontVariantNumeric: 'tabular-nums', letterSpacing: -1 }}>
-                {fmtMoney(g.current, 'USD', t.decimals)}
+                {fmtMoney(g.current, t.currency, t.decimals)}
               </div>
               <div style={{ fontSize: 10, color: A.muted, marginTop: 2, letterSpacing: 0.8 }}>
-                of {fmtMoney(g.target, 'USD', t.decimals)} target
+                of {fmtMoney(g.target, t.currency, t.decimals)} target
               </div>
 
               <div style={{ marginTop: 12, height: 6, background: A.rule2 }}>
@@ -64,7 +64,7 @@ export default function WebGoals({ t, onNavigate, onAdd }) {
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4, fontSize: 9, color: A.muted, letterSpacing: 1 }}>
                 <span>{Math.round(pct * 100)}% COMPLETE</span>
-                <span>{fmtMoney(g.target - g.current, 'USD', false)} TO GO</span>
+                <span>{fmtMoney(g.target - g.current, t.currency, false)} TO GO</span>
               </div>
 
               {!done && (
@@ -102,7 +102,7 @@ export default function WebGoals({ t, onNavigate, onAdd }) {
                     <div key={c.id} style={{ display: 'grid', gridTemplateColumns: '70px 1fr 90px', padding: '7px 0', borderBottom: '1px solid ' + A.rule2, fontSize: 10, alignItems: 'baseline' }}>
                       <span style={{ color: A.muted }}>{dayLabel(c.date)}</span>
                       <span style={{ color: A.muted }}>TX · {c.txId.slice(0, 16)}</span>
-                      <span style={{ textAlign: 'right', color: t.accent, fontVariantNumeric: 'tabular-nums' }}>+{fmtMoney(c.amount, 'USD', t.decimals)}</span>
+                      <span style={{ textAlign: 'right', color: t.accent, fontVariantNumeric: 'tabular-nums' }}>+{fmtMoney(c.amount, t.currency, t.decimals)}</span>
                     </div>
                   ))}
                 </div>

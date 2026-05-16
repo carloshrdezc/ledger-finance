@@ -29,11 +29,11 @@ export default function WebBudgets({ t, onNavigate, onAdd }) {
         <div>
           <ALabel>[01] BUDGETS · {periodLabel}</ALabel>
           <div style={{ fontSize: 48, letterSpacing: -1.5, fontVariantNumeric: 'tabular-nums', lineHeight: 1, marginTop: 6 }}>
-            {fmtMoney(totalSpent, 'USD', t.decimals)}
-            <span style={{ color: A.muted, fontSize: 24 }}> · {fmtMoney(totalAvailable, 'USD', false)}</span>
+            {fmtMoney(totalSpent, t.currency, t.decimals)}
+            <span style={{ color: A.muted, fontSize: 24 }}> · {fmtMoney(totalAvailable, t.currency, false)}</span>
           </div>
           <div style={{ fontSize: 11, color: A.muted, marginTop: 4, letterSpacing: 1 }}>
-            TOTAL SPENT · AVAILABLE · BASE {fmtMoney(totalBudget, 'USD', false)}
+            TOTAL SPENT · AVAILABLE · BASE {fmtMoney(totalBudget, t.currency, false)}
           </div>
         </div>
         <PeriodSwitcher />
@@ -60,7 +60,7 @@ export default function WebBudgets({ t, onNavigate, onAdd }) {
                 <span style={{ fontSize: 11, fontWeight: 500 }}>{cat?.label || b.cat.toUpperCase()}</span>
                 {b.rollover !== 0 && (
                   <span style={{ fontSize: 9, color: A.muted, letterSpacing: 1 }}>
-                    R {b.rollover > 0 ? '+' : '-'}{fmtMoney(Math.abs(b.rollover), 'USD', false)}
+                    R {b.rollover > 0 ? '+' : '-'}{fmtMoney(Math.abs(b.rollover), t.currency, false)}
                   </span>
                 )}
               </div>
@@ -71,7 +71,7 @@ export default function WebBudgets({ t, onNavigate, onAdd }) {
                 <div style={{ fontSize: 8, color: A.muted, marginTop: 3, letterSpacing: 1 }}>{Math.round(pct * 100)}%</div>
               </div>
               <div style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontSize: 12, color: over ? A.neg : A.ink }}>
-                {fmtMoney(b.spent, 'USD', t.decimals)}
+                {fmtMoney(b.spent, t.currency, t.decimals)}
               </div>
               <div style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontSize: 12 }}>
                 {editing === b.cat ? (
@@ -85,12 +85,12 @@ export default function WebBudgets({ t, onNavigate, onAdd }) {
                   />
                 ) : (
                   <span onClick={() => { setEditing(b.cat); setEditVal(String(b.limit)); }} style={{ cursor: 'pointer', borderBottom: '1px dotted ' + A.rule2 }}>
-                    {fmtMoney(b.available, 'USD', t.decimals)}
+                    {fmtMoney(b.available, t.currency, t.decimals)}
                   </span>
                 )}
               </div>
               <div style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontSize: 12, color: b.left < 0 ? A.neg : t.accent }}>
-                {b.left < 0 ? '-' : '+'}{fmtMoney(Math.abs(b.left), 'USD', t.decimals)}
+                {b.left < 0 ? '-' : '+'}{fmtMoney(Math.abs(b.left), t.currency, t.decimals)}
               </div>
             </div>
           );

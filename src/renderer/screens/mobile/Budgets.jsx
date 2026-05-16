@@ -25,10 +25,10 @@ export default function Budgets({ t }) {
       <div style={{ padding: '12px 0 8px' }}>
         <ALabel>{periodLabel} · {Math.round(totalSpent)} / {Math.round(totalAvailable)}</ALabel>
         <div style={{ fontSize: 32, fontVariantNumeric: 'tabular-nums', letterSpacing: -1, marginTop: 4 }}>
-          {fmtMoney(totalSpent, 'USD', t.decimals)}
+          {fmtMoney(totalSpent, t.currency, t.decimals)}
         </div>
         <div style={{ fontSize: 11, color: A.muted, marginTop: 2 }}>
-          of {fmtMoney(totalLimit, 'USD', false)} base · {fmtMoney(totalAvailable, 'USD', false)} available · {dayCount} days
+          of {fmtMoney(totalLimit, t.currency, false)} base · {fmtMoney(totalAvailable, t.currency, false)} available · {dayCount} days
         </div>
       </div>
       <ARule />
@@ -42,7 +42,7 @@ export default function Budgets({ t }) {
                 {CATEGORIES[b.cat].glyph} {CATEGORIES[b.cat].label}
               </div>
               <div style={{ fontSize: 12, fontVariantNumeric: 'tabular-nums', color: over ? A.neg : A.ink }}>
-                {fmtMoney(b.spent, 'USD', t.decimals)} / {fmtMoney(b.available, 'USD', false)}
+                {fmtMoney(b.spent, t.currency, t.decimals)} / {fmtMoney(b.available, t.currency, false)}
               </div>
             </div>
             <div style={{ marginTop: 8, position: 'relative', height: 8, background: A.rule2 }}>
@@ -54,12 +54,12 @@ export default function Budgets({ t }) {
             </div>
             {over && (
               <div style={{ fontSize: 9, color: A.neg, marginTop: 3, letterSpacing: 1 }}>
-                OVER BY {fmtMoney(Math.abs(b.left), 'USD', false)}
+                OVER BY {fmtMoney(Math.abs(b.left), t.currency, false)}
               </div>
             )}
             {b.rollover !== 0 && (
               <div style={{ fontSize: 9, color: A.muted, marginTop: 3, letterSpacing: 1 }}>
-                ROLLOVER {b.rollover > 0 ? '+' : '-'}{fmtMoney(Math.abs(b.rollover), 'USD', false)}
+                ROLLOVER {b.rollover > 0 ? '+' : '-'}{fmtMoney(Math.abs(b.rollover), t.currency, false)}
               </div>
             )}
           </div>

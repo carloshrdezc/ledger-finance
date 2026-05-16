@@ -5,19 +5,19 @@ import { SPARK_NW, SPARK_SPEND, fmtMoney, fmtSigned, fmtPct } from '../../data';
 import { useStore } from '../../store';
 
 export default function Home({ t, onAcct, onAddTx, onViewAll }) {
-  const { accountsWithBalance, transactions, billRows, alertRows } = useStore();
+  const { accountsWithBalance, accountsIncludedInTotals, transactions, billRows, alertRows } = useStore();
   const now = new Date();
   const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   const todayLabel = now.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }).toUpperCase();
 
-  const NET_WORTH   = accountsWithBalance.reduce((s, a) => s + (a.ccy === 'USD' ? a.balance : a.balance * 1.08), 0);
+  const NET_WORTH   = accountsIncludedInTotals.reduce((s, a) => s + (a.ccy === 'USD' ? a.balance : a.balance * 1.08), 0);
   const MONTH_SPEND = transactions
     .filter(tx => tx.cat !== 'income' && tx.amt < 0 && tx.date?.startsWith(thisMonth))
     .reduce((s, tx) => s + Math.abs(tx.ccy === 'USD' ? tx.amt : tx.amt * 1.08), 0);
   const CASH        = accountsWithBalance
     .filter(a => ['CHK', 'SAV', 'FX'].includes(a.type))
     .reduce((s, a) => s + (a.ccy === 'USD' ? a.balance : a.balance * 1.08), 0);
-  const NW_DELTA    = accountsWithBalance.reduce((s, a) => s + (a.ccy === 'USD' ? a.delta : a.delta * 1.08), 0);
+  const NW_DELTA    = accountsIncludedInTotals.reduce((s, a) => s + (a.ccy === 'USD' ? a.delta : a.delta * 1.08), 0);
 
   const HERO_METRICS = [
     { key: 'nw',    label: 'NET WORTH',      value: NET_WORTH,   delta: NW_DELTA, deltaPct: NET_WORTH ? (NW_DELTA / Math.abs(NET_WORTH - NW_DELTA)) * 100 : 0, spark: SPARK_NW,                       ccy: t.currency },

@@ -16,6 +16,10 @@ function txCategory(tx) {
   return (tx.path || [tx.cat])[0];
 }
 
+function countedAccount(account) {
+  return account.archived !== true && account.includeInTotals !== false;
+}
+
 export function getRecentPeriods(selectedPeriod, count = 6) {
   const [year, month] = selectedPeriod.split('-').map(Number);
   return Array.from({ length: count }, (_, i) => {
@@ -61,6 +65,7 @@ export function buildIncomeExpenseSeries(transactions, periods) {
 export function buildNetWorthTrend(accounts, transactions, periods) {
   return periods.map(period => {
     const value = accounts.reduce((sum, account) => {
+      if (!countedAccount(account)) return sum;
       const opening = toUsd(account.openingBal || 0, account.ccy);
       const delta = transactions
         .filter(tx => tx.acct === account.id && txPeriod(tx) <= period)
@@ -79,7 +84,7 @@ export function buildNetWorthDailyTrend(accounts, transactions, endDateIso, dayC
     date.setDate(endDate.getDate() - (safeCount - 1 - i));
     const iso = date.toISOString().slice(0, 10);
     const value = accounts
-      .filter(account => account.archived !== true)
+      .filter(countedAccount)
       .reduce((sum, account) => {
         const opening = toUsd(account.openingBal || 0, account.ccy);
         const delta = transactions

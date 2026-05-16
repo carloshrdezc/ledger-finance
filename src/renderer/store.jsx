@@ -82,7 +82,7 @@ export function StoreProvider({ children }) {
   );
   const periodLabel = React.useMemo(() => formatPeriodLabel(selectedPeriod, budgetStartDay), [selectedPeriod, budgetStartDay]);
   const budgetRows = React.useMemo(
-    () => buildBudgetRows(budgets, transactions, selectedPeriod),
+    () => buildBudgetRows(Array.isArray(budgets) ? budgets : [], transactions, selectedPeriod),
     [budgets, transactions, selectedPeriod],
   );
   const billRows = React.useMemo(
@@ -108,6 +108,11 @@ export function StoreProvider({ children }) {
   const accountsWithBalance = React.useMemo(
     () => allAccountsWithBalance.filter(a => !a.archived),
     [allAccountsWithBalance],
+  );
+
+  const accountsIncludedInTotals = React.useMemo(
+    () => accountsWithBalance.filter(a => a.includeInTotals !== false),
+    [accountsWithBalance],
   );
 
   const alertRowsWithAccounts = React.useMemo(
@@ -184,7 +189,7 @@ export function StoreProvider({ children }) {
 
   const addAccount = React.useCallback(acct => setAccounts(prev => {
     if (prev.some(a => a.id === acct.id)) return prev;
-    return [...prev, { archived: false, order: prev.filter(a => !a.archived).length, ...acct }];
+    return [...prev, { archived: false, includeInTotals: true, order: prev.filter(a => !a.archived).length, ...acct }];
   }), [setAccounts]);
 
   const updateAccount = React.useCallback((id, patch) => setAccounts(prev =>
@@ -282,18 +287,18 @@ export function StoreProvider({ children }) {
   }, [setDismissedAlertIds]);
 
   const reset = React.useCallback(() => {
-    setTxs(TRANSACTIONS);
-    setCatTree(CATEGORY_TREE);
-    setBudgets(BUDGETS);
-    setAccounts(ACCOUNTS);
-    setBills(BILLS);
-    setGoals(GOALS);
+    setTxs([]);
+    setCatTree({});
+    setBudgets([]);
+    setAccounts([]);
+    setBills([]);
+    setGoals([]);
     setGoalContributions([]);
     setSelectedPeriod(monthKey(new Date()));
     setHidden([]);
     setBudgetStartDay(1);
-    setInvestments(INVESTMENTS);
-    setTrades(TRADES);
+    setInvestments([]);
+    setTrades([]);
     setDismissedAlertIds([]);
   }, [setTxs, setCatTree, setBudgets, setAccounts, setBills, setGoals, setGoalContributions, setSelectedPeriod, setHidden, setBudgetStartDay, setInvestments, setTrades, setDismissedAlertIds]);
 
@@ -339,6 +344,7 @@ export function StoreProvider({ children }) {
       goToNextPeriod,
       accounts,
       accountsWithBalance,
+      accountsIncludedInTotals,
       allAccountsWithBalance,
       setAccounts,
       addAccount,
