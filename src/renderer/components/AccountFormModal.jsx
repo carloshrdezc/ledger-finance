@@ -26,6 +26,7 @@ export default function AccountFormModal({ t, onClose, editAccount = null }) {
   const [type, setType]             = React.useState(editAccount?.type ?? 'CHK');
   const [openingBal, setOpeningBal] = React.useState(editAccount != null ? String(editAccount.openingBal) : '');
   const [openingDate, setOpeningDate] = React.useState(editAccount?.openingDate ?? defaultOpeningDate());
+  const [includeInTotals, setIncludeInTotals] = React.useState(editAccount?.includeInTotals !== false);
   const [archiving, setArchiving]   = React.useState(false);
 
   const txCount  = editAccount ? transactions.filter(tx => tx.acct === editAccount.id).length : 0;
@@ -41,6 +42,7 @@ export default function AccountFormModal({ t, onClose, editAccount = null }) {
       openingDate,
       ccy: editAccount?.ccy ?? 'USD',
       code: editAccount?.code ?? '',
+      includeInTotals,
     };
     if (archiving) {
       updateAccount(editAccount.id, fields);
@@ -106,6 +108,10 @@ export default function AccountFormModal({ t, onClose, editAccount = null }) {
             <div style={fieldLabel}>OPENING DATE</div>
             <input type="date" value={openingDate} onChange={e => setOpeningDate(e.target.value)} style={input} />
           </div>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontSize: 11, letterSpacing: 1 }}>
+            <input type="checkbox" checked={includeInTotals} onChange={e => setIncludeInTotals(e.target.checked)} />
+            INCLUDE IN TOTALS
+          </label>
         </div>
 
         {editAccount && (

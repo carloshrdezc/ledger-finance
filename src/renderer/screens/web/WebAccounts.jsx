@@ -14,7 +14,7 @@ const TYPE_LABELS = {
 const TYPE_ORDER = ['CHK', 'SAV', 'CC', 'INV', 'CRY', 'FX', 'LOAN', 'CASH'];
 
 export default function WebAccounts({ t, onNavigate, onAdd }) {
-  const { transactions, accountsWithBalance, allAccountsWithBalance, reorderAccounts } = useStore();
+  const { transactions, accountsWithBalance, accountsIncludedInTotals, allAccountsWithBalance, reorderAccounts } = useStore();
   const [selected, setSelected]       = React.useState(null);
   const [modalAccount, setModalAccount] = React.useState(undefined); // undefined=closed, null=new, obj=edit
   const [reorderMode, setReorderMode] = React.useState(false);
@@ -31,7 +31,7 @@ export default function WebAccounts({ t, onNavigate, onAdd }) {
   const archivedAccounts = (allAccountsWithBalance || []).filter(a => a.archived);
   const archivedCount    = archivedAccounts.length;
 
-  const NET_WORTH = accountsWithBalance.reduce(
+  const NET_WORTH = accountsIncludedInTotals.reduce(
     (s, a) => s + (a.ccy === 'USD' ? a.balance : a.balance * 1.08), 0
   );
 
@@ -75,7 +75,7 @@ export default function WebAccounts({ t, onNavigate, onAdd }) {
         <div>
           <ALabel>[01] ACCOUNTS · {accountsWithBalance.length} LINKED</ALabel>
           <div style={{ fontSize: 48, letterSpacing: -1.5, fontVariantNumeric: 'tabular-nums', lineHeight: 1, marginTop: 6 }}>
-            {fmtMoney(NET_WORTH, 'USD', t.decimals)}
+            {fmtMoney(NET_WORTH, t.currency, t.decimals)}
           </div>
           <div style={{ fontSize: 11, color: A.muted, marginTop: 4, letterSpacing: 1 }}>NET WORTH</div>
         </div>
@@ -142,7 +142,14 @@ export default function WebAccounts({ t, onNavigate, onAdd }) {
                             background: selected === a.id ? A.ink + '10' : 'transparent',
                           }}>
                           <div style={{ fontSize: 9, color: A.muted }}>{a.type}</div>
-                          <div style={{ fontSize: 12, fontWeight: selected === a.id ? 600 : 400 }}>{a.name}</div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                            <span style={{ fontSize: 12, fontWeight: selected === a.id ? 600 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.name}</span>
+                            {a.includeInTotals === false && (
+                              <span style={{ fontSize: 8, letterSpacing: 1, padding: '2px 5px', border: '1px solid ' + A.rule2, color: A.muted }}>
+                                NO TOTALS
+                              </span>
+                            )}
+                          </div>
                           <div style={{ fontSize: 10, color: A.muted }}>{a.code}</div>
                           <div style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontSize: 13, color: a.balance < 0 ? A.neg : A.ink }}>
                             {fmtMoney(a.balance, a.ccy, t.decimals)}

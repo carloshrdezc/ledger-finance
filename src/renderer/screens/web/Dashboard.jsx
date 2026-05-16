@@ -20,22 +20,22 @@ function windowStart(period) {
 }
 
 export default function Dashboard({ t, onNavigate, onAdd }) {
-  const { transactions, budgetRows, accounts, accountsWithBalance, periodLabel, billRows, goals, alertRows } = useStore();
+  const { transactions, budgetRows, accounts, accountsWithBalance, accountsIncludedInTotals, periodLabel, billRows, goals, alertRows } = useStore();
   const [scrub, setScrub] = React.useState(null);
   const [period, setPeriod] = React.useState('1M');
 
   const now = new Date();
   const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-  const NET_WORTH  = accountsWithBalance.reduce((s, a) => s + (a.ccy === 'USD' ? a.balance : a.balance * 1.08), 0);
-  const NW_DELTA   = accountsWithBalance.reduce((s, a) => s + (a.ccy === 'USD' ? a.delta  : a.delta  * 1.08), 0);
+  const NET_WORTH  = accountsIncludedInTotals.reduce((s, a) => s + (a.ccy === 'USD' ? a.balance : a.balance * 1.08), 0);
+  const NW_DELTA   = accountsIncludedInTotals.reduce((s, a) => s + (a.ccy === 'USD' ? a.delta  : a.delta  * 1.08), 0);
   const NW_PCT     = NET_WORTH ? (NW_DELTA / Math.abs(NET_WORTH - NW_DELTA)) * 100 : 0;
   const todayLabel = now.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }).toUpperCase();
   const todayIso = now.toISOString().slice(0, 10);
 
   const netWorthTrend = React.useMemo(() => {
     const days = period === 'MAX' ? 365 : PERIOD_DAYS[period];
-    return buildNetWorthDailyTrend(accounts, transactions, todayIso, days);
-  }, [accounts, transactions, todayIso, period]);
+    return buildNetWorthDailyTrend(accountsIncludedInTotals, transactions, todayIso, days);
+  }, [accountsIncludedInTotals, transactions, todayIso, period]);
   const netWorthSpark = netWorthTrend.map(point => point.value);
   const chartTicks = React.useMemo(() => {
     if (netWorthTrend.length <= 5) return netWorthTrend;
@@ -157,7 +157,14 @@ export default function Dashboard({ t, onNavigate, onAdd }) {
               return (
                 <div key={a.id} style={{ display: 'grid', gridTemplateColumns: '30px 1fr 80px 110px 80px', padding: t.density === 'compact' ? '7px 0' : '10px 0', fontSize: 11, borderBottom: '1px solid ' + A.rule2, alignItems: 'center' }}>
                   <div style={{ fontSize: 9, color: A.muted, letterSpacing: 0.8 }}>{a.type}</div>
-                  <div>{a.name}</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.name}</span>
+                    {a.includeInTotals === false && (
+                      <span style={{ fontSize: 8, letterSpacing: 1, padding: '2px 5px', border: '1px solid ' + A.rule2, color: A.muted }}>
+                        NO TOTALS
+                      </span>
+                    )}
+                  </div>
                   <div style={{ color: A.muted, fontSize: 10 }}>{a.code}</div>
                   <div style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: a.balance < 0 ? A.neg : A.ink }}>{fmtMoney(a.balance, a.ccy, t.decimals)}</div>
                   <div style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: acctDelta < 0 ? A.neg : t.accent, fontSize: 10 }}>{fmtSigned(acctDelta, a.ccy, t.decimals)}</div>

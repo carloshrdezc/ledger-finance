@@ -6,12 +6,12 @@ import { useStore } from '../../store';
 import AccountFormSheet from '../../components/AccountFormSheet';
 
 export function Accounts({ t, onAcct }) {
-  const { accountsWithBalance, allAccountsWithBalance, reorderAccounts } = useStore();
+  const { accountsWithBalance, accountsIncludedInTotals, allAccountsWithBalance, reorderAccounts } = useStore();
   const [sheetAccount, setSheetAccount] = React.useState(undefined); // undefined=closed, null=new, obj=edit
   const [reorderMode, setReorderMode]   = React.useState(false);
   const [showArchived, setShowArchived] = React.useState(false);
 
-  const NET_WORTH = accountsWithBalance.reduce(
+  const NET_WORTH = accountsIncludedInTotals.reduce(
     (s, a) => s + (a.ccy === 'USD' ? a.balance : a.balance * 1.08), 0
   );
 
@@ -70,7 +70,7 @@ export function Accounts({ t, onAcct }) {
       <div style={{ padding: '14px 0' }}>
         <ALabel>TOTAL</ALabel>
         <div style={{ fontSize: 32, fontVariantNumeric: 'tabular-nums', letterSpacing: -1, marginTop: 4 }}>
-          {fmtMoney(NET_WORTH, 'USD', t.decimals)}
+          {fmtMoney(NET_WORTH, t.currency, t.decimals)}
         </div>
       </div>
       <ARule />
@@ -102,7 +102,7 @@ export function Accounts({ t, onAcct }) {
             <div key={title}>
               <div style={{ padding: '12px 0 8px', display: 'flex', justifyContent: 'space-between' }}>
                 <ALabel>{title}</ALabel>
-                <ALabel>{fmtMoney(rows.reduce((s, a) => s + (a.ccy === 'USD' ? a.balance : a.balance * 1.08), 0), 'USD', t.decimals)}</ALabel>
+                <ALabel>{fmtMoney(rows.filter(a => a.includeInTotals !== false).reduce((s, a) => s + (a.ccy === 'USD' ? a.balance : a.balance * 1.08), 0), t.currency, t.decimals)}</ALabel>
               </div>
               {rows.map(a => (
                 <div key={a.id} style={{ display: 'flex', alignItems: 'center', borderBottom: '1px solid ' + A.rule2 }}>
@@ -176,14 +176,14 @@ export function AccountDetail({ t, accountId, onBack }) {
       <div style={{ display: 'flex', gap: 1, background: A.rule2, border: '1px solid ' + A.rule2, marginTop: 6 }}>
         {a.type === 'CC' ? (
           <>
-            <ADetailCell label="CREDIT LIMIT" val={fmtMoney(10000, 'USD', t.decimals)} />
-            <ADetailCell label="AVAILABLE" val={fmtMoney(10000 + a.balance, 'USD', t.decimals)} />
+            <ADetailCell label="CREDIT LIMIT" val={fmtMoney(10000, t.currency, t.decimals)} />
+            <ADetailCell label="AVAILABLE" val={fmtMoney(10000 + a.balance, t.currency, t.decimals)} />
             <ADetailCell label="APR" val="22.74%" />
           </>
         ) : a.type === 'INV' ? (
           <>
-            <ADetailCell label="COST BASIS" val={fmtMoney(a.balance * 0.78, 'USD', t.decimals)} />
-            <ADetailCell label="GAIN" val={fmtSigned(a.balance * 0.22, 'USD', t.decimals)} c={t.accent} />
+            <ADetailCell label="COST BASIS" val={fmtMoney(a.balance * 0.78, t.currency, t.decimals)} />
+            <ADetailCell label="GAIN" val={fmtSigned(a.balance * 0.22, t.currency, t.decimals)} c={t.accent} />
             <ADetailCell label="YIELD" val="1.42%" />
           </>
         ) : (
