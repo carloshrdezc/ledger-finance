@@ -71,9 +71,29 @@ export function buildNetWorthTrend(accounts, transactions, periods) {
   });
 }
 
+export function buildNetWorthDailyTrend(accounts, transactions, endDateIso, dayCount) {
+  const safeCount = Math.max(1, Number(dayCount) || 1);
+  const endDate = new Date(`${endDateIso}T00:00:00`);
+  return Array.from({ length: safeCount }, (_, i) => {
+    const date = new Date(endDate);
+    date.setDate(endDate.getDate() - (safeCount - 1 - i));
+    const iso = date.toISOString().slice(0, 10);
+    const value = accounts
+      .filter(account => account.archived !== true)
+      .reduce((sum, account) => {
+        const opening = toUsd(account.openingBal || 0, account.ccy);
+        const delta = transactions
+          .filter(tx => tx.acct === account.id && tx.date <= iso)
+          .reduce((s, tx) => s + toUsd(tx.amt, tx.ccy), 0);
+        return sum + opening + delta;
+      }, 0);
+    return { date: iso, value: roundCents(value) };
+  });
+}
+
 export function svgLinePath(values, width, height) {
   if (!values.length) return '';
-  if (values.length === 1) return `M0.0 ${(height / 2).toFixed(1)}`;
+  if (values.length === 1) return `M0.0 ${(height / 2).toFixed(1)} L${width.toFixed(1)} ${(height / 2).toFixed(1)}`;
   const min = Math.min(...values);
   const max = Math.max(...values);
   const range = max - min || 1;

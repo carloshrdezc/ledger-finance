@@ -5,7 +5,7 @@ import { SPARK_NW, SPARK_SPEND, fmtMoney, fmtSigned, fmtPct } from '../../data';
 import { useStore } from '../../store';
 
 export default function Home({ t, onAcct, onAddTx, onViewAll }) {
-  const { accountsWithBalance, transactions, billRows } = useStore();
+  const { accountsWithBalance, transactions, billRows, alertRows } = useStore();
   const now = new Date();
   const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   const todayLabel = now.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }).toUpperCase();
@@ -20,10 +20,10 @@ export default function Home({ t, onAcct, onAddTx, onViewAll }) {
   const NW_DELTA    = accountsWithBalance.reduce((s, a) => s + (a.ccy === 'USD' ? a.delta : a.delta * 1.08), 0);
 
   const HERO_METRICS = [
-    { key: 'nw',    label: 'NET WORTH',      value: NET_WORTH,   delta: NW_DELTA, deltaPct: NET_WORTH ? (NW_DELTA / Math.abs(NET_WORTH - NW_DELTA)) * 100 : 0, spark: SPARK_NW,                       ccy: 'USD' },
-    { key: 'spend', label: 'MONTH SPENDING', value: MONTH_SPEND, delta: 0,        deltaPct: 0,                                                                   spark: SPARK_SPEND, ccy: 'USD', invert: true },
-    { key: 'cash',  label: 'CASH ON HAND',   value: CASH,        delta: 0,        deltaPct: 0,                                                                   spark: SPARK_NW.map(v => v * 0.12),   ccy: 'USD' },
-    { key: 'safe',  label: 'SAFE TO SPEND',  value: CASH / 30,   delta: 0,        deltaPct: 0,                                                                   spark: SPARK_NW.map(v => v * 0.0006), ccy: 'USD', unit: '/ DAY' },
+    { key: 'nw',    label: 'NET WORTH',      value: NET_WORTH,   delta: NW_DELTA, deltaPct: NET_WORTH ? (NW_DELTA / Math.abs(NET_WORTH - NW_DELTA)) * 100 : 0, spark: SPARK_NW,                       ccy: t.currency },
+    { key: 'spend', label: 'MONTH SPENDING', value: MONTH_SPEND, delta: 0,        deltaPct: 0,                                                                   spark: SPARK_SPEND, ccy: t.currency, invert: true },
+    { key: 'cash',  label: 'CASH ON HAND',   value: CASH,        delta: 0,        deltaPct: 0,                                                                   spark: SPARK_NW.map(v => v * 0.12),   ccy: t.currency },
+    { key: 'safe',  label: 'SAFE TO SPEND',  value: CASH / 30,   delta: 0,        deltaPct: 0,                                                                   spark: SPARK_NW.map(v => v * 0.0006), ccy: t.currency, unit: '/ DAY' },
   ];
 
   const [heroIdx, setHeroIdx] = React.useState(0);
@@ -73,9 +73,27 @@ export default function Home({ t, onAcct, onAddTx, onViewAll }) {
       </div>
       <ARule />
 
+      {/* Alerts */}
+      <div style={{ padding: '14px 0 0' }}>
+        <ALabel>[02] ALERTS · {alertRows.length}</ALabel>
+        {alertRows.slice(0, 2).map(alert => (
+          <div key={alert.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '9px 0', borderBottom: '1px solid ' + A.rule2, fontSize: 12, gap: 10 }}>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ color: alert.severity === 'critical' ? A.neg : alert.severity === 'medium' ? t.accent : A.ink, fontSize: 9, letterSpacing: 1 }}>{alert.severity.toUpperCase()}</div>
+              <div style={{ marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{alert.title}</div>
+            </div>
+            <div style={{ fontSize: 10, color: A.muted, letterSpacing: 1, alignSelf: 'center' }}>{alert.action}</div>
+          </div>
+        ))}
+        {alertRows.length === 0 && (
+          <div style={{ padding: '9px 0', borderBottom: '1px solid ' + A.rule2, fontSize: 11, color: A.muted, letterSpacing: 1 }}>NO ACTIVE ALERTS</div>
+        )}
+      </div>
+      <ARule style={{ marginTop: 14 }} />
+
       {/* Accounts mini-list */}
       <div style={{ padding: '14px 0 6px', display: 'flex', justifyContent: 'space-between' }}>
-        <ALabel>[02] ACCOUNTS · {accountsWithBalance.length}</ALabel>
+        <ALabel>[03] ACCOUNTS · {accountsWithBalance.length}</ALabel>
         <div onClick={onViewAll} style={{ fontSize: 10, letterSpacing: 1.2, color: A.ink, cursor: 'pointer' }}>VIEW ALL ▸</div>
       </div>
       {accountsWithBalance.slice(0, 5).map(a => (
@@ -104,7 +122,7 @@ export default function Home({ t, onAcct, onAddTx, onViewAll }) {
 
       {/* Cash flow */}
       <div style={{ padding: '14px 0 0' }}>
-        <ALabel>[03] MAY · CASH FLOW</ALabel>
+        <ALabel>[04] MAY · CASH FLOW</ALabel>
         <div style={{ marginTop: 8, display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 1, background: A.rule2, border: '1px solid ' + A.rule2 }}>
           {[
             { l: 'IN',  v:  13680.00, c: t.accent },
@@ -114,7 +132,7 @@ export default function Home({ t, onAcct, onAddTx, onViewAll }) {
             <div key={x.l} style={{ background: A.bg, padding: '10px 12px' }}>
               <div style={{ fontSize: 9, color: A.muted, letterSpacing: 1.2 }}>{x.l}</div>
               <div style={{ fontSize: 16, fontVariantNumeric: 'tabular-nums', color: x.c, marginTop: 4 }}>
-                {fmtSigned(x.v, 'USD', t.decimals)}
+                {fmtSigned(x.v, t.currency, t.decimals)}
               </div>
             </div>
           ))}
@@ -124,14 +142,14 @@ export default function Home({ t, onAcct, onAddTx, onViewAll }) {
 
       {/* Upcoming */}
       <div style={{ padding: '14px 0 0' }}>
-        <ALabel>[04] UPCOMING · 7 DAYS</ALabel>
+        <ALabel>[05] UPCOMING · 7 DAYS</ALabel>
         {billRows.filter(b => b.status !== 'paid').slice(0, 3).map(b => (
           <div key={b.key} style={{ display: 'flex', justifyContent: 'space-between', padding: '9px 0', borderBottom: '1px solid ' + A.rule2, fontSize: 12 }}>
             <div style={{ display: 'flex', gap: 10 }}>
               <span style={{ color: b.status === 'upcoming' ? A.muted : A.neg, width: 24 }}>{b.dueDate.slice(8)}</span>
               <span style={{ fontWeight: 500 }}>{b.name}</span>
             </div>
-            <div style={{ fontVariantNumeric: 'tabular-nums' }}>{fmtMoney(b.amt, 'USD', t.decimals)}</div>
+            <div style={{ fontVariantNumeric: 'tabular-nums' }}>{fmtMoney(b.amt, t.currency, t.decimals)}</div>
           </div>
         ))}
       </div>

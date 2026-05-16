@@ -12,7 +12,7 @@ import More from './screens/mobile/More';
 import AddSheet from './screens/mobile/AddSheet';
 import {
   Reports, ReportsCalendar, CCDetail, GoalDetail,
-  BillsHub, Settings, CategoriesEditor,
+  BillsHub, AlertsHub, Settings, CategoriesEditor,
 } from './screens/mobile/DetailScreens';
 
 // Web screens
@@ -26,6 +26,7 @@ import WebReports from './screens/web/WebReports';
 import WebInvestments from './screens/web/WebInvestments';
 import WebSettings from './screens/web/WebSettings';
 import WebAddModal from './screens/web/WebAddModal';
+import WebAlerts from './screens/web/WebAlerts';
 
 // ─── Tweaks ────────────────────────────────────────────────────────────────
 
@@ -108,6 +109,7 @@ function MobileApp({ t, setAccent, setDensity, setDecimals, setCurrency }) {
       case 'goal':       return <GoalDetail {...props} goal={params.goal} />;
       case 'cc':         return <CCDetail {...props} acct={params.acct} />;
       case 'bills':      return <BillsHub {...props} />;
+      case 'alerts':     return <AlertsHub {...props} />;
       case 'settings':   return <Settings {...props} setAccent={setAccent} setDensity={setDensity} setDecimals={setDecimals} setCurrency={setCurrency} />;
       case 'categories': return <CategoriesEditor {...props} />;
       default: return null;
@@ -159,6 +161,7 @@ function DesktopApp({ t, setAccent, setDensity, setDecimals, setCurrency }) {
   const renderPage = () => {
     switch (page) {
       case 'dashboard':    return <Dashboard {...props} />;
+      case 'alerts':       return <WebAlerts {...props} />;
       case 'tx':           return <WebTransactions {...props} />;
       case 'accounts':     return <WebAccounts {...props} />;
       case 'budgets':      return <WebBudgets {...props} />;

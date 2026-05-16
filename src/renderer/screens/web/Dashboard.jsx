@@ -4,10 +4,10 @@ import { AsciiSpark, ARule, ALabel } from '../../components/Shared';
 import WebShell from './WebShell';
 import {
   CATEGORIES,
-  SPARK_NW,
   fmtMoney, fmtSigned, fmtPct, dayLabel, catGlyph,
 } from '../../data';
 import { useStore } from '../../store';
+import { buildNetWorthDailyTrend } from '../../charts.mjs';
 
 const PERIOD_DAYS  = { '1D': 1, '1W': 7, '1M': 30, '3M': 90, '1Y': 365 };
 const PERIOD_LABEL = { '1D': '1D', '1W': '7D', '1M': '30D', '3M': '90D', '1Y': '1Y', 'MAX': 'ALL' };
@@ -20,7 +20,7 @@ function windowStart(period) {
 }
 
 export default function Dashboard({ t, onNavigate, onAdd }) {
-  const { transactions, budgetRows, accountsWithBalance, periodLabel, billRows, goals } = useStore();
+  const { transactions, budgetRows, accounts, accountsWithBalance, periodLabel, billRows, goals, alertRows } = useStore();
   const [scrub, setScrub] = React.useState(null);
   const [period, setPeriod] = React.useState('1M');
 
@@ -30,6 +30,18 @@ export default function Dashboard({ t, onNavigate, onAdd }) {
   const NW_DELTA   = accountsWithBalance.reduce((s, a) => s + (a.ccy === 'USD' ? a.delta  : a.delta  * 1.08), 0);
   const NW_PCT     = NET_WORTH ? (NW_DELTA / Math.abs(NET_WORTH - NW_DELTA)) * 100 : 0;
   const todayLabel = now.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }).toUpperCase();
+  const todayIso = now.toISOString().slice(0, 10);
+
+  const netWorthTrend = React.useMemo(() => {
+    const days = period === 'MAX' ? 365 : PERIOD_DAYS[period];
+    return buildNetWorthDailyTrend(accounts, transactions, todayIso, days);
+  }, [accounts, transactions, todayIso, period]);
+  const netWorthSpark = netWorthTrend.map(point => point.value);
+  const chartTicks = React.useMemo(() => {
+    if (netWorthTrend.length <= 5) return netWorthTrend;
+    const indexes = [0, 0.25, 0.5, 0.75, 1].map(x => Math.round(x * (netWorthTrend.length - 1)));
+    return indexes.map(i => netWorthTrend[i]);
+  }, [netWorthTrend]);
 
   const { inflow, outflow, net, deltaByAcct } = React.useMemo(() => {
     const cutoff = windowStart(period);
@@ -45,7 +57,8 @@ export default function Dashboard({ t, onNavigate, onAdd }) {
     return { inflow, outflow, net: inflow + outflow, deltaByAcct };
   }, [period, transactions]);
 
-  const heroVal = scrub != null ? SPARK_NW[scrub] : NET_WORTH;
+  const scrubIdx = scrub != null ? Math.max(0, Math.min(netWorthSpark.length - 1, scrub)) : null;
+  const heroVal = scrubIdx != null ? netWorthSpark[scrubIdx] : NET_WORTH;
 
   return (
     <WebShell active="dashboard" t={t} onNavigate={onNavigate} onAdd={onAdd}>
@@ -75,15 +88,42 @@ export default function Dashboard({ t, onNavigate, onAdd }) {
 
       {/* Sparkline */}
       <div style={{ marginTop: 18, borderTop: '2px solid ' + A.ink, borderBottom: '1px solid ' + A.rule2, paddingTop: 18 }}>
-        <AsciiSpark data={SPARK_NW} width={780} height={160} stroke={t.accent} hover={scrub} onScrub={setScrub} />
+        <AsciiSpark data={netWorthSpark} width={780} height={160} stroke={t.accent} hover={scrubIdx} onScrub={setScrub} />
         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 9, color: A.muted, marginTop: 6 }}>
-          <span>APR 11</span><span>APR 18</span><span>APR 25</span><span>MAY 2</span><span>MAY 11</span>
+          {chartTicks.map(point => (
+            <span key={point.date}>{dayLabel(point.date)}</span>
+          ))}
+        </div>
+      </div>
+
+      {/* Alerts */}
+      <div style={{ marginTop: 20, marginBottom: 8 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+          <ALabel>[03] PRIORITY ALERTS</ALabel>
+          <button onClick={() => onNavigate('alerts')} style={{ all: 'unset', cursor: 'pointer', fontSize: 10, letterSpacing: 1.2, color: t.accent }}>
+            VIEW ALL
+          </button>
+        </div>
+        <div style={{ marginTop: 8, borderTop: '2px solid ' + A.ink }}>
+          {alertRows.slice(0, 3).map(alert => (
+            <button key={alert.id} onClick={() => onNavigate(alert.route)} style={{ all: 'unset', cursor: 'pointer', display: 'grid', gridTemplateColumns: '86px 1fr 80px', gap: 16, width: '100%', padding: '9px 0', borderBottom: '1px solid ' + A.rule2, alignItems: 'center' }}>
+              <div style={{ fontSize: 9, letterSpacing: 1, color: alert.severity === 'critical' ? A.neg : alert.severity === 'medium' ? t.accent : A.ink }}>{alert.severity.toUpperCase()}</div>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{alert.title}</div>
+                <div style={{ fontSize: 10, color: A.muted, letterSpacing: 0.8, marginTop: 2 }}>{alert.detail}</div>
+              </div>
+              <div style={{ textAlign: 'right', fontSize: 10, color: t.accent, letterSpacing: 1 }}>{alert.action}</div>
+            </button>
+          ))}
+          {alertRows.length === 0 && (
+            <div style={{ padding: '12px 0', fontSize: 11, color: A.muted, letterSpacing: 1 }}>NO ACTIVE ALERTS</div>
+          )}
         </div>
       </div>
 
       {/* Cash flow */}
       <div style={{ marginTop: 20, marginBottom: 8 }}>
-        <ALabel>[03] {PERIOD_LABEL[period]} · CASH FLOW</ALabel>
+        <ALabel>[04] {PERIOD_LABEL[period]} · CASH FLOW</ALabel>
         <div style={{ marginTop: 8, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 1, background: A.rule2, border: '1px solid ' + A.rule2 }}>
           {[
             { l: 'IN',  v: inflow,  c: t.accent },
@@ -129,7 +169,7 @@ export default function Dashboard({ t, onNavigate, onAdd }) {
 
         {/* Budgets + Upcoming */}
         <div>
-          <ALabel>[04] {periodLabel} · BUDGETS</ALabel>
+          <ALabel>[05] {periodLabel} · BUDGETS</ALabel>
           <div style={{ marginTop: 8, borderTop: '2px solid ' + A.ink }}>
             {budgetRows.slice(0, 5).map(b => {
               const pct = Math.min(b.spent / Math.max(b.available, 1), 1.2);
@@ -147,7 +187,7 @@ export default function Dashboard({ t, onNavigate, onAdd }) {
               );
             })}
           </div>
-          <ALabel style={{ marginTop: 24 }}>[05] UPCOMING · 7D</ALabel>
+          <ALabel style={{ marginTop: 24 }}>[06] UPCOMING · 7D</ALabel>
           <div style={{ marginTop: 8, borderTop: '2px solid ' + A.ink }}>
             {billRows.filter(b => b.status !== 'paid').slice(0, 4).map(b => (
               <div key={b.key} style={{ display: 'flex', justifyContent: 'space-between', padding: '9px 0', fontSize: 11, borderBottom: '1px solid ' + A.rule2 }}>
@@ -159,7 +199,7 @@ export default function Dashboard({ t, onNavigate, onAdd }) {
               </div>
             ))}
           </div>
-          <ALabel style={{ marginTop: 24 }}>[06] GOALS</ALabel>
+          <ALabel style={{ marginTop: 24 }}>[07] GOALS</ALabel>
           <div style={{ marginTop: 8, borderTop: '2px solid ' + A.ink }}>
             {goals.map(g => (
               <div key={g.id} style={{ padding: '9px 0', borderBottom: '1px solid ' + A.rule2 }}>
@@ -180,7 +220,7 @@ export default function Dashboard({ t, onNavigate, onAdd }) {
 
       {/* Recent transactions */}
       <div style={{ marginTop: 28 }}>
-        <ALabel>[07] RECENT · TRANSACTIONS</ALabel>
+        <ALabel>[08] RECENT · TRANSACTIONS</ALabel>
         <div style={{ marginTop: 8, borderTop: '2px solid ' + A.ink }}>
           {transactions.slice(0, 8).map(tx => (
             <div key={tx.id} style={{ display: 'grid', gridTemplateColumns: '80px 16px 1fr 100px 100px', padding: t.density === 'compact' ? '7px 0' : '9px 0', fontSize: 11, borderBottom: '1px solid ' + A.rule2, alignItems: 'center' }}>

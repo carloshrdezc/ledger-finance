@@ -6,10 +6,10 @@ export function AsciiSpark({ data, width = 280, height = 56, stroke = A.ink, hov
   const min = Math.min(...data), max = Math.max(...data);
   const range = max - min || 1;
   const pts = data.map((v, i) => [
-    i * (width / (data.length - 1)),
+    data.length === 1 ? width / 2 : i * (width / (data.length - 1)),
     height - ((v - min) / range) * height,
   ]);
-  const d = pts.map((p, i) => (i ? 'L' : 'M') + p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join(' ');
+  const d = svgLinePath(data, width, height);
   const hi = hover != null ? Math.max(0, Math.min(data.length - 1, hover)) : null;
 
   return (
