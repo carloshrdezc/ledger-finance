@@ -8,9 +8,12 @@ import ImportExport from '../../components/ImportExport';
 const CURRENCIES = ['USD', 'EUR', 'GBP', 'JPY', 'CAD', 'AUD', 'CHF', 'MXN'];
 
 export default function WebSettings({ t, onNavigate, onAdd, setAccent, setDensity, setDecimals, setCurrency }) {
-  const { categoryTree, addCategory, budgetStartDay, setBudgetStartDay, reset } = useStore();
+  const { categoryTree, addCategory, renameCategory, removeCategory, budgetStartDay, setBudgetStartDay, reset } = useStore();
   const [expanded, setExpanded] = React.useState({ edu: true, 'edu.school': true, 'edu.school.supplies': true, food: true });
   const [adding, setAdding] = React.useState(null);
+  const [renaming, setRenaming] = React.useState(null);
+  const [renameVal, setRenameVal] = React.useState('');
+  const [confirmDelete, setConfirmDelete] = React.useState(null);
   const [newName, setNewName] = React.useState('');
   const [showIO, setShowIO] = React.useState(false);
   const [confirmReset, setConfirmReset] = React.useState(false);
@@ -21,6 +24,19 @@ export default function WebSettings({ t, onNavigate, onAdd, setAccent, setDensit
   React.useEffect(() => () => clearTimeout(resetTimerRef.current), []);
 
   const toggle = k => setExpanded(e => ({ ...e, [k]: !e[k] }));
+
+  const startRename = (id, currentLabel) => {
+    setRenaming(id);
+    setRenameVal(currentLabel || '');
+  };
+
+  const commitRename = (path) => {
+    const id = path.join('.');
+    if (renaming !== id) return;
+    renameCategory(path, renameVal.trim().toUpperCase());
+    setRenaming(null);
+    setRenameVal('');
+  };
 
   const commitDay = () => {
     const v = Math.max(1, Math.min(28, parseInt(dayInput, 10) || 1));
@@ -44,6 +60,8 @@ export default function WebSettings({ t, onNavigate, onAdd, setAccent, setDensit
     const children = node.children || {};
     const hasKids = Object.keys(children).length > 0;
     const isOpen = expanded[id];
+    const isRenaming = renaming === id;
+    const isConfirming = confirmDelete === id;
     return (
       <div key={id}>
         <div style={{ display: 'flex', alignItems: 'center', padding: '6px 0', paddingLeft: depth * 20, borderBottom: '1px solid ' + A.rule2 }}>
@@ -51,14 +69,37 @@ export default function WebSettings({ t, onNavigate, onAdd, setAccent, setDensit
             style={{ all: 'unset', cursor: hasKids ? 'pointer' : 'default', width: 22, color: A.ink2, fontSize: 12 }}>
             {hasKids ? (isOpen ? '−' : '+') : '·'}
           </button>
-          <span style={{ fontSize: 11, letterSpacing: depth === 0 ? 1.2 : 0.4, fontWeight: depth === 0 ? 600 : 400, color: A.ink, flex: 1 }}>
-            {node.glyph ? node.glyph + ' ' : ''}{node.label || key}
-          </span>
+          {isRenaming ? (
+            <input autoFocus value={renameVal} onChange={e => setRenameVal(e.target.value)}
+              onBlur={() => commitRename(path)}
+              onKeyDown={e => {
+                if (e.key === 'Enter') commitRename(path);
+                if (e.key === 'Escape') { setRenaming(null); setRenameVal(''); }
+              }}
+              style={{ flex: 1, fontFamily: A.font, fontSize: 11, background: 'transparent', border: 'none', borderBottom: '1px solid ' + A.ink, outline: 'none', padding: '2px 0', color: A.ink, letterSpacing: 0.6 }}
+            />
+          ) : (
+            <span onClick={() => startRename(id, node.label || key)}
+              style={{ fontSize: 11, letterSpacing: depth === 0 ? 1.2 : 0.4, fontWeight: depth === 0 ? 600 : 400, color: A.ink, flex: 1, cursor: 'text' }}>
+              {node.glyph ? node.glyph + ' ' : ''}{node.label || key}
+            </span>
+          )}
           <span style={{ fontSize: 9, color: A.muted, letterSpacing: 1, marginRight: 12 }}>
             {depth > 0 ? path.slice(0, -1).map(p => p.toUpperCase()).join(' › ') : 'TOP · LEVEL'}
           </span>
-          <button onClick={() => setAdding(id)}
+          <button onClick={() => setAdding(id)} title="Add sub-category"
             style={{ all: 'unset', cursor: 'pointer', width: 22, textAlign: 'center', fontSize: 14, color: A.muted }}>+</button>
+          {isConfirming ? (
+            <>
+              <button onClick={() => { removeCategory(path); setConfirmDelete(null); }}
+                style={{ all: 'unset', cursor: 'pointer', fontSize: 9, color: A.neg, letterSpacing: 1, marginLeft: 6 }}>SURE?</button>
+              <button onClick={() => setConfirmDelete(null)}
+                style={{ all: 'unset', cursor: 'pointer', fontSize: 10, color: A.muted, marginLeft: 4 }}>×</button>
+            </>
+          ) : (
+            <button onClick={() => setConfirmDelete(id)} title="Delete category"
+              style={{ all: 'unset', cursor: 'pointer', width: 22, textAlign: 'center', fontSize: 11, color: A.muted }}>✕</button>
+          )}
         </div>
         {adding === id && (
           <div style={{ display: 'flex', gap: 8, padding: '6px 0', paddingLeft: (depth + 1) * 20 + 22, borderBottom: '1px solid ' + A.rule2 }}>
@@ -99,7 +140,7 @@ export default function WebSettings({ t, onNavigate, onAdd, setAccent, setDensit
         <div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
             <ALabel>[02] CATEGORY · TREE</ALabel>
-            <span style={{ fontSize: 10, color: A.muted, letterSpacing: 1 }}>NEST AS DEEP AS YOU NEED · + ON ANY ROW</span>
+            <span style={{ fontSize: 10, color: A.muted, letterSpacing: 1 }}>+ ADD · CLICK NAME TO RENAME · ✕ TO DELETE</span>
           </div>
           <div style={{ marginTop: 12, borderTop: '2px solid ' + A.ink }}>
             {Object.entries(categoryTree).map(([k, n]) => renderNode(k, n, [k], 0))}
