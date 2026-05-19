@@ -11,13 +11,18 @@ export default function Home({ t, onAcct, onAddTx, onViewAll }) {
   const todayLabel = now.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }).toUpperCase();
 
   const NET_WORTH   = accountsIncludedInTotals.reduce((s, a) => s + (a.ccy === 'USD' ? a.balance : a.balance * 1.08), 0);
-  const MONTH_SPEND = transactions
-    .filter(tx => tx.cat !== 'income' && tx.amt < 0 && tx.date?.startsWith(thisMonth))
-    .reduce((s, tx) => s + Math.abs(tx.ccy === 'USD' ? tx.amt : tx.amt * 1.08), 0);
+  const monthTxs    = transactions.filter(tx => tx.date?.startsWith(thisMonth));
+  const toUSD       = tx => (tx.ccy === 'USD' ? tx.amt : tx.amt * 1.08);
+  const MONTH_IN    = monthTxs.filter(tx => tx.amt > 0 && tx.cat !== 'transfer').reduce((s, tx) => s + toUSD(tx), 0);
+  const MONTH_OUT   = monthTxs.filter(tx => tx.amt < 0 && tx.cat !== 'transfer').reduce((s, tx) => s + toUSD(tx), 0);
+  const MONTH_NET   = MONTH_IN + MONTH_OUT;
+  const MONTH_SPEND = Math.abs(MONTH_OUT);
   const CASH        = accountsWithBalance
     .filter(a => ['CHK', 'SAV', 'FX'].includes(a.type))
     .reduce((s, a) => s + (a.ccy === 'USD' ? a.balance : a.balance * 1.08), 0);
   const NW_DELTA    = accountsIncludedInTotals.reduce((s, a) => s + (a.ccy === 'USD' ? a.delta : a.delta * 1.08), 0);
+
+  const monthLabel  = now.toLocaleDateString('en-US', { month: 'short' }).toUpperCase();
 
   const HERO_METRICS = [
     { key: 'nw',    label: 'NET WORTH',      value: NET_WORTH,   delta: NW_DELTA, deltaPct: NET_WORTH ? (NW_DELTA / Math.abs(NET_WORTH - NW_DELTA)) * 100 : 0, spark: SPARK_NW,                       ccy: t.currency },
@@ -122,12 +127,12 @@ export default function Home({ t, onAcct, onAddTx, onViewAll }) {
 
       {/* Cash flow */}
       <div style={{ padding: '14px 0 0' }}>
-        <ALabel>[04] MAY · CASH FLOW</ALabel>
+        <ALabel>[04] {monthLabel} · CASH FLOW</ALabel>
         <div style={{ marginTop: 8, display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 1, background: A.rule2, border: '1px solid ' + A.rule2 }}>
           {[
-            { l: 'IN',  v:  13680.00, c: t.accent },
-            { l: 'OUT', v:  -5234.18, c: A.neg },
-            { l: 'NET', v:   8445.82, c: A.ink },
+            { l: 'IN',  v: MONTH_IN,  c: t.accent },
+            { l: 'OUT', v: MONTH_OUT, c: A.neg },
+            { l: 'NET', v: MONTH_NET, c: MONTH_NET >= 0 ? A.ink : A.neg },
           ].map(x => (
             <div key={x.l} style={{ background: A.bg, padding: '10px 12px' }}>
               <div style={{ fontSize: 9, color: A.muted, letterSpacing: 1.2 }}>{x.l}</div>
