@@ -67,6 +67,7 @@ export function StoreProvider({ children }) {
   const [investments, setInvestments] = useLS('ledger:investments', []);
   const [trades, setTrades]           = useLS('ledger:trades', []);
   const [dismissedAlertIds, setDismissedAlertIds] = useLS('ledger:dismissedAlerts', []);
+  const [welcomeSeen, setWelcomeSeen] = useLS('ledger:welcomeSeen', false);
   const [rates, setRates] = useLS('ledger:fxRates', DEFAULT_RATES);
   const [ratesUpdated, setRatesUpdated] = useLS('ledger:fxRatesUpdated', {});
   const [fxMigrationToastSeen, setFxMigrationToastSeen] = useLS('ledger:fxMigrationToastSeen', false);
@@ -78,6 +79,16 @@ export function StoreProvider({ children }) {
       setTxs(prev => migrateTransactions(prev));
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  React.useEffect(() => {
+    // CAR-76: existing users with non-empty data should not see the welcome
+    // modal on first post-upgrade boot. Read slices directly from initial
+    // state — useLS already loaded localStorage synchronously.
+    if (!welcomeSeen && !isAppEmptyFor({ txs, accounts, bills, goals, budgets, investments, trades })) {
+      setWelcomeSeen(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // run once on mount; reading initial state is intentional
 
   const hiddenSet = React.useMemo(() => new Set(hidden), [hidden]);
   const transactions = React.useMemo(() => txs.filter(t => !hiddenSet.has(t.id)), [txs, hiddenSet]);
@@ -134,6 +145,11 @@ export function StoreProvider({ children }) {
       fxMigrationToastSeen,
     }),
     [billRows, budgetRows, goals, accountsWithBalance, investments, dismissedAlertIds, rates, ratesUpdated, transactions, fxMigrationToastSeen],
+  );
+
+  const isAppEmpty = React.useMemo(
+    () => isAppEmptyFor({ txs, accounts, bills, goals, budgets, investments, trades }),
+    [txs, accounts, bills, goals, budgets, investments, trades],
   );
 
   const addTransactions = React.useCallback(incoming => setTxs(prev => {
@@ -470,9 +486,27 @@ export function StoreProvider({ children }) {
     setDismissedAlertIds([]);
   }, [setDismissedAlertIds]);
 
+  const dismissWelcome = React.useCallback(() => {
+    setWelcomeSeen(true);
+  }, [setWelcomeSeen]);
+
+  const loadSampleData = React.useCallback(() => {
+    if (!isAppEmptyFor({ txs, accounts, bills, goals, budgets, investments, trades })) {
+      throw new Error('LEDGER_NOT_EMPTY');
+    }
+    setTxs(TRANSACTIONS);
+    setAccounts(ACCOUNTS);
+    setBudgets(BUDGETS);
+    setBills(BILLS);
+    setGoals(GOALS);
+    setInvestments(INVESTMENTS);
+    setTrades(TRADES);
+    setCatTree(prev => isDefaultCatTreeFor(prev) ? CATEGORY_TREE : prev);
+  }, [txs, accounts, bills, goals, budgets, investments, trades, setTxs, setAccounts, setBudgets, setBills, setGoals, setInvestments, setTrades, setCatTree]);
+
   const reset = React.useCallback(() => {
     setTxs([]);
-    setCatTree({});
+    setCatTree(DEFAULT_CAT_TREE);
     setBudgets([]);
     setAccounts([]);
     setBills([]);
@@ -488,7 +522,8 @@ export function StoreProvider({ children }) {
     setRates(DEFAULT_RATES);
     setRatesUpdated({});
     setFxMigrationToastSeen(false);
-  }, [setTxs, setCatTree, setBudgets, setAccounts, setBills, setGoals, setGoalContributions, setSelectedPeriod, setHidden, setBudgetStartDay, setInvestments, setTrades, setDismissedAlertIds, setTxFilterRaw, setRates, setRatesUpdated, setFxMigrationToastSeen]);
+    setWelcomeSeen(false);
+  }, [setTxs, setCatTree, setBudgets, setAccounts, setBills, setGoals, setGoalContributions, setSelectedPeriod, setHidden, setBudgetStartDay, setInvestments, setTrades, setDismissedAlertIds, setTxFilterRaw, setRates, setRatesUpdated, setFxMigrationToastSeen, setWelcomeSeen]);
 
   return (
     <StoreCtx.Provider value={{
@@ -568,6 +603,10 @@ export function StoreProvider({ children }) {
       resetRates,
       fxMigrationToastSeen,
       setFxMigrationToastSeen,
+      welcomeSeen,
+      dismissWelcome,
+      loadSampleData,
+      isAppEmpty,
     }}>
       {children}
     </StoreCtx.Provider>
