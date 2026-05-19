@@ -86,8 +86,8 @@ export function StoreProvider({ children }) {
   );
   const periodLabel = React.useMemo(() => formatPeriodLabel(selectedPeriod, budgetStartDay), [selectedPeriod, budgetStartDay]);
   const budgetRows = React.useMemo(
-    () => buildBudgetRows(Array.isArray(budgets) ? budgets : [], transactions, selectedPeriod),
-    [budgets, transactions, selectedPeriod],
+    () => buildBudgetRows(Array.isArray(budgets) ? budgets : [], transactions, selectedPeriod, rates),
+    [budgets, transactions, selectedPeriod, rates],
   );
   const billRows = React.useMemo(
     () => buildBillRows(bills, transactions, selectedPeriod),
