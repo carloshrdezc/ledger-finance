@@ -6,10 +6,11 @@ import { useStore } from '../../store';
 import RecurringFormSheet from '../../components/RecurringFormSheet';
 
 export default function More({ t, onNavigate }) {
-  const { goals, billRows, bills, alertRows, accountsWithBalance } = useStore();
+  const { goals, billRows, bills, alertRows, accountsWithBalance, investments } = useStore();
   const activeRules = bills.filter(b => b.active !== false).length;
   const billTotal = billRows.filter(b => b.type !== 'income').reduce((s, b) => s + b.amt, 0);
   const ccAccounts = accountsWithBalance.filter(a => a.type === 'CC' && !a.archived);
+  const portfolioTotal = investments.reduce((s, i) => s + i.shares * i.price, 0);
   const [showAddRecurring, setShowAddRecurring] = React.useState(false);
   const sections = [
     {
@@ -39,6 +40,18 @@ export default function More({ t, onNavigate }) {
             params: { acct: a.id },
           }))
         : [{ label: 'NO CREDIT CARDS', sub: 'ADD ONE FROM ACCOUNTS', screen: null }],
+    },
+    {
+      title: 'INVESTMENTS',
+      rows: [
+        {
+          label: investments.length > 0
+            ? 'PORTFOLIO · ' + fmtMoney(portfolioTotal, t.currency, false)
+            : 'NO HOLDINGS YET',
+          sub: investments.length + ' HOLDINGS · ALLOCATION',
+          screen: 'investments',
+        },
+      ],
     },
     {
       title: 'RECURRING',
