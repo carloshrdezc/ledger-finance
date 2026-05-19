@@ -174,25 +174,37 @@ export function AccountDetail({ t, accountId, onBack }) {
         </div>
       </div>
       <div style={{ display: 'flex', gap: 1, background: A.rule2, border: '1px solid ' + A.rule2, marginTop: 6 }}>
-        {a.type === 'CC' ? (
-          <>
-            <ADetailCell label="CREDIT LIMIT" val={fmtMoney(10000, t.currency, t.decimals)} />
-            <ADetailCell label="AVAILABLE" val={fmtMoney(10000 + a.balance, t.currency, t.decimals)} />
-            <ADetailCell label="APR" val="22.74%" />
-          </>
-        ) : a.type === 'INV' ? (
-          <>
-            <ADetailCell label="COST BASIS" val={fmtMoney(a.balance * 0.78, t.currency, t.decimals)} />
-            <ADetailCell label="GAIN" val={fmtSigned(a.balance * 0.22, t.currency, t.decimals)} c={t.accent} />
-            <ADetailCell label="YIELD" val="1.42%" />
-          </>
-        ) : (
-          <>
-            <ADetailCell label="AVAILABLE" val={fmtMoney(a.balance, a.ccy, t.decimals)} />
-            <ADetailCell label="APY" val={a.type === 'SAV' ? '4.20%' : '0.00%'} />
-            <ADetailCell label="STATEMENT" val="MAY 28" />
-          </>
-        )}
+        {a.type === 'CC' ? (() => {
+          const limit = a.creditLimit ?? 10000;
+          const apr = a.apr;
+          return (
+            <>
+              <ADetailCell label="CREDIT LIMIT" val={fmtMoney(limit, t.currency, t.decimals)} />
+              <ADetailCell label="AVAILABLE" val={fmtMoney(limit + a.balance, t.currency, t.decimals)} />
+              <ADetailCell label="APR" val={apr != null ? apr.toFixed(2) + '%' : '—'} />
+            </>
+          );
+        })() : a.type === 'INV' ? (() => {
+          const cb = a.costBasisPct != null ? a.costBasisPct / 100 : 0.78;
+          const yld = a.yield;
+          return (
+            <>
+              <ADetailCell label="COST BASIS" val={fmtMoney(a.balance * cb, t.currency, t.decimals)} />
+              <ADetailCell label="GAIN" val={fmtSigned(a.balance * (1 - cb), t.currency, t.decimals)} c={t.accent} />
+              <ADetailCell label="YIELD" val={yld != null ? yld.toFixed(2) + '%' : '—'} />
+            </>
+          );
+        })() : (() => {
+          const apy = a.apy;
+          const apyVal = apy != null ? apy.toFixed(2) + '%' : (a.type === 'SAV' ? '—' : '0.00%');
+          return (
+            <>
+              <ADetailCell label="AVAILABLE" val={fmtMoney(a.balance, a.ccy, t.decimals)} />
+              <ADetailCell label="APY" val={apyVal} />
+              <ADetailCell label="STATEMENT" val="—" />
+            </>
+          );
+        })()}
       </div>
       <ARule style={{ marginTop: 14 }} />
       <div style={{ padding: '14px 0 6px' }}><ALabel>RECENT · ACTIVITY</ALabel></div>
