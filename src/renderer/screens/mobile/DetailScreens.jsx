@@ -16,9 +16,10 @@ import {
 
 // ── Reports ──────────────────────────────────────────────────────────────────
 export function Reports({ t, onBack }) {
-  const { transactions, periodTransactions, categoryTree, selectedPeriod, periodLabel, accounts } = useStore();
+  const { transactions, periodTransactions, categoryTree, selectedPeriod, periodLabel, accounts, bills } = useStore();
   const previousPeriod = addMonths(selectedPeriod, -1);
-  const previousTotal = filterTransactionsForPeriod(transactions, previousPeriod).filter(x => x.amt < 0)
+  const previousPeriodTxs = filterTransactionsForPeriod(transactions, previousPeriod);
+  const previousTotal = previousPeriodTxs.filter(x => x.amt < 0)
     .reduce((s, x) => s + Math.abs(x.ccy === 'USD' ? x.amt : x.amt * 1.08), 0);
   const total = periodTransactions.filter(x => x.amt < 0)
     .reduce((s, x) => s + Math.abs(x.ccy === 'USD' ? x.amt : x.amt * 1.08), 0);
@@ -33,6 +34,72 @@ export function Reports({ t, onBack }) {
   const incomeExpense = buildIncomeExpenseSeries(transactions, trendPeriods);
   const categoryTrend = buildCategoryTrend(transactions, trendPeriods, 4);
   const netWorthTrend = buildNetWorthTrend(accounts, transactions, trendPeriods);
+
+  // ── Detected Insights ────────────────────────────────────────────────────
+  // 1. Top-growing category vs previous period (largest absolute increase).
+  const prevByCat = {};
+  previousPeriodTxs.filter(x => x.amt < 0).forEach(x => {
+    const k = (x.path || [x.cat])[0];
+    prevByCat[k] = (prevByCat[k] || 0) + Math.abs(x.ccy === 'USD' ? x.amt : x.amt * 1.08);
+  });
+  const allCatKeys = new Set([...Object.keys(byCat), ...Object.keys(prevByCat)]);
+  let topGrowth = null;
+  for (const k of allCatKeys) {
+    const cur = byCat[k] || 0;
+    const prev = prevByCat[k] || 0;
+    const diff = cur - prev;
+    if (diff <= 0 || prev <= 0) continue;
+    const pct = (diff / prev) * 100;
+    if (!topGrowth || pct > topGrowth.pct) topGrowth = { key: k, pct, diff };
+  }
+  const growthLabel = topGrowth ? (categoryTree[topGrowth.key]?.label || topGrowth.key.toUpperCase()) : null;
+
+  // 2. Active subscriptions count + monthly total.
+  const subBills = bills.filter(b => b.active !== false && b.cat === 'subs' && b.type !== 'income');
+  const subTotal = subBills.reduce((s, b) => {
+    const amt = Math.abs(b.amt || 0);
+    if (b.freq === 'weekly')   return s + amt * 4.33;
+    if (b.freq === 'biweekly') return s + amt * 2.17;
+    if (b.freq === 'annual')   return s + amt / 12;
+    return s + amt;
+  }, 0);
+
+  // 3. Unused subscription: an active sub bill whose name has no matching tx
+  // in the past 60 days.
+  const today = new Date();
+  const cutoff = new Date(today);
+  cutoff.setDate(cutoff.getDate() - 60);
+  const cutoffIso = cutoff.toISOString().slice(0, 10);
+  const recentNames = new Set(
+    transactions.filter(tx => tx.date >= cutoffIso).map(tx => (tx.name || '').toUpperCase())
+  );
+  const unusedSub = subBills.find(b => !recentNames.has((b.name || '').toUpperCase()));
+
+  // 4. Savings rate for current period: (income - expenses) / income.
+  const periodIncome = periodTransactions.filter(x => x.amt > 0 && x.cat !== 'transfer')
+    .reduce((s, x) => s + (x.ccy === 'USD' ? x.amt : x.amt * 1.08), 0);
+  const periodExpense = total;
+  const savingsRate = periodIncome > 0 ? ((periodIncome - periodExpense) / periodIncome) * 100 : null;
+  // Compare to prior period.
+  const prevIncome = previousPeriodTxs.filter(x => x.amt > 0 && x.cat !== 'transfer')
+    .reduce((s, x) => s + (x.ccy === 'USD' ? x.amt : x.amt * 1.08), 0);
+  const prevSavingsRate = prevIncome > 0 ? ((prevIncome - previousTotal) / prevIncome) * 100 : null;
+  const savingsDelta = (savingsRate != null && prevSavingsRate != null) ? savingsRate - prevSavingsRate : null;
+
+  const insights = [];
+  if (topGrowth) {
+    insights.push([growthLabel.toUpperCase(), '↑ ' + Math.round(topGrowth.pct) + '% VS ' + formatShortPeriodLabel(previousPeriod).slice(0, 3)]);
+  }
+  if (subBills.length > 0) {
+    insights.push(['SUBS', subBills.length + ' ACTIVE · ' + fmtMoney(subTotal, t.currency, false) + ' / MO']);
+  }
+  if (unusedSub) {
+    insights.push(['UNUSED', (unusedSub.name || '').toUpperCase() + ' · NOT SEEN 60D']);
+  }
+  if (savingsRate != null) {
+    const arrow = savingsDelta == null ? '' : ' · ' + (savingsDelta >= 0 ? '▲ ' : '▼ ') + Math.abs(savingsDelta).toFixed(1) + 'PT';
+    insights.push(['SAVINGS', savingsRate.toFixed(1) + '% RATE' + arrow]);
+  }
 
   return (
     <div style={{ padding: '0 18px 20px' }}>
@@ -134,12 +201,11 @@ export function Reports({ t, onBack }) {
       <ARule style={{ marginTop: 14 }} />
       <div style={{ padding: '14px 0 0' }}>
         <ALabel>[05] DETECTED · INSIGHTS</ALabel>
-        {[
-          ['DINING', '↑ 18% VS APR · MOSTLY CAFÉS'],
-          ['SUBS', '5 ACTIVE · $69.48 / MO'],
-          ['UNUSED', 'NYTIMES · NOT OPENED 30D'],
-          ['SAVINGS', '12.4% RATE · ▲ FROM 9.8%'],
-        ].map(([k, v], i) => (
+        {insights.length === 0 ? (
+          <div style={{ padding: '10px 0', borderBottom: '1px solid ' + A.rule2, fontSize: 11, color: A.muted, letterSpacing: 1 }}>
+            NOT ENOUGH DATA YET
+          </div>
+        ) : insights.map(([k, v], i) => (
           <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid ' + A.rule2, fontSize: 11 }}>
             <span style={{ letterSpacing: 1.2 }}>{k}</span>
             <span style={{ color: A.muted, letterSpacing: 0.6 }}>{v}</span>
