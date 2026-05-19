@@ -39,6 +39,7 @@
   "dependencies": {
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
-    "sql.js": "^1.14.1"
+    "sql.js": "^1.14.1",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   }
 }
