@@ -19,7 +19,7 @@ import {
 
 // ── Reports ──────────────────────────────────────────────────────────────────
 export function Reports({ t, onBack, onGoToRoute }) {
-  const { transactions, periodTransactions, categoryTree, selectedPeriod, periodLabel, accounts, bills, setTxFilter } = useStore();
+  const { transactions, periodTransactions, categoryTree, selectedPeriod, periodLabel, accounts, bills, rates, setTxFilter } = useStore();
   const drillTo = (filter) => {
     if (!onGoToRoute) return;
     setTxFilter(filter || null);
@@ -75,9 +75,9 @@ export function Reports({ t, onBack, onGoToRoute }) {
     .sort((a, b) => b.amt - a.amt)
     .slice(0, 8);
   const trendPeriods = getRecentPeriods(selectedPeriod, 6);
-  const incomeExpense = buildIncomeExpenseSeries(transactions, trendPeriods);
-  const categoryTrend = buildCategoryTrend(transactions, trendPeriods, 4);
-  const netWorthTrend = buildNetWorthTrend(accounts, transactions, trendPeriods);
+  const incomeExpense = buildIncomeExpenseSeries(transactions, trendPeriods, rates);
+  const categoryTrend = buildCategoryTrend(transactions, trendPeriods, 4, rates);
+  const netWorthTrend = buildNetWorthTrend(accounts, transactions, trendPeriods, rates);
 
   // Rolling 12-month spend (absolute expense totals, USD-normalized).
   const momPeriods = getRecentPeriods(selectedPeriod, 12);
