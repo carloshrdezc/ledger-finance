@@ -5,9 +5,11 @@ import PeriodSwitcher from '../../components/PeriodSwitcher';
 import { CATEGORIES, fmtMoney } from '../../data';
 import { useStore } from '../../store';
 import { getDaysInPeriod } from '../../period.mjs';
+import BudgetFormSheet from '../../components/BudgetFormSheet';
 
 export default function Budgets({ t }) {
-  const { budgetRows, periodLabel, selectedPeriod } = useStore();
+  const { budgetRows, budgets, periodLabel, selectedPeriod } = useStore();
+  const [editing, setEditing] = React.useState(null); // null | 'new' | budget object
   const totalSpent = budgetRows.reduce((s, b) => s + b.spent, 0);
   const totalLimit = budgetRows.reduce((s, b) => s + b.limit, 0);
   const totalAvailable = budgetRows.reduce((s, b) => s + b.available, 0);
@@ -15,8 +17,11 @@ export default function Budgets({ t }) {
 
   return (
     <div style={{ padding: '0 18px 20px' }}>
-      <div style={{ padding: '10px 0 6px' }}>
+      <div style={{ padding: '10px 0 6px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ fontSize: 12, letterSpacing: 2, fontWeight: 700 }}>BUDGETS</div>
+        <button onClick={() => setEditing('new')} style={{
+          all: 'unset', cursor: 'pointer', fontSize: 10, letterSpacing: 1.2, color: t.accent,
+        }}>+ ADD</button>
       </div>
       <ARule thick />
       <div style={{ padding: '12px 0 2px' }}>
@@ -32,14 +37,25 @@ export default function Budgets({ t }) {
         </div>
       </div>
       <ARule />
-      {budgetRows.map(b => {
+      {budgetRows.length === 0 ? (
+        <div style={{ padding: '24px 0', textAlign: 'center', color: A.muted, fontSize: 11, letterSpacing: 1 }}>
+          NO BUDGETS YET · TAP + ADD TO CREATE ONE
+        </div>
+      ) : budgetRows.map(b => {
         const pct = Math.min(b.spent / Math.max(b.available, 1), 1.2);
         const over = b.left < 0;
+        const rawBudget = budgets.find(x => x.cat === b.cat);
         return (
-          <div key={b.cat} style={{ padding: '12px 0', borderBottom: '1px solid ' + A.rule2 }}>
+          <button key={b.cat}
+            onClick={() => rawBudget && setEditing(rawBudget)}
+            style={{
+              all: 'unset', cursor: 'pointer', display: 'block', width: '100%',
+              padding: '12px 0', borderBottom: '1px solid ' + A.rule2,
+              boxSizing: 'border-box',
+            }}>
             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
               <div style={{ fontSize: 12, letterSpacing: 1, fontWeight: 500 }}>
-                {CATEGORIES[b.cat].glyph} {CATEGORIES[b.cat].label}
+                {CATEGORIES[b.cat]?.glyph || '·'} {CATEGORIES[b.cat]?.label || b.cat.toUpperCase()}
               </div>
               <div style={{ fontSize: 12, fontVariantNumeric: 'tabular-nums', color: over ? A.neg : A.ink }}>
                 {fmtMoney(b.spent, t.currency, t.decimals)} / {fmtMoney(b.available, t.currency, false)}
@@ -62,9 +78,17 @@ export default function Budgets({ t }) {
                 ROLLOVER {b.rollover > 0 ? '+' : '-'}{fmtMoney(Math.abs(b.rollover), t.currency, false)}
               </div>
             )}
-          </div>
+          </button>
         );
       })}
+
+      {editing && (
+        <BudgetFormSheet
+          t={t}
+          editBudget={editing === 'new' ? null : editing}
+          onClose={() => setEditing(null)}
+        />
+      )}
     </div>
   );
 }
