@@ -16,8 +16,13 @@ import {
 } from '../../charts.mjs';
 
 // ── Reports ──────────────────────────────────────────────────────────────────
-export function Reports({ t, onBack }) {
-  const { transactions, periodTransactions, categoryTree, selectedPeriod, periodLabel, accounts, bills } = useStore();
+export function Reports({ t, onBack, onGoToRoute }) {
+  const { transactions, periodTransactions, categoryTree, selectedPeriod, periodLabel, accounts, bills, setTxFilter } = useStore();
+  const drillTo = (filter) => {
+    if (!onGoToRoute) return;
+    setTxFilter(filter || null);
+    onGoToRoute('tx');
+  };
   const previousPeriod = addMonths(selectedPeriod, -1);
   const previousPeriodTxs = filterTransactionsForPeriod(transactions, previousPeriod);
   const previousTotal = previousPeriodTxs.filter(x => x.amt < 0)
@@ -195,7 +200,12 @@ export function Reports({ t, onBack }) {
       {cats.map(([k, v]) => {
         const c = categoryTree[k] || { label: k, glyph: '·' };
         return (
-          <div key={k} style={{ padding: '10px 0', borderBottom: '1px solid ' + A.rule2 }}>
+          <button key={k}
+            onClick={() => drillTo({ category: k, type: 'expense' })}
+            style={{
+              all: 'unset', display: 'block', width: '100%', boxSizing: 'border-box',
+              cursor: 'pointer', padding: '10px 0', borderBottom: '1px solid ' + A.rule2,
+            }}>
             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
               <div style={{ fontSize: 12 }}>{c.glyph} {c.label}</div>
               <div style={{ fontSize: 12, fontVariantNumeric: 'tabular-nums' }}>
@@ -205,7 +215,7 @@ export function Reports({ t, onBack }) {
             <div style={{ marginTop: 6, height: 4, background: A.rule2 }}>
               <div style={{ width: (v / maxCat * 100) + '%', height: '100%', background: t.accent }} />
             </div>
-          </div>
+          </button>
         );
       })}
       <ARule style={{ marginTop: 14 }} />
@@ -215,15 +225,23 @@ export function Reports({ t, onBack }) {
           NO MERCHANTS THIS PERIOD
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 30px 90px', borderTop: '1px solid ' + A.rule2 }}>
+        <div style={{ borderTop: '1px solid ' + A.rule2 }}>
           {topMerchants.map((m, i) => (
-            <React.Fragment key={i}>
-              <div style={{ padding: '9px 0', fontSize: 12, borderBottom: '1px solid ' + A.rule2 }}>{m.name}</div>
-              <div style={{ padding: '9px 0', fontSize: 10, color: A.muted, borderBottom: '1px solid ' + A.rule2, textAlign: 'center' }}>{m.n}×</div>
-              <div style={{ padding: '9px 0', fontSize: 12, fontVariantNumeric: 'tabular-nums', textAlign: 'right', borderBottom: '1px solid ' + A.rule2 }}>
+            <button key={i}
+              onClick={() => drillTo({ merchant: m.name })}
+              style={{
+                all: 'unset', cursor: 'pointer', display: 'grid',
+                gridTemplateColumns: '1fr 30px 90px',
+                width: '100%', boxSizing: 'border-box',
+                padding: '9px 0', borderBottom: '1px solid ' + A.rule2,
+                alignItems: 'center',
+              }}>
+              <div style={{ fontSize: 12 }}>{m.name}</div>
+              <div style={{ fontSize: 10, color: A.muted, textAlign: 'center' }}>{m.n}×</div>
+              <div style={{ fontSize: 12, fontVariantNumeric: 'tabular-nums', textAlign: 'right' }}>
                 {fmtMoney(m.amt, t.currency, t.decimals)}
               </div>
-            </React.Fragment>
+            </button>
           ))}
         </div>
       )}
@@ -246,8 +264,13 @@ export function Reports({ t, onBack }) {
 }
 
 // ── Reports Calendar ──────────────────────────────────────────────────────────
-export function ReportsCalendar({ t, onBack }) {
-  const { periodTransactions, selectedPeriod, periodLabel } = useStore();
+export function ReportsCalendar({ t, onBack, onGoToRoute }) {
+  const { periodTransactions, selectedPeriod, periodLabel, setTxFilter } = useStore();
+  const drillTo = (filter) => {
+    if (!onGoToRoute) return;
+    setTxFilter(filter || null);
+    onGoToRoute('tx');
+  };
   const dayCount = getDaysInPeriod(selectedPeriod);
   const cells = Array.from({ length: dayCount }, (_, i) => {
     const day = String(i + 1).padStart(2, '0');
@@ -292,14 +315,20 @@ export function ReportsCalendar({ t, onBack }) {
           ))}
           {cells.map((v, i) => {
             const intensity = v / max;
+            const day = String(i + 1).padStart(2, '0');
+            const dateIso = `${selectedPeriod}-${day}`;
             return (
-              <div key={i} style={{
-                aspectRatio: '1',
-                background: v === 0 ? A.rule2 : `color-mix(in oklch, ${t.accent} ${Math.max(15, intensity * 100)}%, ${A.bg})`,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-              }}>
+              <button key={i}
+                onClick={() => drillTo({ date: dateIso })}
+                title={`${dateIso} · ${fmtMoney(v, t.currency, false)}`}
+                style={{
+                  all: 'unset', cursor: 'pointer',
+                  aspectRatio: '1',
+                  background: v === 0 ? A.rule2 : `color-mix(in oklch, ${t.accent} ${Math.max(15, intensity * 100)}%, ${A.bg})`,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>
                 <span style={{ fontSize: 9, color: intensity > 0.5 ? A.bg : A.ink, fontVariantNumeric: 'tabular-nums' }}>{i + 1}</span>
-              </div>
+              </button>
             );
           })}
         </div>
@@ -310,13 +339,19 @@ export function ReportsCalendar({ t, onBack }) {
         {weekdayLabels.map((day, i) => {
           const v = weekdayTotals[i];
           return (
-            <div key={day} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 0', borderBottom: '1px solid ' + A.rule2 }}>
+            <button key={day}
+              onClick={() => drillTo({ weekday: i, type: 'expense' })}
+              style={{
+                all: 'unset', cursor: 'pointer', display: 'flex', width: '100%',
+                boxSizing: 'border-box', alignItems: 'center', gap: 12,
+                padding: '8px 0', borderBottom: '1px solid ' + A.rule2,
+              }}>
               <div style={{ fontSize: 10, letterSpacing: 1.4, width: 30 }}>{day}</div>
               <div style={{ flex: 1, height: 4, background: A.rule2 }}>
                 <div style={{ width: (v / maxWeekday * 100) + '%', height: '100%', background: t.accent }} />
               </div>
               <div style={{ fontSize: 11, fontVariantNumeric: 'tabular-nums', width: 80, textAlign: 'right' }}>{fmtMoney(v, t.currency, t.decimals)}</div>
-            </div>
+            </button>
           );
         })}
       </div>

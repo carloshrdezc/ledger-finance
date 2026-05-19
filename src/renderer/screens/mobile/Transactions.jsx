@@ -7,12 +7,34 @@ import { useStore } from '../../store';
 import AddSheet from './AddSheet';
 
 export default function Transactions({ t }) {
-  const { periodTransactions, deleteTx, deleteTransfer, accountsWithBalance, periodLabel } = useStore();
+  const { transactions, periodTransactions, deleteTx, deleteTransfer, accountsWithBalance, periodLabel, txFilter, clearTxFilter } = useStore();
   const [filter, setFilter] = React.useState('ALL');
   const [search, setSearch] = React.useState('');
   const [editTx, setEditTx] = React.useState(null);
 
-  const visible = periodTransactions.filter(x => {
+  const matchesTxFilter = React.useCallback((tx) => {
+    if (!txFilter) return true;
+    if (txFilter.category && tx.cat !== txFilter.category && (tx.path || [])[0] !== txFilter.category) return false;
+    if (txFilter.merchant) {
+      const key = (tx.name || '').split(' · ')[0];
+      if (key !== txFilter.merchant) return false;
+    }
+    if (txFilter.date && tx.date !== txFilter.date) return false;
+    if (txFilter.weekday != null) {
+      const d = new Date(`${tx.date}T00:00:00`);
+      const dow = (d.getDay() + 6) % 7;
+      if (dow !== txFilter.weekday) return false;
+    }
+    if (txFilter.type === 'expense' && tx.amt >= 0) return false;
+    if (txFilter.type === 'income' && tx.amt < 0) return false;
+    if (txFilter.account && tx.acct !== txFilter.account) return false;
+    return true;
+  }, [txFilter]);
+
+  const sourceTxs = txFilter && txFilter.date ? transactions : periodTransactions;
+
+  const visible = sourceTxs.filter(x => {
+    if (!matchesTxFilter(x)) return false;
     if (filter !== 'ALL') {
       if (filter === 'EXP' && x.amt >= 0) return false;
       if (filter === 'INC' && x.amt < 0) return false;
@@ -24,6 +46,17 @@ export default function Transactions({ t }) {
     }
     return true;
   });
+
+  const filterChipLabel = React.useMemo(() => {
+    if (!txFilter) return null;
+    const parts = [];
+    if (txFilter.category) parts.push(txFilter.category.toUpperCase());
+    if (txFilter.merchant) parts.push(txFilter.merchant);
+    if (txFilter.date) parts.push(txFilter.date);
+    if (txFilter.weekday != null) parts.push(['MON','TUE','WED','THU','FRI','SAT','SUN'][txFilter.weekday]);
+    if (txFilter.type) parts.push(txFilter.type.toUpperCase());
+    return parts.join(' · ');
+  }, [txFilter]);
 
   const byDate = {};
   visible.forEach(tx => { (byDate[tx.date] = byDate[tx.date] || []).push(tx); });
@@ -65,6 +98,13 @@ export default function Transactions({ t }) {
             fontSize: 10, letterSpacing: 1.2, flexShrink: 0,
           }}>{f}</button>
         ))}
+        {filterChipLabel && (
+          <button onClick={clearTxFilter} style={{
+            all: 'unset', cursor: 'pointer', padding: '4px 9px',
+            border: '1px solid ' + t.accent, background: t.accent, color: A.bg,
+            fontSize: 10, letterSpacing: 1.2, flexShrink: 0,
+          }}>{filterChipLabel} · ✕</button>
+        )}
       </div>
 
       {dates.map(date => (

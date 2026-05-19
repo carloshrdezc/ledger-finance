@@ -22,7 +22,7 @@ function spendTotal(transactions) {
 }
 
 export default function WebReports({ t, onNavigate, onAdd }) {
-  const { transactions, periodTransactions, categoryTree, selectedPeriod, periodLabel, accounts } = useStore();
+  const { transactions, periodTransactions, categoryTree, selectedPeriod, periodLabel, accounts, setTxFilter } = useStore();
   const total = spendTotal(periodTransactions);
   const previousPeriod = addMonths(selectedPeriod, -1);
   const previousTotal = spendTotal(filterTransactionsForPeriod(transactions, previousPeriod));
@@ -30,6 +30,11 @@ export default function WebReports({ t, onNavigate, onAdd }) {
   const incomeExpense = buildIncomeExpenseSeries(transactions, trendPeriods);
   const netWorthTrend = buildNetWorthTrend(accounts, transactions, trendPeriods);
   const categoryTrend = buildCategoryTrend(transactions, trendPeriods, 5);
+
+  const drillTo = React.useCallback((filter) => {
+    setTxFilter(filter || null);
+    onNavigate('tx');
+  }, [setTxFilter, onNavigate]);
 
   const byCat = {};
   periodTransactions.filter(x => x.amt < 0).forEach(x => {
@@ -96,7 +101,13 @@ export default function WebReports({ t, onNavigate, onAdd }) {
             {cats.map(([k, v]) => {
               const c = categoryTree[k] || { label: k, glyph: '·' };
               return (
-                <div key={k} style={{ padding: '11px 0', borderBottom: '1px solid ' + A.rule2 }}>
+                <button key={k}
+                  onClick={() => drillTo({ category: k, type: 'expense' })}
+                  title={`Show ${c.label} transactions`}
+                  style={{
+                    all: 'unset', display: 'block', width: '100%', boxSizing: 'border-box',
+                    cursor: 'pointer', padding: '11px 0', borderBottom: '1px solid ' + A.rule2,
+                  }}>
                   <div style={{ display: 'grid', gridTemplateColumns: '20px 1fr 80px 60px', alignItems: 'center', gap: 8 }}>
                     <div style={{ color: t.accent }}>{c.glyph}</div>
                     <div style={{ fontSize: 12 }}>{c.label}</div>
@@ -106,7 +117,7 @@ export default function WebReports({ t, onNavigate, onAdd }) {
                   <div style={{ marginTop: 6, marginLeft: 28, height: 4, background: A.rule2 }}>
                     <div style={{ width: (v / maxCat * 100) + '%', height: '100%', background: t.accent }} />
                   </div>
-                </div>
+                </button>
               );
             })}
           </div>
@@ -129,10 +140,20 @@ export default function WebReports({ t, onNavigate, onAdd }) {
               ))}
               {cells.map((v, i) => {
                 const intensity = v / cellMax;
+                const day = String(i + 1).padStart(2, '0');
+                const dateIso = `${selectedPeriod}-${day}`;
                 return (
-                  <div key={i} style={{ aspectRatio: '1.2', background: v === 0 ? A.rule2 : `color-mix(in oklch, ${t.accent} ${Math.max(15, intensity * 100)}%, ${A.bg})`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <button key={i}
+                    onClick={() => drillTo({ date: dateIso })}
+                    title={`${dateIso} · ${fmtMoney(v, t.currency, false)}`}
+                    style={{
+                      all: 'unset', cursor: 'pointer',
+                      aspectRatio: '1.2',
+                      background: v === 0 ? A.rule2 : `color-mix(in oklch, ${t.accent} ${Math.max(15, intensity * 100)}%, ${A.bg})`,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    }}>
                     <span style={{ fontSize: 10, color: intensity > 0.5 ? A.bg : A.ink2, fontVariantNumeric: 'tabular-nums' }}>{i + 1}</span>
-                  </div>
+                  </button>
                 );
               })}
             </div>
@@ -157,12 +178,20 @@ export default function WebReports({ t, onNavigate, onAdd }) {
             <div>MERCHANT</div><div>VISITS</div><div>AVG</div><div style={{ textAlign: 'right' }}>TOTAL</div>
           </div>
           {merchants.map((m, i) => (
-            <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 80px 80px 120px', padding: t.density === 'compact' ? '7px 0' : '10px 0', fontSize: 11, borderBottom: '1px solid ' + A.rule2 }}>
+            <button key={i}
+              onClick={() => drillTo({ merchant: m.name })}
+              title={`Show transactions for ${m.name}`}
+              style={{
+                all: 'unset', display: 'grid', width: '100%', boxSizing: 'border-box',
+                gridTemplateColumns: '1fr 80px 80px 120px',
+                padding: t.density === 'compact' ? '7px 0' : '10px 0',
+                fontSize: 11, borderBottom: '1px solid ' + A.rule2, cursor: 'pointer',
+              }}>
               <div>{m.name}</div>
               <div style={{ color: A.muted }}>{m.n}x</div>
               <div style={{ fontVariantNumeric: 'tabular-nums', color: A.muted }}>{fmtMoney(m.amt / m.n, t.currency, false)}</div>
               <div style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{fmtMoney(m.amt, t.currency, t.decimals)}</div>
-            </div>
+            </button>
           ))}
         </div>
       </div>

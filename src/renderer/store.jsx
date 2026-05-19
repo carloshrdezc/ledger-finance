@@ -369,6 +369,18 @@ export function StoreProvider({ children }) {
     setBudgets(prev => prev.filter(b => b.cat !== cat));
   }, [setBudgets]);
 
+  // Transient filter applied on top of the current period in the Transactions
+  // screens. Set by Reports drill-down clicks; cleared when the user closes
+  // the filter chip or navigates away. Persisted to localStorage so a refresh
+  // mid-drill-down doesn't lose state, but cleared on reset.
+  const [txFilter, setTxFilterRaw] = useLS('ledger:txFilter', null);
+
+  const setTxFilter = React.useCallback(filter => {
+    setTxFilterRaw(filter && Object.keys(filter).length > 0 ? filter : null);
+  }, [setTxFilterRaw]);
+
+  const clearTxFilter = React.useCallback(() => setTxFilterRaw(null), [setTxFilterRaw]);
+
   const goToPreviousPeriod = React.useCallback(() => {
     setSelectedPeriod(period => addMonths(period, -1));
   }, [setSelectedPeriod]);
@@ -421,7 +433,8 @@ export function StoreProvider({ children }) {
     setInvestments([]);
     setTrades([]);
     setDismissedAlertIds([]);
-  }, [setTxs, setCatTree, setBudgets, setAccounts, setBills, setGoals, setGoalContributions, setSelectedPeriod, setHidden, setBudgetStartDay, setInvestments, setTrades, setDismissedAlertIds]);
+    setTxFilterRaw(null);
+  }, [setTxs, setCatTree, setBudgets, setAccounts, setBills, setGoals, setGoalContributions, setSelectedPeriod, setHidden, setBudgetStartDay, setInvestments, setTrades, setDismissedAlertIds, setTxFilterRaw]);
 
   return (
     <StoreCtx.Provider value={{
@@ -469,6 +482,9 @@ export function StoreProvider({ children }) {
       deleteGoal,
       selectedPeriod,
       setSelectedPeriod,
+      txFilter,
+      setTxFilter,
+      clearTxFilter,
       periodLabel,
       goToPreviousPeriod,
       goToNextPeriod,
