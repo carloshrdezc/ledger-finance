@@ -5,6 +5,7 @@ import PeriodSwitcher from '../../components/PeriodSwitcher';
 import { fmtMoney, fmtSigned, fmtPct, dayLabel, catBreadcrumb } from '../../data';
 import { useStore } from '../../store';
 import ImportExport from '../../components/ImportExport';
+import { exportReportCSV } from '../../importExport';
 import RecurringFormSheet from '../../components/RecurringFormSheet';
 import GoalFormSheet from '../../components/GoalFormSheet';
 import RangeSelector from '../../components/RangeSelector';
@@ -31,6 +32,21 @@ export function Reports({ t, onBack, onGoToRoute }) {
   const rangeTxs = React.useMemo(() => useRange ? filterTransactionsForRange(transactions, resolved?.start, resolved?.end) : null, [useRange, transactions, resolved?.start, resolved?.end]);
   const reportTxs = useRange ? rangeTxs : periodTransactions;
   const heroLabel = useRange ? (resolved?.label || 'CUSTOM') : periodLabel;
+
+  const handleExport = () => {
+    const csv = exportReportCSV({
+      rangeLabel: heroLabel,
+      transactions: reportTxs,
+      byCategory: cats,
+      topMerchants: topMerchants,
+    });
+    const stamp = new Date().toISOString().slice(0, 10);
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+    a.download = `ledger-report-${stamp}.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
   const previousPeriod = addMonths(selectedPeriod, -1);
   const previousPeriodTxs = filterTransactionsForPeriod(transactions, previousPeriod);
   const previousTotal = previousPeriodTxs.filter(x => x.amt < 0)
@@ -421,9 +437,12 @@ export function CCDetail({ t, acct, onBack }) {
 
   return (
     <div style={{ padding: '0 18px 20px' }}>
-      <div style={{ padding: '10px 0 6px', display: 'flex', justifyContent: 'space-between' }}>
+      <div style={{ padding: '10px 0 6px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <button onClick={onBack} style={{ all: 'unset', cursor: 'pointer', fontSize: 10, letterSpacing: 1.2 }}>◂ BACK</button>
-        <div style={{ fontSize: 10, letterSpacing: 1.2, color: A.muted }}>{a.name || 'CC'}{a.code ? ' · ' + a.code : ''}</div>
+        <div style={{ display: 'flex', gap: 14, alignItems: 'baseline' }}>
+          <button onClick={handleExport} style={{ all: 'unset', cursor: 'pointer', fontSize: 10, letterSpacing: 1.2, color: t.accent }}>EXPORT</button>
+          <div style={{ fontSize: 10, letterSpacing: 1.2, color: A.muted }}>{heroLabel}</div>
+        </div>
       </div>
       <ARule thick />
       <div style={{ padding: '16px 0 8px' }}>

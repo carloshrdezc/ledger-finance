@@ -13,6 +13,7 @@ import {
   buildNetWorthTrend,
   getRecentPeriods,
 } from '../../charts.mjs';
+import { exportReportCSV } from '../../importExport';
 
 function spendAmount(tx) {
   return Math.abs(tx.ccy === 'USD' ? tx.amt : tx.amt * 1.08);
@@ -20,6 +21,14 @@ function spendAmount(tx) {
 
 function spendTotal(transactions) {
   return transactions.filter(x => x.amt < 0).reduce((s, x) => s + spendAmount(x), 0);
+}
+
+function downloadFile(name, content, mime = 'text/csv') {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([content], { type: mime }));
+  a.download = name;
+  a.click();
+  URL.revokeObjectURL(a.href);
 }
 
 export default function WebReports({ t, onNavigate, onAdd }) {
@@ -51,6 +60,17 @@ export default function WebReports({ t, onNavigate, onAdd }) {
     setTxFilter(filter || null);
     onNavigate('tx');
   }, [setTxFilter, onNavigate]);
+
+  const handleExport = React.useCallback(() => {
+    const csv = exportReportCSV({
+      rangeLabel: heroLabel,
+      transactions: reportTxs,
+      byCategory: cats,
+      topMerchants: merchants,
+    });
+    const stamp = new Date().toISOString().slice(0, 10);
+    downloadFile(`ledger-report-${stamp}.csv`, csv);
+  }, [heroLabel, reportTxs, cats, merchants]);
 
   const byCat = {};
   reportTxs.filter(x => x.amt < 0).forEach(x => {
@@ -99,6 +119,16 @@ export default function WebReports({ t, onNavigate, onAdd }) {
           </div>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'flex-end' }}>
+          <div style={{ display: 'flex', gap: 6 }} data-print-hide>
+            <button onClick={handleExport} style={{
+              all: 'unset', cursor: 'pointer', fontSize: 10, letterSpacing: 1.2,
+              padding: '5px 12px', border: '1px solid ' + A.ink, color: A.ink,
+            }}>EXPORT · CSV</button>
+            <button onClick={() => window.print()} style={{
+              all: 'unset', cursor: 'pointer', fontSize: 10, letterSpacing: 1.2,
+              padding: '5px 12px', border: '1px solid ' + A.rule2, color: A.muted,
+            }}>PRINT</button>
+          </div>
           <RangeSelector range={range} onChange={setRange} t={t} />
           {isMonthRange && range.preset === 'thisMonth' && <PeriodSwitcher />}
         </div>
