@@ -226,7 +226,7 @@ export function CCDetail({ t, acct, onBack }) {
     <div style={{ padding: '0 18px 20px' }}>
       <div style={{ padding: '10px 0 6px', display: 'flex', justifyContent: 'space-between' }}>
         <button onClick={onBack} style={{ all: 'unset', cursor: 'pointer', fontSize: 10, letterSpacing: 1.2 }}>◂ BACK</button>
-        <div style={{ fontSize: 10, letterSpacing: 1.2, color: A.muted }}>{a.name || 'CC'} · {a.code || ''}</div>
+        <div style={{ fontSize: 10, letterSpacing: 1.2, color: A.muted }}>{a.name || 'CC'}{a.code ? ' · ' + a.code : ''}</div>
       </div>
       <ARule thick />
       <div style={{ padding: '16px 0 8px' }}>
