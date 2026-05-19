@@ -6,9 +6,21 @@ import { useStore } from '../../store';
 import { getDaysInPeriod } from '../../period.mjs';
 
 export default function AddSheet({ t, onClose, editTx = null }) {
-  const { addTransactions, updateTx, deleteTx, deleteTransfer, createTransfer, accountsWithBalance, selectedPeriod } = useStore();
+  const { addTransactions, updateTx, deleteTx, deleteTransfer, createTransfer, updateTransfer, transactions, accountsWithBalance, selectedPeriod } = useStore();
   const defaultDay = Math.min(new Date().getDate(), getDaysInPeriod(selectedPeriod));
   const defaultDate = `${selectedPeriod}-${String(defaultDay).padStart(2, '0')}`;
+
+  // For an editTx that's a transfer leg, find both legs and pick the
+  // negative ("out"/from) and positive ("in"/to) accounts and amounts.
+  const transferLegs = React.useMemo(() => {
+    if (!editTx?.transferId) return null;
+    const legs = transactions.filter(tx => tx.transferId === editTx.transferId);
+    if (legs.length !== 2) return null;
+    const out = legs.find(l => l.amt < 0);
+    const inLeg = legs.find(l => l.amt > 0);
+    if (!out || !inLeg) return null;
+    return { out, in: inLeg };
+  }, [editTx, transactions]);
 
   const [amt, setAmt]           = React.useState(editTx ? String(Math.abs(editTx.amt)) : '');
   const [merchant, setMerchant] = React.useState(editTx ? editTx.name : '');
@@ -18,14 +30,15 @@ export default function AddSheet({ t, onClose, editTx = null }) {
   const [date, setDate]         = React.useState(editTx ? editTx.date : defaultDate);
 
   const [isTransfer, setIsTransfer] = React.useState(editTx?.cat === 'transfer');
-  const [fromAcct, setFromAcct]     = React.useState(editTx?.acct || accountsWithBalance[0]?.id || 'chk');
+  const [fromAcct, setFromAcct]     = React.useState(transferLegs?.out.acct || editTx?.acct || accountsWithBalance[0]?.id || 'chk');
   const [toAcct, setToAcct]         = React.useState(() => {
+    if (transferLegs) return transferLegs.in.acct;
     const others = accountsWithBalance.filter(a => a.id !== (editTx?.acct || accountsWithBalance[0]?.id));
     return others[0]?.id || '';
   });
-  const [amtFrom, setAmtFrom]       = React.useState('');
-  const [amtTo, setAmtTo]           = React.useState('');
-  const [transferNote, setTransferNote] = React.useState('');
+  const [amtFrom, setAmtFrom]       = React.useState(transferLegs ? String(Math.abs(transferLegs.out.amt)) : '');
+  const [amtTo, setAmtTo]           = React.useState(transferLegs ? String(Math.abs(transferLegs.in.amt)) : '');
+  const [transferNote, setTransferNote] = React.useState(transferLegs?.out.note || '');
 
   const fromAcctObj = accountsWithBalance.find(a => a.id === fromAcct);
   const toAcctObj   = accountsWithBalance.find(a => a.id === toAcct);
@@ -41,13 +54,23 @@ export default function AddSheet({ t, onClose, editTx = null }) {
   const handleSave = () => {
     if (!canSave) return;
     if (isTransfer) {
-      createTransfer({
-        fromAcct, toAcct,
-        amtFrom: parseFloat(amtFrom),
-        amtTo: parseFloat(isCrossCcy ? amtTo : amtFrom),
-        date,
-        note: transferNote.trim() || undefined,
-      });
+      if (editTx?.transferId) {
+        updateTransfer(editTx.transferId, {
+          fromAcct, toAcct,
+          amtFrom: parseFloat(amtFrom),
+          amtTo: parseFloat(isCrossCcy ? amtTo : amtFrom),
+          date,
+          note: transferNote.trim() || undefined,
+        });
+      } else {
+        createTransfer({
+          fromAcct, toAcct,
+          amtFrom: parseFloat(amtFrom),
+          amtTo: parseFloat(isCrossCcy ? amtTo : amtFrom),
+          date,
+          note: transferNote.trim() || undefined,
+        });
+      }
     } else {
       const changes = {
         name: merchant.trim(),
@@ -86,7 +109,7 @@ export default function AddSheet({ t, onClose, editTx = null }) {
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ fontSize: 12, letterSpacing: 2, fontWeight: 700 }}>
-            {editTx ? (editTx.cat === 'transfer' ? 'VIEW · TRANSFER' : 'EDIT · TRANSACTION') : 'NEW · TRANSACTION'}
+            {editTx ? (editTx.cat === 'transfer' ? 'EDIT · TRANSFER' : 'EDIT · TRANSACTION') : 'NEW · TRANSACTION'}
           </div>
           <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
             {editTx && (
@@ -119,7 +142,7 @@ export default function AddSheet({ t, onClose, editTx = null }) {
           </div>
         )}
 
-        {isTransfer && !editTx && (
+        {isTransfer && (
           <div style={{ marginTop: 12 }}>
             <div style={{ marginBottom: 14 }}>
               <ALabel>FROM</ALabel>
@@ -171,33 +194,6 @@ export default function AddSheet({ t, onClose, editTx = null }) {
               <input value={transferNote} onChange={e => setTransferNote(e.target.value)}
                 placeholder="e.g. RENT SAVINGS"
                 style={{ all: 'unset', display: 'block', width: '100%', marginTop: 6, fontFamily: A.font, fontSize: 13, letterSpacing: 0.6, borderBottom: '1px solid ' + A.rule2, padding: '6px 0', color: A.ink, boxSizing: 'border-box' }} />
-            </div>
-          </div>
-        )}
-
-        {isTransfer && editTx && (
-          <div style={{ marginTop: 16 }}>
-            <div style={{ fontSize: 12, color: A.muted, letterSpacing: 1, marginBottom: 12 }}>TRANSFER DETAIL</div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid ' + A.rule2 }}>
-              <span style={{ fontSize: 10, color: A.muted, letterSpacing: 1 }}>NAME</span>
-              <span style={{ fontSize: 12 }}>{editTx.name}</span>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid ' + A.rule2 }}>
-              <span style={{ fontSize: 10, color: A.muted, letterSpacing: 1 }}>DATE</span>
-              <span style={{ fontSize: 12 }}>{editTx.date}</span>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid ' + A.rule2 }}>
-              <span style={{ fontSize: 10, color: A.muted, letterSpacing: 1 }}>AMOUNT</span>
-              <span style={{ fontSize: 12, fontVariantNumeric: 'tabular-nums' }}>{Math.abs(editTx.amt).toFixed(2)} {editTx.ccy}</span>
-            </div>
-            {editTx.note && (
-              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid ' + A.rule2 }}>
-                <span style={{ fontSize: 10, color: A.muted, letterSpacing: 1 }}>NOTE</span>
-                <span style={{ fontSize: 12 }}>{editTx.note}</span>
-              </div>
-            )}
-            <div style={{ fontSize: 10, color: A.muted, letterSpacing: 0.8, marginTop: 12, lineHeight: 1.5 }}>
-              Editing transfers is not supported. Delete both legs and re-enter to correct.
             </div>
           </div>
         )}
@@ -278,15 +274,13 @@ export default function AddSheet({ t, onClose, editTx = null }) {
         </div>
         </>)}
 
-        {!(isTransfer && editTx) && (
-          <button onClick={handleSave} style={{
-            all: 'unset', cursor: canSave ? 'pointer' : 'default', display: 'block',
-            textAlign: 'center', width: '100%', padding: '14px', marginTop: 6,
-            background: canSave ? t.accent : A.rule2,
-            color: A.bg, fontSize: 12, letterSpacing: 2, fontWeight: 700,
-            boxSizing: 'border-box',
-          }}>SAVE ↵</button>
-        )}
+        <button onClick={handleSave} style={{
+          all: 'unset', cursor: canSave ? 'pointer' : 'default', display: 'block',
+          textAlign: 'center', width: '100%', padding: '14px', marginTop: 6,
+          background: canSave ? t.accent : A.rule2,
+          color: A.bg, fontSize: 12, letterSpacing: 2, fontWeight: 700,
+          boxSizing: 'border-box',
+        }}>SAVE ↵</button>
       </div>
     </div>
   );

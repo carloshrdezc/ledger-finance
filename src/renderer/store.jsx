@@ -165,6 +165,44 @@ export function StoreProvider({ children }) {
     setTxs(prev => prev.filter(tx => tx.transferId !== transferId));
   }, [setTxs]);
 
+  const updateTransfer = React.useCallback((transferId, { fromAcct, toAcct, amtFrom, amtTo, date, note }) => {
+    setTxs(prev => {
+      const legs = prev.filter(tx => tx.transferId === transferId);
+      if (legs.length !== 2) return prev;
+      const fromLegId = legs.find(l => l.amt < 0)?.id;
+      const toLegId   = legs.find(l => l.amt > 0)?.id;
+      const fromAcctObj = accounts.find(a => a.id === fromAcct);
+      const toAcctObj   = accounts.find(a => a.id === toAcct);
+      const outName = note || ('TRANSFER → ' + (toAcctObj?.name   || toAcct));
+      const inName  = note || ('TRANSFER ← ' + (fromAcctObj?.name || fromAcct));
+      return prev.map(tx => {
+        if (tx.id === fromLegId) {
+          return {
+            ...tx,
+            name: outName,
+            amt: -Math.abs(amtFrom),
+            date,
+            acct: fromAcct,
+            ccy: fromAcctObj?.ccy || tx.ccy,
+            ...(note ? { note } : {}),
+          };
+        }
+        if (tx.id === toLegId) {
+          return {
+            ...tx,
+            name: inName,
+            amt: Math.abs(amtTo),
+            date,
+            acct: toAcct,
+            ccy: toAcctObj?.ccy || tx.ccy,
+            ...(note ? { note } : {}),
+          };
+        }
+        return tx;
+      });
+    });
+  }, [accounts, setTxs]);
+
   const updateTx = React.useCallback((id, changes) => setTxs(prev =>
     prev.map(tx => tx.id === id ? { ...tx, ...changes } : tx)
   ), [setTxs]);
@@ -312,6 +350,7 @@ export function StoreProvider({ children }) {
       hideTx,
       deleteTx,
       createTransfer,
+      updateTransfer,
       deleteTransfer,
       updateTx,
       categoryTree: catTree,

@@ -6,9 +6,19 @@ import { useStore } from '../../store';
 import { getDaysInPeriod } from '../../period.mjs';
 
 export default function WebAddModal({ t, onClose, editTx = null }) {
-  const { addTransactions, updateTx, deleteTx, deleteTransfer, createTransfer, accountsWithBalance, selectedPeriod } = useStore();
+  const { addTransactions, updateTx, deleteTx, deleteTransfer, createTransfer, updateTransfer, transactions, accountsWithBalance, selectedPeriod } = useStore();
   const defaultDay = Math.min(new Date().getDate(), getDaysInPeriod(selectedPeriod));
   const defaultDate = `${selectedPeriod}-${String(defaultDay).padStart(2, '0')}`;
+
+  const transferLegs = React.useMemo(() => {
+    if (!editTx?.transferId) return null;
+    const legs = transactions.filter(tx => tx.transferId === editTx.transferId);
+    if (legs.length !== 2) return null;
+    const out = legs.find(l => l.amt < 0);
+    const inLeg = legs.find(l => l.amt > 0);
+    if (!out || !inLeg) return null;
+    return { out, in: inLeg };
+  }, [editTx, transactions]);
 
   const [amt, setAmt]           = React.useState(editTx ? String(Math.abs(editTx.amt)) : '');
   const [merchant, setMerchant] = React.useState(editTx ? editTx.name : '');
@@ -19,14 +29,15 @@ export default function WebAddModal({ t, onClose, editTx = null }) {
 
   // Transfer state
   const [isTransfer, setIsTransfer] = React.useState(editTx?.cat === 'transfer');
-  const [fromAcct, setFromAcct]     = React.useState(editTx?.acct || accountsWithBalance[0]?.id || 'chk');
+  const [fromAcct, setFromAcct]     = React.useState(transferLegs?.out.acct || editTx?.acct || accountsWithBalance[0]?.id || 'chk');
   const [toAcct, setToAcct]         = React.useState(() => {
+    if (transferLegs) return transferLegs.in.acct;
     const others = accountsWithBalance.filter(a => a.id !== (editTx?.acct || accountsWithBalance[0]?.id));
     return others[0]?.id || '';
   });
-  const [amtFrom, setAmtFrom]       = React.useState('');
-  const [amtTo, setAmtTo]           = React.useState('');
-  const [transferNote, setTransferNote] = React.useState('');
+  const [amtFrom, setAmtFrom]       = React.useState(transferLegs ? String(Math.abs(transferLegs.out.amt)) : '');
+  const [amtTo, setAmtTo]           = React.useState(transferLegs ? String(Math.abs(transferLegs.in.amt)) : '');
+  const [transferNote, setTransferNote] = React.useState(transferLegs?.out.note || '');
 
   const fromAcctObj = accountsWithBalance.find(a => a.id === fromAcct);
   const toAcctObj   = accountsWithBalance.find(a => a.id === toAcct);
@@ -42,13 +53,23 @@ export default function WebAddModal({ t, onClose, editTx = null }) {
   const handleSave = () => {
     if (!canSave) return;
     if (isTransfer) {
-      createTransfer({
-        fromAcct, toAcct,
-        amtFrom: parseFloat(amtFrom),
-        amtTo: parseFloat(isCrossCcy ? amtTo : amtFrom),
-        date,
-        note: transferNote.trim() || undefined,
-      });
+      if (editTx?.transferId) {
+        updateTransfer(editTx.transferId, {
+          fromAcct, toAcct,
+          amtFrom: parseFloat(amtFrom),
+          amtTo: parseFloat(isCrossCcy ? amtTo : amtFrom),
+          date,
+          note: transferNote.trim() || undefined,
+        });
+      } else {
+        createTransfer({
+          fromAcct, toAcct,
+          amtFrom: parseFloat(amtFrom),
+          amtTo: parseFloat(isCrossCcy ? amtTo : amtFrom),
+          date,
+          note: transferNote.trim() || undefined,
+        });
+      }
     } else {
       const changes = {
         name: merchant.trim(),
@@ -90,7 +111,7 @@ export default function WebAddModal({ t, onClose, editTx = null }) {
         width: 480, padding: 32, fontFamily: A.font,
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 20 }}>
-          <ALabel>{editTx ? (editTx.cat === 'transfer' ? 'VIEW · TRANSFER' : 'EDIT · TRANSACTION') : 'NEW · TRANSACTION'}</ALabel>
+          <ALabel>{editTx ? (editTx.cat === 'transfer' ? 'EDIT · TRANSFER' : 'EDIT · TRANSACTION') : 'NEW · TRANSACTION'}</ALabel>
           <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
             {editTx && (
               <button onClick={handleDelete} style={{ all: 'unset', cursor: 'pointer', fontSize: 10, letterSpacing: 1.2, color: A.neg }}>
@@ -201,7 +222,7 @@ export default function WebAddModal({ t, onClose, editTx = null }) {
           </>
         )}
 
-        {isTransfer && !editTx && (
+        {isTransfer && (
           <div>
             <div style={{ marginBottom: 16 }}>
               <ALabel>FROM ACCOUNT</ALabel>
@@ -258,36 +279,13 @@ export default function WebAddModal({ t, onClose, editTx = null }) {
           </div>
         )}
 
-        {isTransfer && editTx && (
-          <div style={{ marginBottom: 20 }}>
-            <div style={{ fontSize: 11, color: A.muted, letterSpacing: 1, marginBottom: 12 }}>TRANSFER DETAIL · READ ONLY</div>
-            {[['NAME', editTx.name], ['DATE', editTx.date], ['AMOUNT', Math.abs(editTx.amt).toFixed(2) + ' ' + editTx.ccy]].map(([k, v]) => (
-              <div key={k} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid ' + A.rule2 }}>
-                <span style={{ fontSize: 10, color: A.muted, letterSpacing: 1 }}>{k}</span>
-                <span style={{ fontSize: 12 }}>{v}</span>
-              </div>
-            ))}
-            {editTx.note && (
-              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid ' + A.rule2 }}>
-                <span style={{ fontSize: 10, color: A.muted, letterSpacing: 1 }}>NOTE</span>
-                <span style={{ fontSize: 12 }}>{editTx.note}</span>
-              </div>
-            )}
-            <div style={{ fontSize: 10, color: A.muted, letterSpacing: 0.8, marginTop: 12, lineHeight: 1.5 }}>
-              Editing transfers is not supported. Delete both legs and re-enter to correct.
-            </div>
-          </div>
-        )}
-
-        {!(isTransfer && editTx) && (
-          <button onClick={handleSave} style={{
-            all: 'unset', cursor: canSave ? 'pointer' : 'default', display: 'block',
-            textAlign: 'center', width: '100%', padding: '14px',
-            background: canSave ? t.accent : A.rule2,
-            color: A.bg, fontSize: 12, letterSpacing: 2, fontWeight: 700,
-            boxSizing: 'border-box',
-          }}>SAVE ↵</button>
-        )}
+        <button onClick={handleSave} style={{
+          all: 'unset', cursor: canSave ? 'pointer' : 'default', display: 'block',
+          textAlign: 'center', width: '100%', padding: '14px',
+          background: canSave ? t.accent : A.rule2,
+          color: A.bg, fontSize: 12, letterSpacing: 2, fontWeight: 700,
+          boxSizing: 'border-box',
+        }}>SAVE ↵</button>
       </div>
     </div>
   );
