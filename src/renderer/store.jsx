@@ -225,6 +225,47 @@ export function StoreProvider({ children }) {
     });
   }, [setCatTree]);
 
+  // Walk a path of keys into the tree and apply a mutator function to the
+  // leaf parent (so it can rename/remove the leaf key). pathParts[0] is a
+  // top-level key; subsequent parts are children keys.
+  const renameCategory = React.useCallback((pathParts, newLabel) => {
+    if (!pathParts || pathParts.length === 0) return;
+    const trimmed = (newLabel || '').trim();
+    if (!trimmed) return;
+    setCatTree(prev => {
+      const tree = JSON.parse(JSON.stringify(prev));
+      let parent = tree;
+      for (let i = 0; i < pathParts.length - 1; i++) {
+        const next = i === 0 ? parent[pathParts[i]] : (parent.children || {})[pathParts[i]];
+        if (!next) return prev;
+        parent = next;
+      }
+      const leafKey = pathParts[pathParts.length - 1];
+      const container = pathParts.length === 1 ? parent : (parent.children || {});
+      if (!container[leafKey]) return prev;
+      container[leafKey] = { ...container[leafKey], label: trimmed };
+      return tree;
+    });
+  }, [setCatTree]);
+
+  const removeCategory = React.useCallback(pathParts => {
+    if (!pathParts || pathParts.length === 0) return;
+    setCatTree(prev => {
+      const tree = JSON.parse(JSON.stringify(prev));
+      let parent = tree;
+      for (let i = 0; i < pathParts.length - 1; i++) {
+        const next = i === 0 ? parent[pathParts[i]] : (parent.children || {})[pathParts[i]];
+        if (!next) return prev;
+        parent = next;
+      }
+      const leafKey = pathParts[pathParts.length - 1];
+      const container = pathParts.length === 1 ? parent : (parent.children || {});
+      if (!container[leafKey]) return prev;
+      delete container[leafKey];
+      return tree;
+    });
+  }, [setCatTree]);
+
   const addAccount = React.useCallback(acct => setAccounts(prev => {
     if (prev.some(a => a.id === acct.id)) return prev;
     return [...prev, { archived: false, includeInTotals: true, order: prev.filter(a => !a.archived).length, ...acct }];
@@ -398,6 +439,8 @@ export function StoreProvider({ children }) {
       categoryTree: catTree,
       setCategoryTree: setCatTree,
       addCategory,
+      renameCategory,
+      removeCategory,
       budgets,
       setBudgets,
       addBudget,

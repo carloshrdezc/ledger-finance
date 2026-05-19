@@ -921,18 +921,36 @@ export function Settings({ t, onBack, onNavigate, setAccent, setDensity, setDeci
 
 // ── Categories Editor ─────────────────────────────────────────────────────────
 export function CategoriesEditor({ t, onBack }) {
-  const { categoryTree, addCategory } = useStore();
+  const { categoryTree, addCategory, renameCategory, removeCategory } = useStore();
   const [expanded, setExpanded] = React.useState({ edu: true, 'edu.school': true, 'edu.school.supplies': true });
   const [adding, setAdding] = React.useState(null);
+  const [renaming, setRenaming] = React.useState(null); // path id "a.b.c"
+  const [renameVal, setRenameVal] = React.useState('');
+  const [confirmDelete, setConfirmDelete] = React.useState(null); // path id
   const [newName, setNewName] = React.useState('');
 
   const toggle = k => setExpanded(e => ({ ...e, [k]: !e[k] }));
+
+  const startRename = (id, currentLabel) => {
+    setRenaming(id);
+    setRenameVal(currentLabel || '');
+  };
+
+  const commitRename = (path) => {
+    const id = path.join('.');
+    if (renaming !== id) return;
+    renameCategory(path, renameVal.trim().toUpperCase());
+    setRenaming(null);
+    setRenameVal('');
+  };
 
   const renderNode = (key, node, path, depth) => {
     const id = path.join('.');
     const children = node.children || {};
     const hasKids = Object.keys(children).length > 0;
     const isOpen = expanded[id];
+    const isRenaming = renaming === id;
+    const isConfirming = confirmDelete === id;
     return (
       <div key={id}>
         <div style={{ display: 'flex', alignItems: 'center', padding: '9px 0', paddingLeft: depth * 16, borderBottom: '1px solid ' + A.rule2 }}>
@@ -940,11 +958,38 @@ export function CategoriesEditor({ t, onBack }) {
             style={{ all: 'unset', cursor: hasKids ? 'pointer' : 'default', width: 18, color: A.ink2, fontSize: 12 }}>
             {hasKids ? (isOpen ? '−' : '+') : '·'}
           </button>
-          <span style={{ fontSize: 12, letterSpacing: depth === 0 ? 1.2 : 0.4, fontWeight: depth === 0 ? 600 : 400, color: A.ink, flex: 1 }}>
-            {node.glyph ? node.glyph + ' ' : ''}{node.label || key}
-          </span>
+          {isRenaming ? (
+            <input autoFocus value={renameVal} onChange={e => setRenameVal(e.target.value)}
+              onBlur={() => commitRename(path)}
+              onKeyDown={e => {
+                if (e.key === 'Enter') commitRename(path);
+                if (e.key === 'Escape') { setRenaming(null); setRenameVal(''); }
+              }}
+              style={{ flex: 1, fontFamily: A.font, fontSize: 12, background: 'transparent', border: 'none', borderBottom: '1px solid ' + A.ink, outline: 'none', padding: '2px 0', color: A.ink, letterSpacing: 0.6 }}
+            />
+          ) : (
+            <span onClick={() => startRename(id, node.label || key)}
+              style={{ fontSize: 12, letterSpacing: depth === 0 ? 1.2 : 0.4, fontWeight: depth === 0 ? 600 : 400, color: A.ink, flex: 1, cursor: 'text' }}>
+              {node.glyph ? node.glyph + ' ' : ''}{node.label || key}
+            </span>
+          )}
           <button onClick={() => setAdding(id)}
+            title="Add sub-category"
             style={{ all: 'unset', cursor: 'pointer', width: 24, height: 20, textAlign: 'center', fontSize: 14, color: A.muted, marginLeft: 6 }}>+</button>
+          {isConfirming ? (
+            <>
+              <button onClick={() => { removeCategory(path); setConfirmDelete(null); }}
+                title="Confirm delete"
+                style={{ all: 'unset', cursor: 'pointer', fontSize: 9, color: A.neg, letterSpacing: 1, marginLeft: 6 }}>SURE?</button>
+              <button onClick={() => setConfirmDelete(null)}
+                title="Cancel"
+                style={{ all: 'unset', cursor: 'pointer', fontSize: 10, color: A.muted, marginLeft: 4 }}>×</button>
+            </>
+          ) : (
+            <button onClick={() => setConfirmDelete(id)}
+              title="Delete category"
+              style={{ all: 'unset', cursor: 'pointer', width: 20, height: 20, textAlign: 'center', fontSize: 11, color: A.muted, marginLeft: 4 }}>✕</button>
+          )}
         </div>
         {adding === id && (
           <div style={{ display: 'flex', gap: 8, padding: '8px 0', paddingLeft: (depth + 1) * 16, borderBottom: '1px solid ' + A.rule2, background: A.bg }}>
@@ -980,7 +1025,7 @@ export function CategoriesEditor({ t, onBack }) {
       <div style={{ padding: '14px 0 8px' }}>
         <div style={{ fontSize: 18, fontWeight: 700, letterSpacing: -0.2 }}>CATEGORIES</div>
         <div style={{ fontSize: 11, color: A.muted, marginTop: 4, lineHeight: 1.6 }}>
-          NEST AS DEEP AS YOU NEED. TAP <span style={{ color: A.ink }}>+</span> ON ANY ROW TO ADD A SUB-CATEGORY.
+          NEST AS DEEP AS YOU NEED. TAP <span style={{ color: A.ink }}>+</span> TO ADD · TAP NAME TO RENAME · TAP <span style={{ color: A.ink }}>✕</span> TO DELETE.
         </div>
       </div>
       <ARule />
