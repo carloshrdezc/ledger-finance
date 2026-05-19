@@ -10,6 +10,7 @@ import { exportReportCSV } from '../../importExport';
 import RecurringFormSheet from '../../components/RecurringFormSheet';
 import GoalFormSheet from '../../components/GoalFormSheet';
 import RangeSelector from '../../components/RangeSelector';
+import FxRatesSection from '../../components/FxRatesSection';
 import { addMonths, filterTransactionsForPeriod, filterTransactionsForRange, formatShortPeriodLabel, getDaysInPeriod, resolveRangePreset } from '../../period.mjs';
 import {
   buildCategoryTrend,
@@ -961,6 +962,12 @@ export function Settings({ t, onBack, onNavigate, setAccent, setDensity, setDeci
             </div>
           </button>
         </div>
+      </div>
+
+      {/* FX RATES */}
+      <div style={{ marginTop: 14 }}>
+        <ALabel>FX RATES</ALabel>
+        <FxRatesSection />
       </div>
 
       {/* BUDGETS */}
