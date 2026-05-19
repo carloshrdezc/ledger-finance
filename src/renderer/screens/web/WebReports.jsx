@@ -2,10 +2,11 @@ import React from 'react';
 import { A } from '../../theme';
 import { ALabel, CategoryTrendChart, IncomeExpenseChart, LineChart } from '../../components/Shared';
 import PeriodSwitcher from '../../components/PeriodSwitcher';
+import RangeSelector from '../../components/RangeSelector';
 import WebShell from './WebShell';
 import { fmtMoney, fmtSigned } from '../../data';
 import { useStore } from '../../store';
-import { addMonths, filterTransactionsForPeriod, formatShortPeriodLabel, getDaysInPeriod } from '../../period.mjs';
+import { addMonths, filterTransactionsForPeriod, filterTransactionsForRange, formatShortPeriodLabel, getDaysInPeriod, resolveRangePreset } from '../../period.mjs';
 import {
   buildCategoryTrend,
   buildIncomeExpenseSeries,
@@ -23,7 +24,22 @@ function spendTotal(transactions) {
 
 export default function WebReports({ t, onNavigate, onAdd }) {
   const { transactions, periodTransactions, categoryTree, selectedPeriod, periodLabel, accounts, setTxFilter } = useStore();
-  const total = spendTotal(periodTransactions);
+
+  const [range, setRange] = React.useState({ kind: 'preset', preset: 'thisMonth' });
+  const isMonthRange = range.kind === 'preset' && (range.preset === 'thisMonth' || range.preset === 'lastMonth');
+  const resolved = range.kind === 'custom' ? { start: range.start, end: range.end, label: `${range.start} → ${range.end}` } : resolveRangePreset(range.preset);
+  const useRange = range.kind === 'custom' || (range.preset !== 'thisMonth' && range.preset !== 'lastMonth');
+
+  // Source transactions for the report. When a range overrides the period,
+  // periodTransactions is bypassed.
+  const rangeTxs = React.useMemo(() => {
+    if (!useRange) return null;
+    return filterTransactionsForRange(transactions, resolved?.start, resolved?.end);
+  }, [useRange, transactions, resolved?.start, resolved?.end]);
+  const reportTxs = useRange ? rangeTxs : periodTransactions;
+  const heroLabel = useRange ? (resolved?.label || 'CUSTOM') : periodLabel;
+
+  const total = spendTotal(reportTxs);
   const previousPeriod = addMonths(selectedPeriod, -1);
   const previousTotal = spendTotal(filterTransactionsForPeriod(transactions, previousPeriod));
   const trendPeriods = getRecentPeriods(selectedPeriod, 6);
@@ -37,7 +53,7 @@ export default function WebReports({ t, onNavigate, onAdd }) {
   }, [setTxFilter, onNavigate]);
 
   const byCat = {};
-  periodTransactions.filter(x => x.amt < 0).forEach(x => {
+  reportTxs.filter(x => x.amt < 0).forEach(x => {
     const k = (x.path || [x.cat])[0];
     byCat[k] = (byCat[k] || 0) + spendAmount(x);
   });
@@ -54,31 +70,38 @@ export default function WebReports({ t, onNavigate, onAdd }) {
   const cellMax = Math.max(...cells, 1);
 
   const merchantMap = {};
-  periodTransactions.filter(x => x.amt < 0).forEach(tx => {
+  reportTxs.filter(x => x.amt < 0).forEach(tx => {
     const key = tx.name.split(' · ')[0];
     const curr = merchantMap[key] || { name: key, amt: 0, n: 0 };
-    curr.amt -= spendAmount(tx);
+    curr.amt += spendAmount(tx);
     curr.n += 1;
     merchantMap[key] = curr;
   });
-  const merchants = Object.values(merchantMap).sort((a, b) => Math.abs(b.amt) - Math.abs(a.amt)).slice(0, 8);
+  const merchants = Object.values(merchantMap).sort((a, b) => b.amt - a.amt).slice(0, 8);
 
   return (
     <WebShell active="reports" t={t} onNavigate={onNavigate} onAdd={onAdd}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 16 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16 }}>
         <div>
-          <ALabel>[01] REPORTS · {periodLabel}</ALabel>
+          <ALabel>[01] REPORTS · {heroLabel}</ALabel>
           <div style={{ fontSize: 48, letterSpacing: -1.5, fontVariantNumeric: 'tabular-nums', lineHeight: 1, marginTop: 6 }}>
-            {fmtMoney(total, t.currency, t.decimals)}{' '}
-            <span style={{ fontSize: 18, color: total - previousTotal > 0 ? A.neg : t.accent }}>
-              {fmtSigned(total - previousTotal, t.currency, false)}
-            </span>
+            {fmtMoney(total, t.currency, t.decimals)}
+            {!useRange && (
+              <span style={{ fontSize: 18, color: total - previousTotal > 0 ? A.neg : t.accent }}>
+                {' '}{fmtSigned(total - previousTotal, t.currency, false)}
+              </span>
+            )}
           </div>
           <div style={{ fontSize: 11, color: A.muted, marginTop: 6, letterSpacing: 1 }}>
-            SPENT · VS · {formatShortPeriodLabel(previousPeriod)} · {fmtMoney(previousTotal, t.currency, false)}
+            {useRange
+              ? `${reportTxs.length} TXS IN RANGE`
+              : `SPENT · VS · ${formatShortPeriodLabel(previousPeriod)} · ${fmtMoney(previousTotal, t.currency, false)}`}
           </div>
         </div>
-        <PeriodSwitcher />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'flex-end' }}>
+          <RangeSelector range={range} onChange={setRange} t={t} />
+          {isMonthRange && range.preset === 'thisMonth' && <PeriodSwitcher />}
+        </div>
       </div>
 
       <div style={{ marginTop: 24, borderTop: '2px solid ' + A.ink, paddingTop: 18 }}>
@@ -133,6 +156,11 @@ export default function WebReports({ t, onNavigate, onAdd }) {
           </div>
 
           <ALabel style={{ marginTop: 28 }}>[05] CALENDAR · {periodLabel}</ALabel>
+          {useRange ? (
+            <div style={{ marginTop: 12, padding: '14px 0', fontSize: 10, color: A.muted, letterSpacing: 1, borderTop: '2px solid ' + A.ink }}>
+              CALENDAR HEATMAP IS PER-MONTH · SWITCH TO 'THIS MONTH' OR 'LAST MONTH' TO VIEW
+            </div>
+          ) : (
           <div style={{ marginTop: 12, borderTop: '2px solid ' + A.ink, paddingTop: 16 }}>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4 }}>
               {['S','M','T','W','T','F','S'].map((d, i) => (
@@ -158,6 +186,7 @@ export default function WebReports({ t, onNavigate, onAdd }) {
               })}
             </div>
           </div>
+          )}
 
           <ALabel style={{ marginTop: 28 }}>[06] DETECTED · INSIGHTS</ALabel>
           <div style={{ marginTop: 8, borderTop: '2px solid ' + A.ink }}>

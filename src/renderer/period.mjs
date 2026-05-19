@@ -46,6 +46,62 @@ export function filterTransactionsForPeriod(transactions, period, startDay = 1) 
   return transactions.filter(tx => tx.date >= start && tx.date <= end);
 }
 
+// Filter transactions to an inclusive [startIso, endIso] range. Both sides
+// are 'YYYY-MM-DD'. Either side may be falsy (means open-ended).
+export function filterTransactionsForRange(transactions, startIso, endIso) {
+  return transactions.filter(tx => {
+    if (!tx.date) return false;
+    if (startIso && tx.date < startIso) return false;
+    if (endIso && tx.date > endIso) return false;
+    return true;
+  });
+}
+
+// Resolve a range preset key into { start, end } ISO date strings.
+// Presets are computed against today (UTC-naive). 'thisMonth' / 'lastMonth'
+// use the calendar month; the rolling presets count back exact day windows.
+export function resolveRangePreset(preset, today = new Date()) {
+  const fmt = d => d.toISOString().slice(0, 10);
+  const startOfMonth = (y, m) => new Date(y, m, 1);
+  const endOfMonth   = (y, m) => new Date(y, m + 1, 0);
+  switch (preset) {
+    case 'thisMonth': {
+      const s = startOfMonth(today.getFullYear(), today.getMonth());
+      const e = endOfMonth(today.getFullYear(), today.getMonth());
+      return { start: fmt(s), end: fmt(e), label: 'THIS MONTH' };
+    }
+    case 'lastMonth': {
+      const s = startOfMonth(today.getFullYear(), today.getMonth() - 1);
+      const e = endOfMonth(today.getFullYear(), today.getMonth() - 1);
+      return { start: fmt(s), end: fmt(e), label: 'LAST MONTH' };
+    }
+    case 'last3': {
+      const s = new Date(today); s.setDate(s.getDate() - 89);
+      return { start: fmt(s), end: fmt(today), label: 'LAST 90 DAYS' };
+    }
+    case 'last6': {
+      const s = new Date(today); s.setDate(s.getDate() - 179);
+      return { start: fmt(s), end: fmt(today), label: 'LAST 6 MONTHS' };
+    }
+    case 'ytd': {
+      const s = new Date(today.getFullYear(), 0, 1);
+      return { start: fmt(s), end: fmt(today), label: 'YEAR TO DATE' };
+    }
+    case 'last12': {
+      const s = new Date(today); s.setFullYear(s.getFullYear() - 1); s.setDate(s.getDate() + 1);
+      return { start: fmt(s), end: fmt(today), label: 'LAST 12 MONTHS' };
+    }
+    case 'lastYear': {
+      const y = today.getFullYear() - 1;
+      const s = new Date(y, 0, 1);
+      const e = new Date(y, 11, 31);
+      return { start: fmt(s), end: fmt(e), label: String(y) };
+    }
+    default:
+      return null;
+  }
+}
+
 function toUsd(amount, ccy = 'USD') {
   return ccy === 'USD' ? amount : amount * EUR_TO_USD;
 }
