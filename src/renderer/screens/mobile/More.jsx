@@ -4,6 +4,7 @@ import { ARule, ALabel } from '../../components/Shared';
 import { fmtMoney } from '../../data';
 import { useStore } from '../../store';
 import RecurringFormSheet from '../../components/RecurringFormSheet';
+import GoalFormSheet from '../../components/GoalFormSheet';
 
 export default function More({ t, onNavigate }) {
   const { goals, billRows, bills, alertRows, accountsWithBalance, investments } = useStore();
@@ -12,6 +13,7 @@ export default function More({ t, onNavigate }) {
   const ccAccounts = accountsWithBalance.filter(a => a.type === 'CC' && !a.archived);
   const portfolioTotal = investments.reduce((s, i) => s + i.shares * i.price, 0);
   const [showAddRecurring, setShowAddRecurring] = React.useState(false);
+  const [showAddGoal, setShowAddGoal] = React.useState(false);
   const sections = [
     {
       title: 'REPORTS',
@@ -23,12 +25,14 @@ export default function More({ t, onNavigate }) {
     },
     {
       title: 'GOALS',
-      rows: goals.map(g => ({
-        label: g.name,
-        sub: Math.round(g.current / g.target * 100) + '% COMPLETE',
-        screen: 'goal',
-        params: { goalId: g.id },
-      })),
+      rows: goals.length > 0
+        ? goals.map(g => ({
+            label: g.name,
+            sub: Math.round(g.current / g.target * 100) + '% COMPLETE',
+            screen: 'goal',
+            params: { goalId: g.id },
+          }))
+        : [{ label: 'NO GOALS YET', sub: 'TAP + ADD TO CREATE ONE', screen: null }],
     },
     {
       title: 'CREDIT CARDS',
@@ -81,6 +85,9 @@ export default function More({ t, onNavigate }) {
             {sec.title === 'RECURRING' && (
               <button onClick={() => setShowAddRecurring(true)} style={{ all: 'unset', cursor: 'pointer', fontSize: 10, letterSpacing: 1.2, color: t.accent }}>+ ADD</button>
             )}
+            {sec.title === 'GOALS' && (
+              <button onClick={() => setShowAddGoal(true)} style={{ all: 'unset', cursor: 'pointer', fontSize: 10, letterSpacing: 1.2, color: t.accent }}>+ ADD</button>
+            )}
           </div>
           <div style={{ marginTop: 6 }}>
             {sec.rows.map((row, i) => (
@@ -108,6 +115,12 @@ export default function More({ t, onNavigate }) {
         <RecurringFormSheet
           t={t}
           onClose={() => setShowAddRecurring(false)}
+        />
+      )}
+      {showAddGoal && (
+        <GoalFormSheet
+          t={t}
+          onClose={() => setShowAddGoal(false)}
         />
       )}
     </div>
