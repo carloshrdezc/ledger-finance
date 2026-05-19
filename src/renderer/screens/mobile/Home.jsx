@@ -1,13 +1,15 @@
 ﻿import React from 'react';
 import { A } from '../../theme';
 import { AsciiSpark, ARule, ALabel } from '../../components/Shared';
-import { SPARK_NW, SPARK_SPEND, fmtMoney, fmtSigned, fmtPct } from '../../data';
+import { fmtMoney, fmtSigned, fmtPct } from '../../data';
+import { buildNetWorthDailyTrend } from '../../charts.mjs';
 import { useStore } from '../../store';
 
 export default function Home({ t, onAcct, onAddTx, onViewAll }) {
-  const { accountsWithBalance, accountsIncludedInTotals, transactions, billRows, alertRows } = useStore();
+  const { accounts, accountsWithBalance, accountsIncludedInTotals, transactions, billRows, alertRows } = useStore();
   const now = new Date();
   const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const todayIso = now.toISOString().slice(0, 10);
   const todayLabel = now.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }).toUpperCase();
 
   const NET_WORTH   = accountsIncludedInTotals.reduce((s, a) => s + (a.ccy === 'USD' ? a.balance : a.balance * 1.08), 0);
@@ -24,11 +26,35 @@ export default function Home({ t, onAcct, onAddTx, onViewAll }) {
 
   const monthLabel  = now.toLocaleDateString('en-US', { month: 'short' }).toUpperCase();
 
+  // 30-day net worth daily trend, derived from real transaction history.
+  const nwTrend = React.useMemo(
+    () => buildNetWorthDailyTrend(accounts, transactions, todayIso, 30).map(p => p.value),
+    [accounts, transactions, todayIso],
+  );
+  // Daily spend trend (rolling 30 days, absolute value of expenses per day).
+  const spendTrend = React.useMemo(() => {
+    const days = 30;
+    const out = new Array(days).fill(0);
+    const end = new Date(`${todayIso}T00:00:00`);
+    for (const tx of transactions) {
+      if (!tx.date || tx.amt >= 0 || tx.cat === 'transfer') continue;
+      const d = new Date(`${tx.date}T00:00:00`);
+      const diff = Math.round((end - d) / 86400000);
+      if (diff >= 0 && diff < days) {
+        const idx = days - 1 - diff;
+        out[idx] += Math.abs(tx.ccy === 'USD' ? tx.amt : tx.amt * 1.08);
+      }
+    }
+    return out;
+  }, [transactions, todayIso]);
+  const cashTrend = React.useMemo(() => nwTrend.map(v => v * 0.12), [nwTrend]);
+  const safeTrend = React.useMemo(() => nwTrend.map(v => v * 0.0006), [nwTrend]);
+
   const HERO_METRICS = [
-    { key: 'nw',    label: 'NET WORTH',      value: NET_WORTH,   delta: NW_DELTA, deltaPct: NET_WORTH ? (NW_DELTA / Math.abs(NET_WORTH - NW_DELTA)) * 100 : 0, spark: SPARK_NW,                       ccy: t.currency },
-    { key: 'spend', label: 'MONTH SPENDING', value: MONTH_SPEND, delta: 0,        deltaPct: 0,                                                                   spark: SPARK_SPEND, ccy: t.currency, invert: true },
-    { key: 'cash',  label: 'CASH ON HAND',   value: CASH,        delta: 0,        deltaPct: 0,                                                                   spark: SPARK_NW.map(v => v * 0.12),   ccy: t.currency },
-    { key: 'safe',  label: 'SAFE TO SPEND',  value: CASH / 30,   delta: 0,        deltaPct: 0,                                                                   spark: SPARK_NW.map(v => v * 0.0006), ccy: t.currency, unit: '/ DAY' },
+    { key: 'nw',    label: 'NET WORTH',      value: NET_WORTH,   delta: NW_DELTA, deltaPct: NET_WORTH ? (NW_DELTA / Math.abs(NET_WORTH - NW_DELTA)) * 100 : 0, spark: nwTrend,                         ccy: t.currency },
+    { key: 'spend', label: 'MONTH SPENDING', value: MONTH_SPEND, delta: 0,        deltaPct: 0,                                                                   spark: spendTrend, ccy: t.currency, invert: true },
+    { key: 'cash',  label: 'CASH ON HAND',   value: CASH,        delta: 0,        deltaPct: 0,                                                                   spark: cashTrend,  ccy: t.currency },
+    { key: 'safe',  label: 'SAFE TO SPEND',  value: CASH / 30,   delta: 0,        deltaPct: 0,                                                                   spark: safeTrend,  ccy: t.currency, unit: '/ DAY' },
   ];
 
   const [heroIdx, setHeroIdx] = React.useState(0);
