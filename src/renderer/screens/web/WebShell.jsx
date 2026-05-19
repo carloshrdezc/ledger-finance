@@ -1,5 +1,6 @@
 import React from 'react';
 import { A } from '../../theme';
+import { useStore } from '../../store';
 
 const NAV_ITEMS = [
   ['DASHBOARD',     'dashboard'],
@@ -15,6 +16,21 @@ const NAV_ITEMS = [
 ];
 
 export default function WebShell({ active, t, onNavigate, onAdd, children }) {
+  const { accountsWithBalance } = useStore();
+  // Build a short "linked accounts" summary from actual account names.
+  // Take up to 6 distinct first words so the list stays compact.
+  const linkedNames = React.useMemo(() => {
+    const seen = new Set();
+    const out = [];
+    for (const a of accountsWithBalance) {
+      const first = (a.name || '').split(' ')[0];
+      if (!first || seen.has(first)) continue;
+      seen.add(first);
+      out.push(first);
+      if (out.length >= 6) break;
+    }
+    return out;
+  }, [accountsWithBalance]);
   return (
     <div style={{ background: A.bg, color: A.ink, fontFamily: A.font, height: '100%', overflow: 'auto' }}>
       <div style={{ padding: '28px 40px', display: 'grid', gridTemplateColumns: '200px 1fr', gap: 40, minHeight: '100%', boxSizing: 'border-box' }}>
@@ -35,11 +51,14 @@ export default function WebShell({ active, t, onNavigate, onAdd, children }) {
               [{String(i + 1).padStart(2, '0')}] {label}
             </button>
           ))}
-          <div style={{ fontSize: 10, letterSpacing: 1.4, color: A.ink2, textTransform: 'uppercase', marginTop: 28 }}>LINKED · 8</div>
-          <div style={{ fontSize: 11, color: A.muted, marginTop: 8, lineHeight: 1.7 }}>
-            CHASE · AMEX · ALLY<br />VANGUARD · FIDELITY<br />COINBASE · WISE<br />
-            <span style={{ color: t.accent }}>● SYNCED 09:41 PT</span>
+          <div style={{ fontSize: 10, letterSpacing: 1.4, color: A.ink2, textTransform: 'uppercase', marginTop: 28 }}>
+            ACCOUNTS · {accountsWithBalance.length}
           </div>
+          {linkedNames.length > 0 && (
+            <div style={{ fontSize: 11, color: A.muted, marginTop: 8, lineHeight: 1.7 }}>
+              {linkedNames.join(' · ')}
+            </div>
+          )}
           <div style={{ fontSize: 10, letterSpacing: 1.4, color: A.ink2, textTransform: 'uppercase', marginTop: 28 }}>QUICK · ADD</div>
           <div onClick={onAdd} style={{ marginTop: 8, padding: '10px 12px', border: '1.5px solid ' + A.ink, fontSize: 11, letterSpacing: 1.2, cursor: 'pointer', display: 'flex', justifyContent: 'space-between' }}>
             <span>+ TRANSACTION</span><span style={{ color: A.muted }}>⌘N</span>
