@@ -6,6 +6,7 @@ import RangeSelector from '../../components/RangeSelector';
 import WebShell from './WebShell';
 import { fmtMoney, fmtSigned } from '../../data';
 import { useStore } from '../../store';
+import { useFx } from '../../useFx';
 import { addMonths, filterTransactionsForPeriod, filterTransactionsForRange, formatShortPeriodLabel, getDaysInPeriod, resolveRangePreset } from '../../period.mjs';
 import {
   buildCategoryTrend,
@@ -14,14 +15,6 @@ import {
   getRecentPeriods,
 } from '../../charts.mjs';
 import { exportReportCSV } from '../../importExport';
-
-function spendAmount(tx) {
-  return Math.abs(tx.ccy === 'USD' ? tx.amt : tx.amt * 1.08);
-}
-
-function spendTotal(transactions) {
-  return transactions.filter(x => x.amt < 0).reduce((s, x) => s + spendAmount(x), 0);
-}
 
 function downloadFile(name, content, mime = 'text/csv') {
   const a = document.createElement('a');
@@ -32,7 +25,8 @@ function downloadFile(name, content, mime = 'text/csv') {
 }
 
 export default function WebReports({ t, onNavigate, onAdd }) {
-  const { transactions, periodTransactions, categoryTree, selectedPeriod, periodLabel, accounts, setTxFilter } = useStore();
+  const { transactions, periodTransactions, categoryTree, selectedPeriod, periodLabel, accounts, setTxFilter, rates } = useStore();
+  const { toReporting } = useFx(t.currency || 'USD');
 
   const [range, setRange] = React.useState({ kind: 'preset', preset: 'thisMonth' });
   const isMonthRange = range.kind === 'preset' && (range.preset === 'thisMonth' || range.preset === 'lastMonth');
@@ -48,13 +42,14 @@ export default function WebReports({ t, onNavigate, onAdd }) {
   const reportTxs = useRange ? rangeTxs : periodTransactions;
   const heroLabel = useRange ? (resolved?.label || 'CUSTOM') : periodLabel;
 
-  const total = spendTotal(reportTxs);
+  const sumExpense = (txs) => txs.filter(x => x.amt < 0).reduce((s, x) => s + Math.abs(toReporting(x.amt, x.ccy)), 0);
+  const total = sumExpense(reportTxs);
   const previousPeriod = addMonths(selectedPeriod, -1);
-  const previousTotal = spendTotal(filterTransactionsForPeriod(transactions, previousPeriod));
+  const previousTotal = sumExpense(filterTransactionsForPeriod(transactions, previousPeriod));
   const trendPeriods = getRecentPeriods(selectedPeriod, 6);
-  const incomeExpense = buildIncomeExpenseSeries(transactions, trendPeriods);
-  const netWorthTrend = buildNetWorthTrend(accounts, transactions, trendPeriods);
-  const categoryTrend = buildCategoryTrend(transactions, trendPeriods, 5);
+  const incomeExpense = buildIncomeExpenseSeries(transactions, trendPeriods, rates);
+  const netWorthTrend = buildNetWorthTrend(accounts, transactions, trendPeriods, rates);
+  const categoryTrend = buildCategoryTrend(transactions, trendPeriods, 5, rates);
 
   const drillTo = React.useCallback((filter) => {
     setTxFilter(filter || null);
@@ -64,7 +59,7 @@ export default function WebReports({ t, onNavigate, onAdd }) {
   const byCat = {};
   reportTxs.filter(x => x.amt < 0).forEach(x => {
     const k = (x.path || [x.cat])[0];
-    byCat[k] = (byCat[k] || 0) + spendAmount(x);
+    byCat[k] = (byCat[k] || 0) + Math.abs(toReporting(x.amt, x.ccy));
   });
   const cats = Object.entries(byCat).sort((a, b) => b[1] - a[1]);
   const maxCat = cats[0] ? cats[0][1] : 1;
@@ -74,7 +69,7 @@ export default function WebReports({ t, onNavigate, onAdd }) {
     const day = String(i + 1).padStart(2, '0');
     return periodTransactions
       .filter(x => x.date === `${selectedPeriod}-${day}` && x.amt < 0)
-      .reduce((s, x) => s + spendAmount(x), 0);
+      .reduce((s, x) => s + Math.abs(toReporting(x.amt, x.ccy)), 0);
   });
   const cellMax = Math.max(...cells, 1);
 
@@ -82,7 +77,7 @@ export default function WebReports({ t, onNavigate, onAdd }) {
   reportTxs.filter(x => x.amt < 0).forEach(tx => {
     const key = tx.name.split(' · ')[0];
     const curr = merchantMap[key] || { name: key, amt: 0, n: 0 };
-    curr.amt += spendAmount(tx);
+    curr.amt += Math.abs(toReporting(tx.amt, tx.ccy));
     curr.n += 1;
     merchantMap[key] = curr;
   });

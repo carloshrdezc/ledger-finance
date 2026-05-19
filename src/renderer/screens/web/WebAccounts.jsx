@@ -5,6 +5,7 @@ import WebShell from './WebShell';
 import AccountFormModal from '../../components/AccountFormModal';
 import { fmtMoney, fmtSigned, dayLabel, catGlyph } from '../../data';
 import { useStore } from '../../store';
+import { useFx } from '../../useFx';
 
 const TYPE_LABELS = {
   CHK: 'CHECKING', SAV: 'SAVINGS', CC: 'CREDIT CARD',
@@ -15,6 +16,7 @@ const TYPE_ORDER = ['CHK', 'SAV', 'CC', 'INV', 'CRY', 'FX', 'LOAN', 'CASH'];
 
 export default function WebAccounts({ t, onNavigate, onAdd }) {
   const { transactions, accountsWithBalance, accountsIncludedInTotals, allAccountsWithBalance, reorderAccounts } = useStore();
+  const { toReporting } = useFx(t.currency || 'USD');
   const [selected, setSelected]       = React.useState(null);
   const [modalAccount, setModalAccount] = React.useState(undefined); // undefined=closed, null=new, obj=edit
   const [reorderMode, setReorderMode] = React.useState(false);
@@ -32,7 +34,7 @@ export default function WebAccounts({ t, onNavigate, onAdd }) {
   const archivedCount    = archivedAccounts.length;
 
   const NET_WORTH = accountsIncludedInTotals.reduce(
-    (s, a) => s + (a.ccy === 'USD' ? a.balance : a.balance * 1.08), 0
+    (s, a) => s + toReporting(a.balance, a.ccy), 0
   );
 
   const acctTxs = selected ? transactions.filter(tx => tx.acct === selected) : [];

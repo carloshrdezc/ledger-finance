@@ -9,6 +9,7 @@ import {
 } from './period.mjs';
 import { buildBillRows, markRecurringPaid as createRecurringPayment, getBillDueDate, slug, createGoalContribution } from './planning.mjs';
 import { buildAlertRows } from './alerts.mjs';
+import { DEFAULT_RATES } from './fx.mjs';
 
 function useLS(key, def) {
   const [v, setV] = React.useState(() => {
@@ -65,6 +66,9 @@ export function StoreProvider({ children }) {
   const [investments, setInvestments] = useLS('ledger:investments', INVESTMENTS);
   const [trades, setTrades]           = useLS('ledger:trades', TRADES);
   const [dismissedAlertIds, setDismissedAlertIds] = useLS('ledger:dismissedAlerts', []);
+  const [rates, setRates] = useLS('ledger:fxRates', DEFAULT_RATES);
+  const [ratesUpdated, setRatesUpdated] = useLS('ledger:fxRatesUpdated', {});
+  const [fxMigrationToastSeen, setFxMigrationToastSeen] = useLS('ledger:fxMigrationToastSeen', false);
 
   React.useEffect(() => {
     // Intentional: txs is read from the initial synchronous localStorage load.
@@ -82,8 +86,8 @@ export function StoreProvider({ children }) {
   );
   const periodLabel = React.useMemo(() => formatPeriodLabel(selectedPeriod, budgetStartDay), [selectedPeriod, budgetStartDay]);
   const budgetRows = React.useMemo(
-    () => buildBudgetRows(Array.isArray(budgets) ? budgets : [], transactions, selectedPeriod),
-    [budgets, transactions, selectedPeriod],
+    () => buildBudgetRows(Array.isArray(budgets) ? budgets : [], transactions, selectedPeriod, rates),
+    [budgets, transactions, selectedPeriod, rates],
   );
   const billRows = React.useMemo(
     () => buildBillRows(bills, transactions, selectedPeriod),
@@ -123,8 +127,12 @@ export function StoreProvider({ children }) {
       accountsWithBalance,
       investments,
       dismissedAlertIds,
+      rates,
+      ratesUpdated,
+      transactions,
+      fxMigrationToastSeen,
     }),
-    [billRows, budgetRows, goals, accountsWithBalance, investments, dismissedAlertIds],
+    [billRows, budgetRows, goals, accountsWithBalance, investments, dismissedAlertIds, rates, ratesUpdated, transactions, fxMigrationToastSeen],
   );
 
   const addTransactions = React.useCallback(incoming => setTxs(prev => {
@@ -266,10 +274,48 @@ export function StoreProvider({ children }) {
     });
   }, [setCatTree]);
 
-  const addAccount = React.useCallback(acct => setAccounts(prev => {
-    if (prev.some(a => a.id === acct.id)) return prev;
-    return [...prev, { archived: false, includeInTotals: true, order: prev.filter(a => !a.archived).length, ...acct }];
-  }), [setAccounts]);
+  const setRate = React.useCallback((ccy, rate) => {
+    if (ccy === 'USD') return; // USD is always 1.0; not editable
+    const numeric = Number(rate);
+    if (!Number.isFinite(numeric) || numeric <= 0) return;
+    setRates(prev => ({ ...prev, [ccy]: numeric }));
+    setRatesUpdated(prev => ({ ...prev, [ccy]: new Date().toISOString().slice(0, 10) }));
+  }, [setRates, setRatesUpdated]);
+
+  const removeRate = React.useCallback(ccy => {
+    if (ccy === 'USD') return;
+    setRates(prev => {
+      const next = { ...prev };
+      delete next[ccy];
+      return next;
+    });
+    setRatesUpdated(prev => {
+      const next = { ...prev };
+      delete next[ccy];
+      return next;
+    });
+  }, [setRates, setRatesUpdated]);
+
+  const resetRates = React.useCallback(() => {
+    setRates(DEFAULT_RATES);
+    setRatesUpdated({});
+  }, [setRates, setRatesUpdated]);
+
+  // Auto-seed a placeholder rate (1.0) when an account in a new currency
+  // shows up. The missing-rate alert (added in CAR-140) will then surface.
+  const ensureRateForCurrency = React.useCallback(ccy => {
+    if (!ccy || ccy === 'USD') return;
+    setRates(prev => prev[ccy] != null ? prev : { ...prev, [ccy]: 1.0 });
+    setRatesUpdated(prev => prev[ccy] !== undefined ? prev : { ...prev, [ccy]: null });
+  }, [setRates, setRatesUpdated]);
+
+  const addAccount = React.useCallback(acct => {
+    ensureRateForCurrency(acct.ccy);
+    setAccounts(prev => {
+      if (prev.some(a => a.id === acct.id)) return prev;
+      return [...prev, { archived: false, includeInTotals: true, order: prev.filter(a => !a.archived).length, ...acct }];
+    });
+  }, [ensureRateForCurrency, setAccounts]);
 
   const updateAccount = React.useCallback((id, patch) => setAccounts(prev =>
     prev.map(a => a.id === id ? { ...a, ...patch } : a)
@@ -412,8 +458,12 @@ export function StoreProvider({ children }) {
   }, [setInvestments, setTrades]);
 
   const dismissAlert = React.useCallback(id => {
+    if (id === 'fx:migration-notice') {
+      setFxMigrationToastSeen(true);
+      return;
+    }
     setDismissedAlertIds(prev => prev.includes(id) ? prev : [...prev, id]);
-  }, [setDismissedAlertIds]);
+  }, [setDismissedAlertIds, setFxMigrationToastSeen]);
 
   const restoreAlerts = React.useCallback(() => {
     setDismissedAlertIds([]);
@@ -434,7 +484,10 @@ export function StoreProvider({ children }) {
     setTrades([]);
     setDismissedAlertIds([]);
     setTxFilterRaw(null);
-  }, [setTxs, setCatTree, setBudgets, setAccounts, setBills, setGoals, setGoalContributions, setSelectedPeriod, setHidden, setBudgetStartDay, setInvestments, setTrades, setDismissedAlertIds, setTxFilterRaw]);
+    setRates(DEFAULT_RATES);
+    setRatesUpdated({});
+    setFxMigrationToastSeen(false);
+  }, [setTxs, setCatTree, setBudgets, setAccounts, setBills, setGoals, setGoalContributions, setSelectedPeriod, setHidden, setBudgetStartDay, setInvestments, setTrades, setDismissedAlertIds, setTxFilterRaw, setRates, setRatesUpdated, setFxMigrationToastSeen]);
 
   return (
     <StoreCtx.Provider value={{
@@ -507,6 +560,13 @@ export function StoreProvider({ children }) {
       addTrade,
       updateHolding,
       removeHolding,
+      rates,
+      ratesUpdated,
+      setRate,
+      removeRate,
+      resetRates,
+      fxMigrationToastSeen,
+      setFxMigrationToastSeen,
     }}>
       {children}
     </StoreCtx.Provider>

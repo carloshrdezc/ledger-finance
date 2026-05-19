@@ -8,6 +8,7 @@ import {
 } from '../../data';
 import { useStore } from '../../store';
 import { buildNetWorthDailyTrend } from '../../charts.mjs';
+import { useFx } from '../../useFx';
 
 const PERIOD_DAYS  = { '1D': 1, '1W': 7, '1M': 30, '3M': 90, '1Y': 365 };
 const PERIOD_LABEL = { '1D': '1D', '1W': '7D', '1M': '30D', '3M': '90D', '1Y': '1Y', 'MAX': 'ALL' };
@@ -20,22 +21,23 @@ function windowStart(period) {
 }
 
 export default function Dashboard({ t, onNavigate, onAdd }) {
-  const { transactions, budgetRows, accounts, accountsWithBalance, accountsIncludedInTotals, periodLabel, billRows, goals, alertRows } = useStore();
+  const { transactions, budgetRows, accounts, accountsWithBalance, accountsIncludedInTotals, periodLabel, billRows, goals, alertRows, rates } = useStore();
+  const { toReporting } = useFx(t.currency || 'USD');
   const [scrub, setScrub] = React.useState(null);
   const [period, setPeriod] = React.useState('1M');
 
   const now = new Date();
   const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-  const NET_WORTH  = accountsIncludedInTotals.reduce((s, a) => s + (a.ccy === 'USD' ? a.balance : a.balance * 1.08), 0);
-  const NW_DELTA   = accountsIncludedInTotals.reduce((s, a) => s + (a.ccy === 'USD' ? a.delta  : a.delta  * 1.08), 0);
+  const NET_WORTH  = accountsIncludedInTotals.reduce((s, a) => s + toReporting(a.balance, a.ccy), 0);
+  const NW_DELTA   = accountsIncludedInTotals.reduce((s, a) => s + toReporting(a.delta,   a.ccy), 0);
   const NW_PCT     = NET_WORTH ? (NW_DELTA / Math.abs(NET_WORTH - NW_DELTA)) * 100 : 0;
   const todayLabel = now.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }).toUpperCase();
   const todayIso = now.toISOString().slice(0, 10);
 
   const netWorthTrend = React.useMemo(() => {
     const days = period === 'MAX' ? 365 : PERIOD_DAYS[period];
-    return buildNetWorthDailyTrend(accountsIncludedInTotals, transactions, todayIso, days);
-  }, [accountsIncludedInTotals, transactions, todayIso, period]);
+    return buildNetWorthDailyTrend(accountsIncludedInTotals, transactions, todayIso, days, rates);
+  }, [accountsIncludedInTotals, transactions, todayIso, period, rates]);
   const netWorthSpark = netWorthTrend.map(point => point.value);
   const chartTicks = React.useMemo(() => {
     if (netWorthTrend.length <= 5) return netWorthTrend;
@@ -49,13 +51,13 @@ export default function Dashboard({ t, onNavigate, onAdd }) {
     let inflow = 0, outflow = 0;
     const deltaByAcct = new Map();
     for (const tx of filtered) {
-      const usd = tx.ccy === 'USD' ? tx.amt : tx.amt * 1.08;
+      const usd = toReporting(tx.amt, tx.ccy);
       if (usd > 0) inflow += usd;
       else outflow += usd;
       deltaByAcct.set(tx.acct, (deltaByAcct.get(tx.acct) ?? 0) + usd);
     }
     return { inflow, outflow, net: inflow + outflow, deltaByAcct };
-  }, [period, transactions]);
+  }, [period, transactions, toReporting]);
 
   const scrubIdx = scrub != null ? Math.max(0, Math.min(netWorthSpark.length - 1, scrub)) : null;
   const heroVal = scrubIdx != null ? netWorthSpark[scrubIdx] : NET_WORTH;

@@ -4,32 +4,33 @@ import { AsciiSpark, ARule, ALabel } from '../../components/Shared';
 import { fmtMoney, fmtSigned, fmtPct } from '../../data';
 import { buildNetWorthDailyTrend } from '../../charts.mjs';
 import { useStore } from '../../store';
+import { useFx } from '../../useFx';
 
 export default function Home({ t, onAcct, onAddTx, onViewAll }) {
-  const { accounts, accountsWithBalance, accountsIncludedInTotals, transactions, billRows, alertRows } = useStore();
+  const { accounts, accountsWithBalance, accountsIncludedInTotals, transactions, billRows, alertRows, rates } = useStore();
+  const { toReporting } = useFx(t.currency || 'USD');
   const now = new Date();
   const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   const todayIso = now.toISOString().slice(0, 10);
   const todayLabel = now.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }).toUpperCase();
 
-  const NET_WORTH   = accountsIncludedInTotals.reduce((s, a) => s + (a.ccy === 'USD' ? a.balance : a.balance * 1.08), 0);
+  const NET_WORTH   = accountsIncludedInTotals.reduce((s, a) => s + toReporting(a.balance, a.ccy), 0);
   const monthTxs    = transactions.filter(tx => tx.date?.startsWith(thisMonth));
-  const toUSD       = tx => (tx.ccy === 'USD' ? tx.amt : tx.amt * 1.08);
-  const MONTH_IN    = monthTxs.filter(tx => tx.amt > 0 && tx.cat !== 'transfer').reduce((s, tx) => s + toUSD(tx), 0);
-  const MONTH_OUT   = monthTxs.filter(tx => tx.amt < 0 && tx.cat !== 'transfer').reduce((s, tx) => s + toUSD(tx), 0);
+  const MONTH_IN    = monthTxs.filter(tx => tx.amt > 0 && tx.cat !== 'transfer').reduce((s, tx) => s + toReporting(tx.amt, tx.ccy), 0);
+  const MONTH_OUT   = monthTxs.filter(tx => tx.amt < 0 && tx.cat !== 'transfer').reduce((s, tx) => s + toReporting(tx.amt, tx.ccy), 0);
   const MONTH_NET   = MONTH_IN + MONTH_OUT;
   const MONTH_SPEND = Math.abs(MONTH_OUT);
   const CASH        = accountsWithBalance
     .filter(a => ['CHK', 'SAV', 'FX'].includes(a.type))
-    .reduce((s, a) => s + (a.ccy === 'USD' ? a.balance : a.balance * 1.08), 0);
-  const NW_DELTA    = accountsIncludedInTotals.reduce((s, a) => s + (a.ccy === 'USD' ? a.delta : a.delta * 1.08), 0);
+    .reduce((s, a) => s + toReporting(a.balance, a.ccy), 0);
+  const NW_DELTA    = accountsIncludedInTotals.reduce((s, a) => s + toReporting(a.delta, a.ccy), 0);
 
   const monthLabel  = now.toLocaleDateString('en-US', { month: 'short' }).toUpperCase();
 
   // 30-day net worth daily trend, derived from real transaction history.
   const nwTrend = React.useMemo(
-    () => buildNetWorthDailyTrend(accounts, transactions, todayIso, 30).map(p => p.value),
-    [accounts, transactions, todayIso],
+    () => buildNetWorthDailyTrend(accounts, transactions, todayIso, 30, rates).map(p => p.value),
+    [accounts, transactions, todayIso, rates],
   );
   // Daily spend trend (rolling 30 days, absolute value of expenses per day).
   const spendTrend = React.useMemo(() => {
@@ -42,11 +43,11 @@ export default function Home({ t, onAcct, onAddTx, onViewAll }) {
       const diff = Math.round((end - d) / 86400000);
       if (diff >= 0 && diff < days) {
         const idx = days - 1 - diff;
-        out[idx] += Math.abs(tx.ccy === 'USD' ? tx.amt : tx.amt * 1.08);
+        out[idx] += Math.abs(toReporting(tx.amt, tx.ccy));
       }
     }
     return out;
-  }, [transactions, todayIso]);
+  }, [transactions, todayIso, toReporting]);
   const cashTrend = React.useMemo(() => nwTrend.map(v => v * 0.12), [nwTrend]);
   const safeTrend = React.useMemo(() => nwTrend.map(v => v * 0.0006), [nwTrend]);
 

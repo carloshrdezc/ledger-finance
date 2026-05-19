@@ -18,9 +18,14 @@ const transactions = [
   { date: '2026-05-04', cat: 'food', path: ['food'], amt: -10, acct: 'eur', ccy: 'EUR' },
 ];
 
+// Preserves the pre-CAR-75 hardcoded EUR_TO_USD = 1.08 behaviour. Rates
+// are stored as "1 USD = N units of X" so 1 EUR = 1.08 USD means
+// rates.EUR = 1 / 1.08. Used by the three trend-builder tests below.
+const RATES = { USD: 1, EUR: 1 / 1.08 };
+
 test('buildCategoryTrend totals spending by category across periods', () => {
   assert.deepEqual(
-    buildCategoryTrend(transactions, ['2026-04', '2026-05']),
+    buildCategoryTrend(transactions, ['2026-04', '2026-05'], 6, RATES),
     [
       { cat: 'food', values: [120, 160.8], total: 280.8 },
       { cat: 'dining', values: [0, 50], total: 50 },
@@ -29,7 +34,7 @@ test('buildCategoryTrend totals spending by category across periods', () => {
 });
 
 test('buildIncomeExpenseSeries separates income and expenses by month', () => {
-  assert.deepEqual(buildIncomeExpenseSeries(transactions, ['2026-04', '2026-05']), [
+  assert.deepEqual(buildIncomeExpenseSeries(transactions, ['2026-04', '2026-05'], RATES), [
     { period: '2026-04', income: 1000, expense: 120, net: 880 },
     { period: '2026-05', income: 2000, expense: 210.8, net: 1789.2 },
   ]);
@@ -43,7 +48,7 @@ test('buildNetWorthTrend accumulates transactions from opening balances', () => 
     { id: 'eur', openingBal: 10, ccy: 'EUR' },
   ];
 
-  assert.deepEqual(buildNetWorthTrend(accounts, transactions, ['2026-04', '2026-05']), [
+  assert.deepEqual(buildNetWorthTrend(accounts, transactions, ['2026-04', '2026-05'], RATES), [
     { period: '2026-04', value: 990.8 },
     { period: '2026-05', value: 2780 },
   ]);

@@ -1,5 +1,5 @@
 const SEVERITY_RANK = { critical: 0, high: 1, medium: 2, low: 3 };
-const KIND_RANK = { bill: 0, budget: 1, account: 2, goal: 3, investment: 4 };
+const KIND_RANK = { bill: 0, budget: 1, account: 2, goal: 3, investment: 4, fx: 5 };
 
 function pct(n) {
   return Math.round(n * 100) + '%';
@@ -28,6 +28,10 @@ export function buildAlertRows({
   accountsWithBalance = [],
   investments = [],
   dismissedAlertIds = [],
+  rates = {},
+  ratesUpdated = {},
+  transactions = [],
+  fxMigrationToastSeen = false,
 } = {}, todayIso = new Date().toISOString().slice(0, 10)) {
   const dismissed = new Set(dismissedAlertIds);
   const alerts = [];
@@ -121,6 +125,45 @@ export function buildAlertRows({
       metric: moneyValue((holding.shares || 0) * (holding.price || 0) * (holding.chg || 0) / 100),
       action: 'REVIEW',
       route: 'investments',
+    });
+  }
+
+  // Missing FX rate: every non-USD currency in use must have a confirmed
+  // rate. ratesUpdated[ccy] === null/undefined means the rate is the
+  // default seed (or auto-seeded 1.0 placeholder); we surface that.
+  const usedCcys = new Set();
+  for (const a of accountsWithBalance) if (a.ccy && a.ccy !== 'USD') usedCcys.add(a.ccy);
+  for (const tx of transactions) if (tx.ccy && tx.ccy !== 'USD') usedCcys.add(tx.ccy);
+  for (const ccy of usedCcys) {
+    const rate = rates[ccy];
+    const updated = ratesUpdated[ccy];
+    if (rate == null || updated == null) {
+      alerts.push({
+        id: `fx:missing:${ccy}`,
+        kind: 'fx',
+        severity: rate == null || rate === 1.0 ? 'medium' : 'low',
+        title: `SET FX RATE FOR ${ccy}`,
+        detail: rate == null ? 'NO RATE CONFIGURED' : 'USING DEFAULT RATE',
+        metric: '',
+        action: 'SET',
+        route: 'settings',
+      });
+    }
+  }
+
+  // Migration notice: one-time low-severity nudge for users upgrading
+  // from the hardcoded-1.08 era who hold non-USD data. Dismiss = mark
+  // fxMigrationToastSeen via the store.
+  if (!fxMigrationToastSeen && usedCcys.size > 0) {
+    alerts.push({
+      id: 'fx:migration-notice',
+      kind: 'fx',
+      severity: 'low',
+      title: 'FX RATES NOW CONFIGURABLE',
+      detail: 'SET YOUR OWN RATES IN SETTINGS',
+      metric: '',
+      action: 'OPEN',
+      route: 'settings',
     });
   }
 

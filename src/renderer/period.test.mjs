@@ -40,6 +40,10 @@ test('filterTransactionsForPeriod keeps only selected month transactions', () =>
 });
 
 test('buildBudgetRows computes monthly spend and carries previous rollover', () => {
+  // Preserves the pre-CAR-75 hardcoded EUR_TO_USD = 1.08 behaviour: rates
+  // are stored as "1 USD = N units of X", so 1 EUR = 1.08 USD means
+  // rates.EUR = 1 / 1.08.
+  const rates = { USD: 1, EUR: 1 / 1.08 };
   const rows = buildBudgetRows(
     [
       { cat: 'food', limit: 300, spent: 999 },
@@ -47,6 +51,7 @@ test('buildBudgetRows computes monthly spend and carries previous rollover', () 
     ],
     txs,
     '2026-05',
+    rates,
   );
 
   assert.deepEqual(rows.map(row => row.cat), ['food', 'dining']);
