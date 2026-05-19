@@ -2,7 +2,7 @@ import React from 'react';
 import { A, ACCENTS } from '../../theme';
 import { AsciiSpark, ARule, ALabel, ADetailCell, CategoryTrendChart, IncomeExpenseChart, LineChart } from '../../components/Shared';
 import PeriodSwitcher from '../../components/PeriodSwitcher';
-import { MERCHANTS, fmtMoney, fmtSigned, fmtPct, dayLabel, catBreadcrumb } from '../../data';
+import { fmtMoney, fmtSigned, fmtPct, dayLabel, catBreadcrumb } from '../../data';
 import { useStore } from '../../store';
 import ImportExport from '../../components/ImportExport';
 import RecurringFormSheet from '../../components/RecurringFormSheet';
@@ -31,6 +31,20 @@ export function Reports({ t, onBack }) {
   });
   const cats = Object.entries(byCat).sort((a, b) => b[1] - a[1]).slice(0, 6);
   const maxCat = cats[0] ? cats[0][1] : 1;
+
+  // Top merchants computed from periodTransactions (matches WebReports).
+  const merchantMap = {};
+  periodTransactions.filter(x => x.amt < 0).forEach(tx => {
+    const key = (tx.name || '').split(' · ')[0];
+    if (!key) return;
+    const curr = merchantMap[key] || { name: key, amt: 0, n: 0 };
+    curr.amt += Math.abs(tx.ccy === 'USD' ? tx.amt : tx.amt * 1.08);
+    curr.n += 1;
+    merchantMap[key] = curr;
+  });
+  const topMerchants = Object.values(merchantMap)
+    .sort((a, b) => b.amt - a.amt)
+    .slice(0, 8);
   const trendPeriods = getRecentPeriods(selectedPeriod, 6);
   const incomeExpense = buildIncomeExpenseSeries(transactions, trendPeriods);
   const categoryTrend = buildCategoryTrend(transactions, trendPeriods, 4);
@@ -156,7 +170,7 @@ export function Reports({ t, onBack }) {
       </div>
       <ARule style={{ marginTop: 14 }} />
       <div style={{ padding: '14px 0 0' }}>
-        <ALabel>[02] MONTH · OVER · MONTH</ALabel>
+        <ALabel>[05] MONTH · OVER · MONTH</ALabel>
         <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4, height: 110, marginTop: 14 }}>
           {momSpend.map((v, i) => {
             const h = (v / momMax) * 100;
@@ -177,7 +191,7 @@ export function Reports({ t, onBack }) {
         </div>
       </div>
       <ARule style={{ marginTop: 14 }} />
-      <div style={{ padding: '14px 0 4px' }}><ALabel>[03] TOP · CATEGORIES</ALabel></div>
+      <div style={{ padding: '14px 0 4px' }}><ALabel>[06] TOP · CATEGORIES</ALabel></div>
       {cats.map(([k, v]) => {
         const c = categoryTree[k] || { label: k, glyph: '·' };
         return (
@@ -195,21 +209,27 @@ export function Reports({ t, onBack }) {
         );
       })}
       <ARule style={{ marginTop: 14 }} />
-      <div style={{ padding: '14px 0 4px' }}><ALabel>[04] TOP · MERCHANTS</ALabel></div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 30px 90px', borderTop: '1px solid ' + A.rule2 }}>
-        {MERCHANTS.slice(0, 8).map((m, i) => (
-          <React.Fragment key={i}>
-            <div style={{ padding: '9px 0', fontSize: 12, borderBottom: '1px solid ' + A.rule2 }}>{m.name}</div>
-            <div style={{ padding: '9px 0', fontSize: 10, color: A.muted, borderBottom: '1px solid ' + A.rule2, textAlign: 'center' }}>{m.n}×</div>
-            <div style={{ padding: '9px 0', fontSize: 12, fontVariantNumeric: 'tabular-nums', textAlign: 'right', borderBottom: '1px solid ' + A.rule2 }}>
-              {fmtMoney(m.amt, t.currency, t.decimals)}
-            </div>
-          </React.Fragment>
-        ))}
-      </div>
+      <div style={{ padding: '14px 0 4px' }}><ALabel>[07] TOP · MERCHANTS</ALabel></div>
+      {topMerchants.length === 0 ? (
+        <div style={{ padding: '12px 0', fontSize: 11, color: A.muted, letterSpacing: 1, borderBottom: '1px solid ' + A.rule2 }}>
+          NO MERCHANTS THIS PERIOD
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 30px 90px', borderTop: '1px solid ' + A.rule2 }}>
+          {topMerchants.map((m, i) => (
+            <React.Fragment key={i}>
+              <div style={{ padding: '9px 0', fontSize: 12, borderBottom: '1px solid ' + A.rule2 }}>{m.name}</div>
+              <div style={{ padding: '9px 0', fontSize: 10, color: A.muted, borderBottom: '1px solid ' + A.rule2, textAlign: 'center' }}>{m.n}×</div>
+              <div style={{ padding: '9px 0', fontSize: 12, fontVariantNumeric: 'tabular-nums', textAlign: 'right', borderBottom: '1px solid ' + A.rule2 }}>
+                {fmtMoney(m.amt, t.currency, t.decimals)}
+              </div>
+            </React.Fragment>
+          ))}
+        </div>
+      )}
       <ARule style={{ marginTop: 14 }} />
       <div style={{ padding: '14px 0 0' }}>
-        <ALabel>[05] DETECTED · INSIGHTS</ALabel>
+        <ALabel>[08] DETECTED · INSIGHTS</ALabel>
         {insights.length === 0 ? (
           <div style={{ padding: '10px 0', borderBottom: '1px solid ' + A.rule2, fontSize: 11, color: A.muted, letterSpacing: 1 }}>
             NOT ENOUGH DATA YET
