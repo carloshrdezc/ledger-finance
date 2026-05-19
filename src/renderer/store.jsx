@@ -1,5 +1,6 @@
 import React from 'react';
-import { TRANSACTIONS, CATEGORY_TREE, BUDGETS, ACCOUNTS, BILLS, GOALS, INVESTMENTS, TRADES } from './data';
+import { TRANSACTIONS, CATEGORY_TREE, DEFAULT_CAT_TREE, BUDGETS, ACCOUNTS, BILLS, GOALS, INVESTMENTS, TRADES } from './data';
+import { isAppEmptyFor, isDefaultCatTreeFor } from './sampleData.mjs';
 import {
   addMonths,
   buildBudgetRows,
@@ -50,21 +51,21 @@ function migrateBills(bills) {
 export const StoreCtx = React.createContext(null);
 
 export function StoreProvider({ children }) {
-  const [txs, setTxs]         = useLS('ledger:tx',      TRANSACTIONS);
-  const [catTree, setCatTree]  = useLS('ledger:cats',    CATEGORY_TREE);
-  const [budgets, setBudgets]  = useLS('ledger:budgets', BUDGETS);
+  const [txs, setTxs]         = useLS('ledger:tx',      []);
+  const [catTree, setCatTree]  = useLS('ledger:cats',    DEFAULT_CAT_TREE);
+  const [budgets, setBudgets]  = useLS('ledger:budgets', []);
   const [hidden, setHidden]    = useLS('ledger:hidden',  []);
-  const [accounts, setAccounts] = useLS('ledger:accounts', ACCOUNTS);
+  const [accounts, setAccounts] = useLS('ledger:accounts', []);
   const [selectedPeriod, setSelectedPeriod] = useLS('ledger:period', monthKey(new Date()));
-  const [bills, setBills] = useLS('ledger:bills', BILLS);
+  const [bills, setBills] = useLS('ledger:bills', []);
   React.useEffect(() => {
     setBills(prev => migrateBills(prev));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  const [goals, setGoals] = useLS('ledger:goals', GOALS);
+  const [goals, setGoals] = useLS('ledger:goals', []);
   const [goalContributions, setGoalContributions] = useLS('ledger:goalContributions', []);
   const [budgetStartDay, setBudgetStartDay] = useLS('ledger:budgetStartDay', 1);
-  const [investments, setInvestments] = useLS('ledger:investments', INVESTMENTS);
-  const [trades, setTrades]           = useLS('ledger:trades', TRADES);
+  const [investments, setInvestments] = useLS('ledger:investments', []);
+  const [trades, setTrades]           = useLS('ledger:trades', []);
   const [dismissedAlertIds, setDismissedAlertIds] = useLS('ledger:dismissedAlerts', []);
   const [rates, setRates] = useLS('ledger:fxRates', DEFAULT_RATES);
   const [ratesUpdated, setRatesUpdated] = useLS('ledger:fxRatesUpdated', {});
