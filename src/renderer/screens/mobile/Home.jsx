@@ -7,7 +7,7 @@ import { useStore } from '../../store';
 import { useFx } from '../../useFx';
 import EmptySectionHint from '../../components/EmptySectionHint';
 
-export default function Home({ t, onAcct, onAddTx, onViewAll }) {
+export default function Home({ t, onAcct, onAdd, onViewAll }) {
   const { accounts, accountsWithBalance, accountsIncludedInTotals, transactions, billRows, alertRows, rates } = useStore();
   const { toReporting } = useFx(t.currency || 'USD');
   const now = new Date();
@@ -84,7 +84,7 @@ export default function Home({ t, onAcct, onAddTx, onViewAll }) {
             <EmptySectionHint
               message="Add your first account to see your net worth."
               ctaLabel="ADD ACCOUNT"
-              onCta={onAddTx}
+              onCta={onAdd}
             />
           </div>
         ) : (
