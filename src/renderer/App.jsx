@@ -96,6 +96,32 @@ function MobileApp({ t, setAccent, setDensity, setDecimals, setCurrency }) {
   const push = (screen, params = {}) => setNavStack(s => [...s, { screen, params }]);
   const pop = () => setNavStack(s => s.slice(0, -1));
 
+  // Resolve an alert route (string from alerts.mjs) to either a tab switch or
+  // overlay push. Tab targets clear the overlay stack.
+  const goToRoute = React.useCallback((route, params = {}) => {
+    if (!route) return;
+    // Tab-level destinations
+    if (route === 'accounts' || route === 'budgets' || route === 'tx' || route === 'home' || route === 'more') {
+      setNavStack([]);
+      setTab(route);
+      return;
+    }
+    // Goals live behind MORE on mobile - jump to MORE tab
+    if (route === 'goals') {
+      setNavStack([]);
+      setTab('more');
+      return;
+    }
+    // Investments do not exist on mobile yet - fall back to More
+    if (route === 'investments') {
+      setNavStack([]);
+      setTab('more');
+      return;
+    }
+    // Otherwise treat as an overlay screen key
+    push(route, params);
+  }, []);
+
   const current = navStack.length > 0 ? navStack[navStack.length - 1] : null;
 
   const renderOverlay = () => {
@@ -109,7 +135,7 @@ function MobileApp({ t, setAccent, setDensity, setDecimals, setCurrency }) {
       case 'goal':       return <GoalDetail {...props} goal={params.goalId} />;
       case 'cc':         return <CCDetail {...props} acct={params.acct} />;
       case 'bills':      return <BillsHub {...props} />;
-      case 'alerts':     return <AlertsHub {...props} />;
+      case 'alerts':     return <AlertsHub {...props} onNavigate={goToRoute} />;
       case 'settings':   return <Settings {...props} setAccent={setAccent} setDensity={setDensity} setDecimals={setDecimals} setCurrency={setCurrency} />;
       case 'categories': return <CategoriesEditor {...props} />;
       default: return null;
