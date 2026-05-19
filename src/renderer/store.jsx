@@ -309,6 +309,25 @@ export function StoreProvider({ children }) {
     setGoalContributions(prev => prev.filter(c => c.goalId !== id));
   }, [setGoals, setGoalContributions]);
 
+  const addBudget = React.useCallback(({ cat, limit, rollover }) => {
+    const entry = {
+      cat,
+      limit: Math.max(0, Number(limit) || 0),
+      spent: 0,
+      ...(rollover != null ? { rollover: Number(rollover) || 0 } : {}),
+    };
+    setBudgets(prev => prev.some(b => b.cat === cat) ? prev : [...prev, entry]);
+    return entry;
+  }, [setBudgets]);
+
+  const updateBudget = React.useCallback((cat, patch) => {
+    setBudgets(prev => prev.map(b => b.cat === cat ? { ...b, ...patch } : b));
+  }, [setBudgets]);
+
+  const removeBudget = React.useCallback(cat => {
+    setBudgets(prev => prev.filter(b => b.cat !== cat));
+  }, [setBudgets]);
+
   const goToPreviousPeriod = React.useCallback(() => {
     setSelectedPeriod(period => addMonths(period, -1));
   }, [setSelectedPeriod]);
@@ -381,6 +400,9 @@ export function StoreProvider({ children }) {
       addCategory,
       budgets,
       setBudgets,
+      addBudget,
+      updateBudget,
+      removeBudget,
       budgetRows,
       bills,
       setBills,

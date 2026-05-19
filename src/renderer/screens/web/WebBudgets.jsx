@@ -5,11 +5,13 @@ import PeriodSwitcher from '../../components/PeriodSwitcher';
 import WebShell from './WebShell';
 import { CATEGORIES, fmtMoney } from '../../data';
 import { useStore } from '../../store';
+import BudgetFormModal from '../../components/BudgetFormModal';
 
 export default function WebBudgets({ t, onNavigate, onAdd }) {
-  const { budgetRows, setBudgets, periodLabel } = useStore();
+  const { budgetRows, budgets, setBudgets, periodLabel } = useStore();
   const [editing, setEditing] = React.useState(null);
   const [editVal, setEditVal] = React.useState('');
+  const [modalEdit, setModalEdit] = React.useState(null); // null | 'new' | budget object
 
   const totalBudget = budgetRows.reduce((s, b) => s + b.limit, 0);
   const totalSpent = budgetRows.reduce((s, b) => s + b.spent, 0);
@@ -36,25 +38,37 @@ export default function WebBudgets({ t, onNavigate, onAdd }) {
             TOTAL SPENT · AVAILABLE · BASE {fmtMoney(totalBudget, t.currency, false)}
           </div>
         </div>
-        <PeriodSwitcher />
+        <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+          <PeriodSwitcher />
+          <button onClick={() => setModalEdit('new')} style={{
+            all: 'unset', cursor: 'pointer', fontSize: 11, letterSpacing: 1.5,
+            padding: '10px 18px', background: A.ink, color: A.bg,
+          }}>+ NEW BUDGET</button>
+        </div>
       </div>
 
       <div style={{ marginTop: 24, borderTop: '2px solid ' + A.ink }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 160px 120px 120px 80px', padding: '8px 0', fontSize: 9, color: A.muted, letterSpacing: 1.2, borderBottom: '1px solid ' + A.rule2 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 160px 120px 120px 80px 32px', padding: '8px 0', fontSize: 9, color: A.muted, letterSpacing: 1.2, borderBottom: '1px solid ' + A.rule2 }}>
           <div>CATEGORY</div>
           <div>PROGRESS</div>
           <div style={{ textAlign: 'right' }}>SPENT</div>
           <div style={{ textAlign: 'right' }}>AVAILABLE</div>
           <div style={{ textAlign: 'right' }}>LEFT</div>
+          <div />
         </div>
 
-        {budgetRows.map(b => {
+        {budgetRows.length === 0 ? (
+          <div style={{ padding: '32px 0', textAlign: 'center', color: A.muted, fontSize: 12, letterSpacing: 0.8 }}>
+            NO BUDGETS YET. CLICK "+ NEW BUDGET" TO CREATE ONE.
+          </div>
+        ) : budgetRows.map(b => {
           const pct = Math.min(b.spent / Math.max(b.available, 1), 1.2);
           const over = b.left < 0;
           const cat = CATEGORIES[b.cat];
+          const rawBudget = budgets.find(x => x.cat === b.cat);
 
           return (
-            <div key={b.cat} style={{ display: 'grid', gridTemplateColumns: '1fr 160px 120px 120px 80px', padding: t.density === 'compact' ? '10px 0' : '14px 0', borderBottom: '1px solid ' + A.rule2, alignItems: 'center' }}>
+            <div key={b.cat} style={{ display: 'grid', gridTemplateColumns: '1fr 160px 120px 120px 80px 32px', padding: t.density === 'compact' ? '10px 0' : '14px 0', borderBottom: '1px solid ' + A.rule2, alignItems: 'center' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span style={{ fontSize: 13 }}>{cat?.glyph}</span>
                 <span style={{ fontSize: 11, fontWeight: 500 }}>{cat?.label || b.cat.toUpperCase()}</span>
@@ -92,14 +106,26 @@ export default function WebBudgets({ t, onNavigate, onAdd }) {
               <div style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontSize: 12, color: b.left < 0 ? A.neg : t.accent }}>
                 {b.left < 0 ? '-' : '+'}{fmtMoney(Math.abs(b.left), t.currency, t.decimals)}
               </div>
+              <div style={{ textAlign: 'right' }}>
+                <button onClick={() => rawBudget && setModalEdit(rawBudget)} title="Edit"
+                  style={{ all: 'unset', cursor: 'pointer', fontSize: 10, color: A.muted, padding: '4px 6px' }}>✎</button>
+              </div>
             </div>
           );
         })}
       </div>
 
       <div style={{ marginTop: 12, fontSize: 9, color: A.muted, letterSpacing: 1 }}>
-        CLICK AVAILABLE AMOUNT TO EDIT BASE LIMIT
+        CLICK AVAILABLE TO EDIT LIMIT INLINE · CLICK ✎ FOR FULL EDIT/DELETE · CLICK "+ NEW BUDGET" TO ADD
       </div>
+
+      {modalEdit && (
+        <BudgetFormModal
+          t={t}
+          editBudget={modalEdit === 'new' ? null : modalEdit}
+          onClose={() => setModalEdit(null)}
+        />
+      )}
     </WebShell>
   );
 }
