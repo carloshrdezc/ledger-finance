@@ -4,6 +4,7 @@ import { AsciiSpark, ARule, ALabel, ADetailCell, CategoryTrendChart, IncomeExpen
 import PeriodSwitcher from '../../components/PeriodSwitcher';
 import { fmtMoney, fmtSigned, fmtPct, dayLabel, catBreadcrumb } from '../../data';
 import { useStore } from '../../store';
+import { useFx } from '../../useFx';
 import ImportExport from '../../components/ImportExport';
 import { exportReportCSV } from '../../importExport';
 import RecurringFormSheet from '../../components/RecurringFormSheet';
@@ -20,6 +21,7 @@ import {
 // ── Reports ──────────────────────────────────────────────────────────────────
 export function Reports({ t, onBack, onGoToRoute }) {
   const { transactions, periodTransactions, categoryTree, selectedPeriod, periodLabel, accounts, bills, rates, setTxFilter } = useStore();
+  const { toReporting } = useFx(t.currency || 'USD');
   const drillTo = (filter) => {
     if (!onGoToRoute) return;
     setTxFilter(filter || null);
@@ -50,13 +52,13 @@ export function Reports({ t, onBack, onGoToRoute }) {
   const previousPeriod = addMonths(selectedPeriod, -1);
   const previousPeriodTxs = filterTransactionsForPeriod(transactions, previousPeriod);
   const previousTotal = previousPeriodTxs.filter(x => x.amt < 0)
-    .reduce((s, x) => s + Math.abs(x.ccy === 'USD' ? x.amt : x.amt * 1.08), 0);
+    .reduce((s, x) => s + Math.abs(toReporting(x.amt, x.ccy)), 0);
   const total = reportTxs.filter(x => x.amt < 0)
-    .reduce((s, x) => s + Math.abs(x.ccy === 'USD' ? x.amt : x.amt * 1.08), 0);
+    .reduce((s, x) => s + Math.abs(toReporting(x.amt, x.ccy)), 0);
   const byCat = {};
   reportTxs.filter(x => x.amt < 0).forEach(x => {
     const k = (x.path || [x.cat])[0];
-    byCat[k] = (byCat[k] || 0) + Math.abs(x.ccy === 'USD' ? x.amt : x.amt * 1.08);
+    byCat[k] = (byCat[k] || 0) + Math.abs(toReporting(x.amt, x.ccy));
   });
   const cats = Object.entries(byCat).sort((a, b) => b[1] - a[1]).slice(0, 6);
   const maxCat = cats[0] ? cats[0][1] : 1;
@@ -67,7 +69,7 @@ export function Reports({ t, onBack, onGoToRoute }) {
     const key = (tx.name || '').split(' · ')[0];
     if (!key) return;
     const curr = merchantMap[key] || { name: key, amt: 0, n: 0 };
-    curr.amt += Math.abs(tx.ccy === 'USD' ? tx.amt : tx.amt * 1.08);
+    curr.amt += Math.abs(toReporting(tx.amt, tx.ccy));
     curr.n += 1;
     merchantMap[key] = curr;
   });
@@ -83,7 +85,7 @@ export function Reports({ t, onBack, onGoToRoute }) {
   const momPeriods = getRecentPeriods(selectedPeriod, 12);
   const momSpend = momPeriods.map(p => filterTransactionsForPeriod(transactions, p)
     .filter(x => x.amt < 0)
-    .reduce((s, x) => s + Math.abs(x.ccy === 'USD' ? x.amt : x.amt * 1.08), 0));
+    .reduce((s, x) => s + Math.abs(toReporting(x.amt, x.ccy)), 0));
   const momMax = Math.max(...momSpend, 1);
   const momAvg = momSpend.reduce((s, v) => s + v, 0) / momSpend.length;
 
@@ -92,7 +94,7 @@ export function Reports({ t, onBack, onGoToRoute }) {
   const prevByCat = {};
   previousPeriodTxs.filter(x => x.amt < 0).forEach(x => {
     const k = (x.path || [x.cat])[0];
-    prevByCat[k] = (prevByCat[k] || 0) + Math.abs(x.ccy === 'USD' ? x.amt : x.amt * 1.08);
+    prevByCat[k] = (prevByCat[k] || 0) + Math.abs(toReporting(x.amt, x.ccy));
   });
   const allCatKeys = new Set([...Object.keys(byCat), ...Object.keys(prevByCat)]);
   let topGrowth = null;
@@ -129,12 +131,12 @@ export function Reports({ t, onBack, onGoToRoute }) {
 
   // 4. Savings rate for current period: (income - expenses) / income.
   const periodIncome = reportTxs.filter(x => x.amt > 0 && x.cat !== 'transfer')
-    .reduce((s, x) => s + (x.ccy === 'USD' ? x.amt : x.amt * 1.08), 0);
+    .reduce((s, x) => s + toReporting(x.amt, x.ccy), 0);
   const periodExpense = total;
   const savingsRate = periodIncome > 0 ? ((periodIncome - periodExpense) / periodIncome) * 100 : null;
   // Compare to prior period.
   const prevIncome = previousPeriodTxs.filter(x => x.amt > 0 && x.cat !== 'transfer')
-    .reduce((s, x) => s + (x.ccy === 'USD' ? x.amt : x.amt * 1.08), 0);
+    .reduce((s, x) => s + toReporting(x.amt, x.ccy), 0);
   const prevSavingsRate = prevIncome > 0 ? ((prevIncome - previousTotal) / prevIncome) * 100 : null;
   const savingsDelta = (savingsRate != null && prevSavingsRate != null) ? savingsRate - prevSavingsRate : null;
 
@@ -300,6 +302,7 @@ export function Reports({ t, onBack, onGoToRoute }) {
 // ── Reports Calendar ──────────────────────────────────────────────────────────
 export function ReportsCalendar({ t, onBack, onGoToRoute }) {
   const { periodTransactions, selectedPeriod, periodLabel, setTxFilter } = useStore();
+  const { toReporting } = useFx(t.currency || 'USD');
   const drillTo = (filter) => {
     if (!onGoToRoute) return;
     setTxFilter(filter || null);
@@ -310,7 +313,7 @@ export function ReportsCalendar({ t, onBack, onGoToRoute }) {
     const day = String(i + 1).padStart(2, '0');
     return periodTransactions
       .filter(x => x.date === `${selectedPeriod}-${day}` && x.amt < 0)
-      .reduce((s, x) => s + Math.abs(x.ccy === 'USD' ? x.amt : x.amt * 1.08), 0);
+      .reduce((s, x) => s + Math.abs(toReporting(x.amt, x.ccy)), 0);
   });
   const max = Math.max(...cells, 1);
   const total = cells.reduce((a, b) => a + b, 0);
@@ -323,7 +326,7 @@ export function ReportsCalendar({ t, onBack, onGoToRoute }) {
     const d = new Date(`${tx.date}T00:00:00`);
     // Date.getDay(): 0 = Sunday. Re-map so Mon = 0 ... Sun = 6.
     const dow = (d.getDay() + 6) % 7;
-    weekdayTotals[dow] += Math.abs(tx.ccy === 'USD' ? tx.amt : tx.amt * 1.08);
+    weekdayTotals[dow] += Math.abs(toReporting(tx.amt, tx.ccy));
   }
   const maxWeekday = Math.max(...weekdayTotals, 1);
 
