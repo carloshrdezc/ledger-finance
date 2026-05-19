@@ -148,7 +148,7 @@ export default function WebReports({ t, onNavigate, onAdd }) {
         <div>
           <ALabel>[03] SPEND · BY · CATEGORY · TREND</ALabel>
           <div style={{ marginTop: 12, borderTop: '2px solid ' + A.ink, paddingTop: 14 }}>
-            <CategoryTrendChart rows={categoryTrend} periods={trendPeriods} accent={t.accent} />
+            <CategoryTrendChart rows={categoryTrend} periods={trendPeriods} accent={t.accent} categoryTree={categoryTree} />
           </div>
           <div style={{ marginTop: 12, borderTop: '1px solid ' + A.rule2 }}>
             {cats.map(([k, v]) => {

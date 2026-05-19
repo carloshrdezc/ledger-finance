@@ -197,7 +197,7 @@ export function Reports({ t, onBack, onGoToRoute }) {
       <div style={{ padding: '14px 0 0' }}>
         <ALabel>[03] CATEGORY · TREND</ALabel>
         <div style={{ marginTop: 12 }}>
-          <CategoryTrendChart rows={categoryTrend} periods={trendPeriods} height={120} accent={t.accent} />
+          <CategoryTrendChart rows={categoryTrend} periods={trendPeriods} height={120} accent={t.accent} categoryTree={categoryTree} />
         </div>
       </div>
       <ARule style={{ marginTop: 14 }} />
