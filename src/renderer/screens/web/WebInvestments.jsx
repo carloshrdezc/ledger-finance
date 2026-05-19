@@ -41,6 +41,46 @@ function chartDateLabels(period) {
   return [fmt(start), fmt(q1), fmt(mid), fmt(q3), fmt(end)];
 }
 
+// Portfolio value at a given ISO date based on cumulative trades up to that
+// date and current prices. (Approximation — uses current prices instead of
+// historical ones, mirroring the existing portfolioCurve function.)
+function portfolioValueAt(investments, trades, isoDate) {
+  const sharesAtT = {};
+  for (const trade of trades) {
+    if (trade.date <= isoDate) {
+      sharesAtT[trade.ticker] = (sharesAtT[trade.ticker] || 0) +
+        (trade.type === 'buy' ? trade.shares : -trade.shares);
+    }
+  }
+  return investments.reduce((sum, h) => sum + (sharesAtT[h.ticker] || 0) * h.price, 0);
+}
+
+function isoDaysAgo(days) {
+  const d = new Date();
+  d.setDate(d.getDate() - days);
+  return d.toISOString().slice(0, 10);
+}
+
+function ytdStartIso() {
+  const d = new Date();
+  return `${d.getFullYear()}-01-01`;
+}
+
+function computePerformance(investments, trades, current) {
+  if (current <= 0) return [];
+  const windows = [
+    ['1M',  isoDaysAgo(30)],
+    ['3M',  isoDaysAgo(90)],
+    ['YTD', ytdStartIso()],
+    ['1Y',  isoDaysAgo(365)],
+  ];
+  return windows.map(([k, iso]) => {
+    const start = portfolioValueAt(investments, trades, iso);
+    if (start <= 0) return [k, null];
+    return [k, ((current - start) / start) * 100];
+  });
+}
+
 export default function WebInvestments({ t, onNavigate, onAdd }) {
   const { investments, trades, addTrade, updateHolding, removeHolding, setInvestments } = useStore();
   const [period, setPeriod] = React.useState('3M');
@@ -53,6 +93,10 @@ export default function WebInvestments({ t, onNavigate, onAdd }) {
 
   const spark      = React.useMemo(() => portfolioCurve(investments, trades, period), [investments, trades, period]);
   const dateLabels = React.useMemo(() => chartDateLabels(period), [period]);
+  const performance = React.useMemo(
+    () => computePerformance(investments, trades, totalPort),
+    [investments, trades, totalPort],
+  );
 
   return (
     <WebShell active="investments" t={t} onNavigate={onNavigate} onAdd={onAdd}>
@@ -118,12 +162,16 @@ export default function WebInvestments({ t, onNavigate, onAdd }) {
 
           <ALabel style={{ marginTop: 28 }}>[04] PERFORMANCE</ALabel>
           <div style={{ marginTop: 12, borderTop: '2px solid ' + A.ink, display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 1, background: A.rule2, border: '1px solid ' + A.rule2 }}>
-            {[['1M','+2.40%'],['3M','+8.12%'],['YTD','+12.4%'],['1Y','+18.4%']].map(([k, v]) => (
-              <div key={k} style={{ background: A.bg, padding: '14px 16px' }}>
-                <div style={{ fontSize: 9, color: A.muted, letterSpacing: 1.2 }}>{k}</div>
-                <div style={{ fontSize: 18, fontVariantNumeric: 'tabular-nums', color: t.accent, marginTop: 6 }}>{v}</div>
-              </div>
-            ))}
+            {performance.map(([k, v]) => {
+              const display = v == null ? '—' : (v >= 0 ? '+' : '') + v.toFixed(2) + '%';
+              const color = v == null ? A.muted : (v >= 0 ? t.accent : A.neg);
+              return (
+                <div key={k} style={{ background: A.bg, padding: '14px 16px' }}>
+                  <div style={{ fontSize: 9, color: A.muted, letterSpacing: 1.2 }}>{k}</div>
+                  <div style={{ fontSize: 18, fontVariantNumeric: 'tabular-nums', color, marginTop: 6 }}>{display}</div>
+                </div>
+              );
+            })}
           </div>
         </div>
 
