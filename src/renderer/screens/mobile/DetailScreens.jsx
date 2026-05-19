@@ -863,8 +863,9 @@ export function AlertsHub({ t, onBack, onNavigate }) {
 
 // ── Settings ──────────────────────────────────────────────────────────────────
 const SETTINGS_CURRENCIES = ['USD', 'EUR', 'GBP', 'JPY', 'CAD', 'AUD', 'CHF', 'MXN'];
+const SETTINGS_THEMES = ['light', 'dark', 'auto'];
 
-export function Settings({ t, onBack, onNavigate, setAccent, setDensity, setDecimals, setCurrency }) {
+export function Settings({ t, onBack, onNavigate, setAccent, setDensity, setDecimals, setCurrency, setTheme }) {
   const { budgetStartDay, setBudgetStartDay, reset } = useStore();
   const [showIO, setShowIO] = React.useState(false);
   const [confirmReset, setConfirmReset] = React.useState(false);
@@ -877,6 +878,13 @@ export function Settings({ t, onBack, onNavigate, setAccent, setDensity, setDeci
   const cycleCurrency = () => {
     const idx = SETTINGS_CURRENCIES.indexOf(t.currency);
     setCurrency(SETTINGS_CURRENCIES[(idx + 1) % SETTINGS_CURRENCIES.length]);
+  };
+
+  const cycleTheme = () => {
+    if (!setTheme) return;
+    const current = SETTINGS_THEMES.includes(t.theme) ? t.theme : 'light';
+    const idx = SETTINGS_THEMES.indexOf(current);
+    setTheme(SETTINGS_THEMES[(idx + 1) % SETTINGS_THEMES.length]);
   };
 
   const commitDay = () => {
@@ -909,6 +917,13 @@ export function Settings({ t, onBack, onNavigate, setAccent, setDensity, setDeci
       <div style={{ marginTop: 14 }}>
         <ALabel>DISPLAY</ALabel>
         <div style={{ marginTop: 6 }}>
+          <button onClick={cycleTheme}
+            style={{ all: 'unset', cursor: 'pointer', display: 'block', width: '100%' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: t.density === 'compact' ? '9px 0' : '11px 0', borderBottom: '1px solid ' + A.rule2 }}>
+              <span style={{ fontSize: 12 }}>THEME</span>
+              <span style={{ fontSize: 11, color: A.muted }}>{(t.theme || 'light').toUpperCase()}</span>
+            </div>
+          </button>
           <div style={{ padding: '11px 0', borderBottom: '1px solid ' + A.rule2 }}>
             <div style={{ fontSize: 10, color: A.muted, marginBottom: 8, letterSpacing: 0.6 }}>ACCENT COLOR</div>
             <div style={{ display: 'flex', gap: 10 }}>

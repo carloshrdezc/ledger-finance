@@ -1,5 +1,5 @@
 import React from 'react';
-import { A, ACCENTS } from '../../theme';
+import { A, ACCENTS, THEMES } from '../../theme';
 import { ALabel } from '../../components/Shared';
 import WebShell from './WebShell';
 import { useStore } from '../../store';
@@ -7,7 +7,7 @@ import ImportExport from '../../components/ImportExport';
 
 const CURRENCIES = ['USD', 'EUR', 'GBP', 'JPY', 'CAD', 'AUD', 'CHF', 'MXN'];
 
-export default function WebSettings({ t, onNavigate, onAdd, setAccent, setDensity, setDecimals, setCurrency }) {
+export default function WebSettings({ t, onNavigate, onAdd, setAccent, setDensity, setDecimals, setCurrency, setTheme }) {
   const { categoryTree, addCategory, renameCategory, removeCategory, budgetStartDay, setBudgetStartDay, reset } = useStore();
   const [expanded, setExpanded] = React.useState({ edu: true, 'edu.school': true, 'edu.school.supplies': true, food: true });
   const [adding, setAdding] = React.useState(null);
@@ -176,6 +176,20 @@ export default function WebSettings({ t, onNavigate, onAdd, setAccent, setDensit
           {/* DISPLAY */}
           <ALabel>[03] DISPLAY</ALabel>
           <div style={{ marginTop: 12, borderTop: '2px solid ' + A.ink }}>
+            {/* Theme */}
+            <div style={{ padding: '10px 0', borderBottom: '1px solid ' + A.rule2 }}>
+              <div style={{ fontSize: 9, color: A.muted, letterSpacing: 1, marginBottom: 8 }}>THEME</div>
+              <div style={{ display: 'flex', gap: 6 }}>
+                {THEMES.map(({ val, label }) => (
+                  <button key={val} onClick={() => setTheme(val)} style={{
+                    all: 'unset', cursor: 'pointer', fontSize: 10, letterSpacing: 1.2,
+                    padding: '5px 10px', border: '1px solid ' + (t.theme === val ? A.ink : A.rule2),
+                    background: t.theme === val ? A.ink : 'transparent',
+                    color: t.theme === val ? A.bg : A.ink,
+                  }}>{label}</button>
+                ))}
+              </div>
+            </div>
             {/* Accent color */}
             <div style={{ padding: '10px 0', borderBottom: '1px solid ' + A.rule2 }}>
               <div style={{ fontSize: 9, color: A.muted, letterSpacing: 1, marginBottom: 8 }}>ACCENT COLOR</div>
