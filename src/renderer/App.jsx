@@ -130,8 +130,8 @@ function MobileApp({ t, setAccent, setDensity, setDecimals, setCurrency }) {
     const props = { t, onBack: pop, onNavigate: push };
     switch (screen) {
       case 'acct':       return <AccountDetail {...props} acct={params.acct} />;
-      case 'reports':    return <Reports {...props} />;
-      case 'reports-cal':return <ReportsCalendar {...props} />;
+      case 'reports':    return <Reports {...props} onGoToRoute={goToRoute} />;
+      case 'reports-cal':return <ReportsCalendar {...props} onGoToRoute={goToRoute} />;
       case 'goal':       return <GoalDetail {...props} goal={params.goalId} />;
       case 'cc':         return <CCDetail {...props} acct={params.acct} />;
       case 'bills':      return <BillsHub {...props} />;
