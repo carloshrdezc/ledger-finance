@@ -4,6 +4,7 @@ import { ARule, ALabel } from '../../components/Shared';
 import { CATEGORIES, CCY_SYM } from '../../data';
 import { useStore } from '../../store';
 import { getDaysInPeriod } from '../../period.mjs';
+import AccountFormSheet from '../../components/AccountFormSheet';
 
 export default function AddSheet({ t, onClose, editTx = null }) {
   const { addTransactions, updateTx, deleteTx, deleteTransfer, createTransfer, updateTransfer, transactions, accountsWithBalance, selectedPeriod } = useStore();
@@ -39,6 +40,8 @@ export default function AddSheet({ t, onClose, editTx = null }) {
   const [amtFrom, setAmtFrom]       = React.useState(transferLegs ? String(Math.abs(transferLegs.out.amt)) : '');
   const [amtTo, setAmtTo]           = React.useState(transferLegs ? String(Math.abs(transferLegs.in.amt)) : '');
   const [transferNote, setTransferNote] = React.useState(transferLegs?.out.note || '');
+
+  const [showAddAccount, setShowAddAccount] = React.useState(false);
 
   const fromAcctObj = accountsWithBalance.find(a => a.id === fromAcct);
   const toAcctObj   = accountsWithBalance.find(a => a.id === toAcct);
@@ -94,6 +97,48 @@ export default function AddSheet({ t, onClose, editTx = null }) {
     }
     onClose();
   };
+
+  if (accountsWithBalance.length === 0) {
+    return (
+      <>
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 100,
+          background: 'rgba(0,0,0,0.5)',
+          display: 'flex', alignItems: 'flex-end',
+          fontFamily: A.font,
+        }} onClick={onClose}>
+          <div onClick={(e) => e.stopPropagation()} style={{
+            background: A.bg, width: '100%', borderTop: '2px solid ' + A.ink,
+            padding: '24px 18px',
+          }}>
+            <div style={{ fontSize: 9, color: A.muted, letterSpacing: 1.2 }}>ADD TRANSACTION</div>
+            <div style={{ fontSize: 14, marginTop: 12, lineHeight: 1.5 }}>
+              No accounts yet. Add an account to start tracking transactions.
+            </div>
+            <div style={{ display: 'flex', gap: 8, marginTop: 18 }}>
+              <button onClick={onClose} style={{
+                all: 'unset', cursor: 'pointer', flex: 1, textAlign: 'center',
+                fontSize: 11, letterSpacing: 1.2,
+                padding: '12px 0', border: '1px solid ' + A.rule2, color: A.muted,
+              }}>CANCEL</button>
+              <button onClick={() => setShowAddAccount(true)} style={{
+                all: 'unset', cursor: 'pointer', flex: 2, textAlign: 'center',
+                fontSize: 11, letterSpacing: 1.2,
+                padding: '12px 0', border: '1px solid ' + A.ink, background: A.ink, color: A.bg,
+              }}>+ ADD ACCOUNT</button>
+            </div>
+          </div>
+        </div>
+        {showAddAccount && (
+          <AccountFormSheet
+            account={null}
+            t={t}
+            onClose={() => { setShowAddAccount(false); onClose(); }}
+          />
+        )}
+      </>
+    );
+  }
 
   return (
     <div onClick={onClose} style={{
