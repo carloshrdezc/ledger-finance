@@ -2,7 +2,7 @@ import React from 'react';
 import { A, ACCENTS } from '../../theme';
 import { AsciiSpark, ARule, ALabel, ADetailCell, CategoryTrendChart, IncomeExpenseChart, LineChart } from '../../components/Shared';
 import PeriodSwitcher from '../../components/PeriodSwitcher';
-import { MERCHANTS, MOM_SPEND, fmtMoney, fmtSigned, fmtPct, dayLabel, catBreadcrumb } from '../../data';
+import { MERCHANTS, fmtMoney, fmtSigned, fmtPct, dayLabel, catBreadcrumb } from '../../data';
 import { useStore } from '../../store';
 import ImportExport from '../../components/ImportExport';
 import RecurringFormSheet from '../../components/RecurringFormSheet';
@@ -34,6 +34,14 @@ export function Reports({ t, onBack }) {
   const incomeExpense = buildIncomeExpenseSeries(transactions, trendPeriods);
   const categoryTrend = buildCategoryTrend(transactions, trendPeriods, 4);
   const netWorthTrend = buildNetWorthTrend(accounts, transactions, trendPeriods);
+
+  // Rolling 12-month spend (absolute expense totals, USD-normalized).
+  const momPeriods = getRecentPeriods(selectedPeriod, 12);
+  const momSpend = momPeriods.map(p => filterTransactionsForPeriod(transactions, p)
+    .filter(x => x.amt < 0)
+    .reduce((s, x) => s + Math.abs(x.ccy === 'USD' ? x.amt : x.amt * 1.08), 0));
+  const momMax = Math.max(...momSpend, 1);
+  const momAvg = momSpend.reduce((s, v) => s + v, 0) / momSpend.length;
 
   // ── Detected Insights ────────────────────────────────────────────────────
   // 1. Top-growing category vs previous period (largest absolute increase).
@@ -149,22 +157,22 @@ export function Reports({ t, onBack }) {
       <div style={{ padding: '14px 0 0' }}>
         <ALabel>[02] MONTH · OVER · MONTH</ALabel>
         <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4, height: 110, marginTop: 14 }}>
-          {MOM_SPEND.map((v, i) => {
-            const max = Math.max(...MOM_SPEND);
-            const h = (v / max) * 100;
-            const isCurrent = i === MOM_SPEND.length - 1;
+          {momSpend.map((v, i) => {
+            const h = (v / momMax) * 100;
+            const isCurrent = i === momSpend.length - 1;
+            const period = momPeriods[i]; // 'YYYY-MM'
+            const monthIdx = parseInt(period.slice(5, 7), 10) - 1;
+            const monthShort = ['JA','FE','MR','AP','MY','JN','JL','AU','SE','OC','NO','DE'][monthIdx] || '';
             return (
-              <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+              <div key={period} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
                 <div style={{ width: '100%', height: h, background: isCurrent ? t.accent : A.ink, opacity: isCurrent ? 1 : 0.85 }} />
-                <div style={{ fontSize: 8, color: A.muted, letterSpacing: 0.4 }}>
-                  {['JN','JL','AU','SE','OC','NO','DE','JA','FE','MR','AP','MY'][i]}
-                </div>
+                <div style={{ fontSize: 8, color: A.muted, letterSpacing: 0.4 }}>{monthShort}</div>
               </div>
             );
           })}
         </div>
         <div style={{ fontSize: 10, color: A.muted, marginTop: 8, letterSpacing: 1 }}>
-          AVG · {fmtMoney(MOM_SPEND.reduce((s, v) => s + v, 0) / MOM_SPEND.length, t.currency, false)} / MO
+          AVG · {fmtMoney(momAvg, t.currency, false)} / MO
         </div>
       </div>
       <ARule style={{ marginTop: 14 }} />
