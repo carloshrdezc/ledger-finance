@@ -5,12 +5,14 @@ import WebShell from './WebShell';
 import { fmtMoney, dayLabel } from '../../data';
 import { useStore } from '../../store';
 import { getDaysInPeriod } from '../../period.mjs';
+import GoalFormModal from '../../components/GoalFormModal';
 
 export default function WebGoals({ t, onNavigate, onAdd }) {
   const { goals, goalContributions, contributeToGoal, accountsWithBalance, selectedPeriod } = useStore();
   const [contributing, setContributing] = React.useState(null);
   const [contribAmt, setContribAmt] = React.useState('');
   const [acct, setAcct] = React.useState(accountsWithBalance.find(a => a.type === 'SAV')?.id || accountsWithBalance[0]?.id || 'chk');
+  const [editing, setEditing] = React.useState(null); // null | 'new' | goal object
   const defaultDay = Math.min(new Date().getDate(), getDaysInPeriod(selectedPeriod));
   const defaultDate = `${selectedPeriod}-${String(defaultDay).padStart(2, '0')}`;
 
@@ -28,15 +30,26 @@ export default function WebGoals({ t, onNavigate, onAdd }) {
 
   return (
     <WebShell active="goals" t={t} onNavigate={onNavigate} onAdd={onAdd}>
-      <div>
-        <ALabel>[01] GOALS · {goals.length} ACTIVE</ALabel>
-        <div style={{ fontSize: 48, letterSpacing: -1.5, fontVariantNumeric: 'tabular-nums', lineHeight: 1, marginTop: 6 }}>
-          {fmtMoney(totalCurrent, t.currency, t.decimals)}
-          <span style={{ color: A.muted, fontSize: 24 }}> · {fmtMoney(totalTarget, t.currency, false)}</span>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div>
+          <ALabel>[01] GOALS · {goals.length} ACTIVE</ALabel>
+          <div style={{ fontSize: 48, letterSpacing: -1.5, fontVariantNumeric: 'tabular-nums', lineHeight: 1, marginTop: 6 }}>
+            {fmtMoney(totalCurrent, t.currency, t.decimals)}
+            <span style={{ color: A.muted, fontSize: 24 }}> · {fmtMoney(totalTarget, t.currency, false)}</span>
+          </div>
+          <div style={{ fontSize: 11, color: A.muted, marginTop: 4, letterSpacing: 1 }}>SAVED · TARGET · {goalContributions.length} CONTRIBUTIONS</div>
         </div>
-        <div style={{ fontSize: 11, color: A.muted, marginTop: 4, letterSpacing: 1 }}>SAVED · TARGET · {goalContributions.length} CONTRIBUTIONS</div>
+        <button onClick={() => setEditing('new')} style={{
+          all: 'unset', cursor: 'pointer', fontSize: 11, letterSpacing: 1.5,
+          padding: '10px 18px', background: A.ink, color: A.bg,
+        }}>+ NEW GOAL</button>
       </div>
 
+      {goals.length === 0 ? (
+        <div style={{ marginTop: 32, padding: 32, border: '1.5px dashed ' + A.rule2, textAlign: 'center', color: A.muted, fontSize: 12, letterSpacing: 0.8 }}>
+          NO GOALS YET. CLICK "+ NEW GOAL" TO CREATE ONE.
+        </div>
+      ) : (
       <div style={{ marginTop: 24, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
         {goals.map(g => {
           const pct = Math.min(g.current / g.target, 1);
@@ -49,7 +62,12 @@ export default function WebGoals({ t, onNavigate, onAdd }) {
             <div key={g.id} style={{ border: '1px solid ' + (done ? t.accent : A.rule2), padding: 20 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
                 <div style={{ fontSize: 12, fontWeight: 600, letterSpacing: 0.8 }}>{g.name}</div>
-                {done && <div style={{ fontSize: 9, color: t.accent, letterSpacing: 1.4 }}>COMPLETE</div>}
+                <div style={{ display: 'flex', gap: 12, alignItems: 'baseline' }}>
+                  {done && <div style={{ fontSize: 9, color: t.accent, letterSpacing: 1.4 }}>COMPLETE</div>}
+                  <button onClick={() => setEditing(g)} style={{
+                    all: 'unset', cursor: 'pointer', fontSize: 10, color: A.muted, letterSpacing: 1,
+                  }}>EDIT</button>
+                </div>
               </div>
 
               <div style={{ marginTop: 12, fontSize: 28, fontVariantNumeric: 'tabular-nums', letterSpacing: -1 }}>
@@ -57,6 +75,7 @@ export default function WebGoals({ t, onNavigate, onAdd }) {
               </div>
               <div style={{ fontSize: 10, color: A.muted, marginTop: 2, letterSpacing: 0.8 }}>
                 of {fmtMoney(g.target, t.currency, t.decimals)} target
+                {g.targetDate && ' · BY ' + g.targetDate}
               </div>
 
               <div style={{ marginTop: 12, height: 6, background: A.rule2 }}>
@@ -111,6 +130,15 @@ export default function WebGoals({ t, onNavigate, onAdd }) {
           );
         })}
       </div>
+      )}
+
+      {editing && (
+        <GoalFormModal
+          t={t}
+          editGoal={editing === 'new' ? null : editing}
+          onClose={() => setEditing(null)}
+        />
+      )}
     </WebShell>
   );
 }

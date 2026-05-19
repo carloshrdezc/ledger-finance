@@ -286,6 +286,29 @@ export function StoreProvider({ children }) {
     setTxs(prev => prev.some(tx => tx.id === result.transaction.id) ? prev : [...prev, result.transaction]);
   }, [goals, setGoals, setGoalContributions, setTxs]);
 
+  const addGoal = React.useCallback(({ name, target, targetDate }) => {
+    const id = 'g_' + Date.now();
+    const goal = {
+      id,
+      name: (name || '').trim().toUpperCase(),
+      target: Math.max(0, Number(target) || 0),
+      current: 0,
+      createdAt: new Date().toISOString().slice(0, 10),
+      ...(targetDate ? { targetDate } : {}),
+    };
+    setGoals(prev => [...prev, goal]);
+    return goal;
+  }, [setGoals]);
+
+  const updateGoal = React.useCallback((id, patch) => {
+    setGoals(prev => prev.map(g => g.id === id ? { ...g, ...patch } : g));
+  }, [setGoals]);
+
+  const deleteGoal = React.useCallback(id => {
+    setGoals(prev => prev.filter(g => g.id !== id));
+    setGoalContributions(prev => prev.filter(c => c.goalId !== id));
+  }, [setGoals, setGoalContributions]);
+
   const goToPreviousPeriod = React.useCallback(() => {
     setSelectedPeriod(period => addMonths(period, -1));
   }, [setSelectedPeriod]);
@@ -376,6 +399,9 @@ export function StoreProvider({ children }) {
       goalContributions,
       setGoalContributions,
       contributeToGoal,
+      addGoal,
+      updateGoal,
+      deleteGoal,
       selectedPeriod,
       setSelectedPeriod,
       periodLabel,
