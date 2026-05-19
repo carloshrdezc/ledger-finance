@@ -9,7 +9,7 @@ import FxRatesSection from '../../components/FxRatesSection';
 const CURRENCIES = ['USD', 'EUR', 'GBP', 'JPY', 'CAD', 'AUD', 'CHF', 'MXN'];
 
 export default function WebSettings({ t, onNavigate, onAdd, setAccent, setDensity, setDecimals, setCurrency, setTheme }) {
-  const { categoryTree, addCategory, renameCategory, removeCategory, budgetStartDay, setBudgetStartDay, reset } = useStore();
+  const { categoryTree, addCategory, renameCategory, removeCategory, budgetStartDay, setBudgetStartDay, reset, loadSampleData, resetAndLoadSampleData } = useStore();
   const [expanded, setExpanded] = React.useState({ edu: true, 'edu.school': true, 'edu.school.supplies': true, food: true });
   const [adding, setAdding] = React.useState(null);
   const [renaming, setRenaming] = React.useState(null);
@@ -54,6 +54,27 @@ export default function WebSettings({ t, onNavigate, onAdd, setAccent, setDensit
       reset();
       setConfirmReset(false);
     }
+  };
+
+  const [showResetAndLoad, setShowResetAndLoad] = React.useState(false);
+
+  const handleLoadSampleClick = () => {
+    try {
+      loadSampleData();
+    } catch (err) {
+      if (err.message === 'LEDGER_NOT_EMPTY') {
+        setShowResetAndLoad(true);
+      } else {
+        throw err;
+      }
+    }
+  };
+
+  const handleResetAndLoad = () => {
+    // Use the store's atomic reset+seed action — bypasses the precondition
+    // check that would observe stale closure state, and batches the writes.
+    resetAndLoadSampleData();
+    setShowResetAndLoad(false);
   };
 
   const renderNode = (key, node, path, depth) => {
@@ -290,10 +311,54 @@ export default function WebSettings({ t, onNavigate, onAdd, setAccent, setDensit
                   {confirmReset ? 'CLICK AGAIN TO CONFIRM ↩' : 'RESET ALL DATA'}
                 </button>
               </div>
+              <div style={{ padding: '10px 0', borderBottom: '1px solid ' + A.rule2 }}>
+                <div style={{ fontSize: 9, color: A.muted, letterSpacing: 1, marginBottom: 8 }}>SAMPLE · DATA</div>
+                <button onClick={handleLoadSampleClick} style={{
+                  all: 'unset', cursor: 'pointer', fontSize: 10, letterSpacing: 1.2,
+                  padding: '5px 12px', border: '1px solid ' + A.ink, color: A.ink,
+                }}>
+                  LOAD SAMPLE DATA
+                </button>
+              </div>
             </div>
           </div>
         </div>
       </div>
+      {showResetAndLoad && (
+        <div
+          onClick={(e) => { if (e.target === e.currentTarget) setShowResetAndLoad(false); }}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 1000,
+            background: 'rgba(0,0,0,0.5)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontFamily: A.font,
+          }}
+        >
+          <div style={{
+            background: A.bg, color: A.ink,
+            border: '2px solid ' + A.ink,
+            padding: '24px 22px',
+            width: 'min(360px, 90vw)',
+          }}>
+            <div style={{ fontSize: 9, color: A.muted, letterSpacing: 1.2 }}>
+              SAMPLE · DATA
+            </div>
+            <div style={{ fontSize: 12, marginTop: 10, lineHeight: 1.5 }}>
+              Your data isn't empty. Loading sample data would mix real and demo entries. Reset to empty first, then load samples?
+            </div>
+            <div style={{ display: 'flex', gap: 8, marginTop: 18, justifyContent: 'flex-end' }}>
+              <button onClick={() => setShowResetAndLoad(false)} style={{
+                all: 'unset', cursor: 'pointer', fontSize: 10, letterSpacing: 1.2,
+                padding: '5px 12px', border: '1px solid ' + A.rule2, color: A.muted,
+              }}>CANCEL</button>
+              <button onClick={handleResetAndLoad} style={{
+                all: 'unset', cursor: 'pointer', fontSize: 10, letterSpacing: 1.2,
+                padding: '5px 12px', border: '1px solid ' + A.neg, background: A.neg, color: A.bg,
+              }}>RESET & LOAD SAMPLES</button>
+            </div>
+          </div>
+        </div>
+      )}
     </WebShell>
   );
 }

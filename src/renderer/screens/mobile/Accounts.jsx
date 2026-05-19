@@ -5,6 +5,7 @@ import { fmtMoney, fmtSigned, dayLabel, catBreadcrumb } from '../../data';
 import { useStore } from '../../store';
 import { useFx } from '../../useFx';
 import AccountFormSheet from '../../components/AccountFormSheet';
+import EmptySectionHint from '../../components/EmptySectionHint';
 
 export function Accounts({ t, onAcct }) {
   const { accountsWithBalance, accountsIncludedInTotals, allAccountsWithBalance, reorderAccounts } = useStore();
@@ -100,6 +101,13 @@ export function Accounts({ t, onAcct }) {
       ) : (
         /* ── Normal grouped view ── */
         <>
+          {accountsWithBalance.length === 0 ? (
+            <EmptySectionHint
+              message="No accounts yet."
+              ctaLabel="ADD ACCOUNT"
+              onCta={() => setSheetAccount(null)}
+            />
+          ) : null}
           {groups.map(([title, rows]) => (
             <div key={title}>
               <div style={{ padding: '12px 0 8px', display: 'flex', justifyContent: 'space-between' }}>

@@ -4,6 +4,7 @@ import { ALabel } from '../../components/Shared';
 import PeriodSwitcher from '../../components/PeriodSwitcher';
 import WebShell from './WebShell';
 import WebAddModal from './WebAddModal';
+import EmptySectionHint from '../../components/EmptySectionHint';
 import { fmtMoney, fmtSigned, dayLabel, catGlyph, catBreadcrumb } from '../../data';
 import { useStore } from '../../store';
 import { exportCSV } from '../../importExport';
@@ -116,6 +117,15 @@ export default function WebTransactions({ t, onNavigate, onAdd }) {
         <div style={{ display: 'grid', gridTemplateColumns: '90px 24px 1fr 280px 90px 120px', padding: '8px 0', fontSize: 9, color: A.muted, letterSpacing: 1.2, borderBottom: '1px solid ' + A.rule2 }}>
           <div>DATE</div><div /><div>MERCHANT</div><div>CATEGORY</div><div>ACCT</div><div style={{ textAlign: 'right' }}>AMOUNT</div>
         </div>
+        {visible.length === 0 ? (
+          <EmptySectionHint
+            message={transactions.length === 0
+              ? "No transactions yet. Add one with the + button or import a bank file."
+              : "No transactions match the current filter."}
+            ctaLabel={transactions.length === 0 ? "ADD TRANSACTION" : null}
+            onCta={transactions.length === 0 ? onAdd : null}
+          />
+        ) : null}
         {visible.map(tx => (
           <div
             key={tx.id}

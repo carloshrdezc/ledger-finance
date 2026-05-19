@@ -5,6 +5,7 @@ import PeriodSwitcher from '../../components/PeriodSwitcher';
 import { fmtMoney, fmtSigned, dayLabel, catGlyph, catBreadcrumb } from '../../data';
 import { useStore } from '../../store';
 import AddSheet from './AddSheet';
+import EmptySectionHint from '../../components/EmptySectionHint';
 
 export default function Transactions({ t }) {
   const { transactions, periodTransactions, deleteTx, deleteTransfer, accountsWithBalance, periodLabel, txFilter, clearTxFilter } = useStore();
@@ -106,6 +107,14 @@ export default function Transactions({ t }) {
           }}>{filterChipLabel} · ✕</button>
         )}
       </div>
+
+      {visible.length === 0 ? (
+        <EmptySectionHint
+          message={transactions.length === 0
+            ? "No transactions yet. Add one with the + button."
+            : "No transactions match the current filter."}
+        />
+      ) : null}
 
       {dates.map(date => (
         <div key={date}>

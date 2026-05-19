@@ -870,12 +870,31 @@ const SETTINGS_CURRENCIES = ['USD', 'EUR', 'GBP', 'JPY', 'CAD', 'AUD', 'CHF', 'M
 const SETTINGS_THEMES = ['light', 'dark', 'auto'];
 
 export function Settings({ t, onBack, onNavigate, setAccent, setDensity, setDecimals, setCurrency, setTheme }) {
-  const { budgetStartDay, setBudgetStartDay, reset } = useStore();
+  const { budgetStartDay, setBudgetStartDay, reset, loadSampleData, resetAndLoadSampleData } = useStore();
   const [showIO, setShowIO] = React.useState(false);
   const [confirmReset, setConfirmReset] = React.useState(false);
   const [editingDay, setEditingDay] = React.useState(false);
   const [dayInput, setDayInput] = React.useState(String(budgetStartDay));
+  const [showResetAndLoad, setShowResetAndLoad] = React.useState(false);
   const resetTimerRef = React.useRef(null);
+
+  const handleLoadSampleClick = () => {
+    try {
+      loadSampleData();
+    } catch (err) {
+      if (err.message === 'LEDGER_NOT_EMPTY') {
+        setShowResetAndLoad(true);
+      } else {
+        throw err;
+      }
+    }
+  };
+
+  const handleResetAndLoad = () => {
+    // Atomic reset+seed via the store action — see CAR-76 review notes.
+    resetAndLoadSampleData();
+    setShowResetAndLoad(false);
+  };
 
   React.useEffect(() => () => clearTimeout(resetTimerRef.current), []);
 
@@ -1028,10 +1047,53 @@ export function Settings({ t, onBack, onNavigate, setAccent, setDensity, setDeci
               </span>
             </div>
           </button>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '11px 0', borderBottom: '1px solid ' + A.rule2 }}>
+            <div>
+              <div style={{ fontSize: 9, color: A.muted, letterSpacing: 1 }}>SAMPLE · DATA</div>
+              <div style={{ fontSize: 11, marginTop: 3 }}>Load demo entries</div>
+            </div>
+            <button onClick={handleLoadSampleClick} style={{
+              all: 'unset', cursor: 'pointer', fontSize: 10, letterSpacing: 1.2,
+              padding: '5px 10px', border: '1px solid ' + A.ink, color: A.ink,
+            }}>LOAD</button>
+          </div>
         </div>
       </div>
 
       {showIO && <ImportExport onClose={() => setShowIO(false)} />}
+      {showResetAndLoad && (
+        <div
+          onClick={(e) => { if (e.target === e.currentTarget) setShowResetAndLoad(false); }}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 1000,
+            background: 'rgba(0,0,0,0.5)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontFamily: A.font,
+          }}
+        >
+          <div style={{
+            background: A.bg, color: A.ink,
+            border: '2px solid ' + A.ink,
+            padding: '24px 22px',
+            width: 'min(320px, 88vw)',
+          }}>
+            <div style={{ fontSize: 9, color: A.muted, letterSpacing: 1.2 }}>SAMPLE · DATA</div>
+            <div style={{ fontSize: 12, marginTop: 10, lineHeight: 1.5 }}>
+              Your data isn't empty. Reset to empty first, then load samples?
+            </div>
+            <div style={{ display: 'flex', gap: 8, marginTop: 18, justifyContent: 'flex-end' }}>
+              <button onClick={() => setShowResetAndLoad(false)} style={{
+                all: 'unset', cursor: 'pointer', fontSize: 10, letterSpacing: 1.2,
+                padding: '5px 12px', border: '1px solid ' + A.rule2, color: A.muted,
+              }}>CANCEL</button>
+              <button onClick={handleResetAndLoad} style={{
+                all: 'unset', cursor: 'pointer', fontSize: 10, letterSpacing: 1.2,
+                padding: '5px 12px', border: '1px solid ' + A.neg, background: A.neg, color: A.bg,
+              }}>RESET & LOAD</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

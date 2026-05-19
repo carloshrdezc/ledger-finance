@@ -1,5 +1,6 @@
 import React from 'react';
-import { TRANSACTIONS, CATEGORY_TREE, BUDGETS, ACCOUNTS, BILLS, GOALS, INVESTMENTS, TRADES } from './data';
+import { TRANSACTIONS, CATEGORY_TREE, DEFAULT_CAT_TREE, BUDGETS, ACCOUNTS, BILLS, GOALS, INVESTMENTS, TRADES } from './data';
+import { isAppEmptyFor, isDefaultCatTreeFor } from './sampleData.mjs';
 import {
   addMonths,
   buildBudgetRows,
@@ -49,23 +50,61 @@ function migrateBills(bills) {
 
 export const StoreCtx = React.createContext(null);
 
+// CAR-76: synchronous pre-render migration. Existing users upgrading from a
+// pre-CAR-76 build have non-empty slices in localStorage but no
+// `ledger:welcomeSeen` key — they should NOT see the welcome modal flicker
+// on first post-upgrade boot. By writing `ledger:welcomeSeen=true` here
+// (before any React render), `useLS` picks up the right initial value and
+// the welcome modal never mounts for them.
+//
+// Brand-new users (everything empty) still get welcomeSeen=false and see
+// the welcome modal.
+//
+// Runs once per page load. Safe across hot reloads (idempotent).
+(function migrateWelcomeSeenForExistingUsers() {
+  try {
+    if (typeof localStorage === 'undefined') return;
+    if (localStorage.getItem('ledger:welcomeSeen') !== null) return;
+
+    const slices = ['ledger:tx', 'ledger:accounts', 'ledger:bills', 'ledger:goals',
+                    'ledger:budgets', 'ledger:investments', 'ledger:trades'];
+    for (const key of slices) {
+      const raw = localStorage.getItem(key);
+      if (!raw) continue;
+      try {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          localStorage.setItem('ledger:welcomeSeen', JSON.stringify(true));
+          return;
+        }
+      } catch {
+        // Malformed JSON in a slice — skip; useLS will fall back to default.
+      }
+    }
+  } catch {
+    // localStorage unavailable (private browsing, denied permissions, etc.)
+    // — leave welcomeSeen unset; user will see the welcome modal once.
+  }
+})();
+
 export function StoreProvider({ children }) {
-  const [txs, setTxs]         = useLS('ledger:tx',      TRANSACTIONS);
-  const [catTree, setCatTree]  = useLS('ledger:cats',    CATEGORY_TREE);
-  const [budgets, setBudgets]  = useLS('ledger:budgets', BUDGETS);
+  const [txs, setTxs]         = useLS('ledger:tx',      []);
+  const [catTree, setCatTree]  = useLS('ledger:cats',    DEFAULT_CAT_TREE);
+  const [budgets, setBudgets]  = useLS('ledger:budgets', []);
   const [hidden, setHidden]    = useLS('ledger:hidden',  []);
-  const [accounts, setAccounts] = useLS('ledger:accounts', ACCOUNTS);
+  const [accounts, setAccounts] = useLS('ledger:accounts', []);
   const [selectedPeriod, setSelectedPeriod] = useLS('ledger:period', monthKey(new Date()));
-  const [bills, setBills] = useLS('ledger:bills', BILLS);
+  const [bills, setBills] = useLS('ledger:bills', []);
   React.useEffect(() => {
     setBills(prev => migrateBills(prev));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  const [goals, setGoals] = useLS('ledger:goals', GOALS);
+  const [goals, setGoals] = useLS('ledger:goals', []);
   const [goalContributions, setGoalContributions] = useLS('ledger:goalContributions', []);
   const [budgetStartDay, setBudgetStartDay] = useLS('ledger:budgetStartDay', 1);
-  const [investments, setInvestments] = useLS('ledger:investments', INVESTMENTS);
-  const [trades, setTrades]           = useLS('ledger:trades', TRADES);
+  const [investments, setInvestments] = useLS('ledger:investments', []);
+  const [trades, setTrades]           = useLS('ledger:trades', []);
   const [dismissedAlertIds, setDismissedAlertIds] = useLS('ledger:dismissedAlerts', []);
+  const [welcomeSeen, setWelcomeSeen] = useLS('ledger:welcomeSeen', false);
   const [rates, setRates] = useLS('ledger:fxRates', DEFAULT_RATES);
   const [ratesUpdated, setRatesUpdated] = useLS('ledger:fxRatesUpdated', {});
   const [fxMigrationToastSeen, setFxMigrationToastSeen] = useLS('ledger:fxMigrationToastSeen', false);
@@ -77,6 +116,10 @@ export function StoreProvider({ children }) {
       setTxs(prev => migrateTransactions(prev));
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // (CAR-76 migration is handled by the module-scope IIFE above, before any
+  // StoreProvider render — that avoids the welcome-modal flicker for existing
+  // users.)
 
   const hiddenSet = React.useMemo(() => new Set(hidden), [hidden]);
   const transactions = React.useMemo(() => txs.filter(t => !hiddenSet.has(t.id)), [txs, hiddenSet]);
@@ -133,6 +176,11 @@ export function StoreProvider({ children }) {
       fxMigrationToastSeen,
     }),
     [billRows, budgetRows, goals, accountsWithBalance, investments, dismissedAlertIds, rates, ratesUpdated, transactions, fxMigrationToastSeen],
+  );
+
+  const isAppEmpty = React.useMemo(
+    () => isAppEmptyFor({ txs, accounts, bills, goals, budgets, investments, trades }),
+    [txs, accounts, bills, goals, budgets, investments, trades],
   );
 
   const addTransactions = React.useCallback(incoming => setTxs(prev => {
@@ -469,9 +517,40 @@ export function StoreProvider({ children }) {
     setDismissedAlertIds([]);
   }, [setDismissedAlertIds]);
 
-  const reset = React.useCallback(() => {
+  const dismissWelcome = React.useCallback(() => {
+    setWelcomeSeen(true);
+  }, [setWelcomeSeen]);
+
+  // Internal: actually seed the store with demo data. No precondition check.
+  // Used by both `loadSampleData` (with check) and `resetAndLoadSampleData`
+  // (which has just wiped the store, so the check would be a tautology AND
+  // would observe stale closure state from before the reset — see CAR-76
+  // code review notes).
+  const _seedSampleData = React.useCallback(() => {
+    setTxs(TRANSACTIONS);
+    setAccounts(ACCOUNTS);
+    setBudgets(BUDGETS);
+    setBills(BILLS);
+    setGoals(GOALS);
+    setInvestments(INVESTMENTS);
+    setTrades(TRADES);
+    setCatTree(prev => isDefaultCatTreeFor(prev) ? CATEGORY_TREE : prev);
+  }, [setTxs, setAccounts, setBudgets, setBills, setGoals, setInvestments, setTrades, setCatTree]);
+
+  const loadSampleData = React.useCallback(() => {
+    if (!isAppEmptyFor({ txs, accounts, bills, goals, budgets, investments, trades })) {
+      throw new Error('LEDGER_NOT_EMPTY');
+    }
+    _seedSampleData();
+  }, [txs, accounts, bills, goals, budgets, investments, trades, _seedSampleData]);
+
+  // Atomic "reset then load samples" — performs both updates in the same React
+  // batch, so the user goes from non-empty → empty → seeded in a single render.
+  // Bypasses loadSampleData's precondition because we just wiped the store; the
+  // closure-captured `txs`/`accounts`/etc. would still be non-empty here.
+  const resetAndLoadSampleData = React.useCallback(() => {
     setTxs([]);
-    setCatTree({});
+    setCatTree(DEFAULT_CAT_TREE);
     setBudgets([]);
     setAccounts([]);
     setBills([]);
@@ -487,7 +566,30 @@ export function StoreProvider({ children }) {
     setRates(DEFAULT_RATES);
     setRatesUpdated({});
     setFxMigrationToastSeen(false);
-  }, [setTxs, setCatTree, setBudgets, setAccounts, setBills, setGoals, setGoalContributions, setSelectedPeriod, setHidden, setBudgetStartDay, setInvestments, setTrades, setDismissedAlertIds, setTxFilterRaw, setRates, setRatesUpdated, setFxMigrationToastSeen]);
+    setWelcomeSeen(true); // already past the welcome — don't re-show it
+    _seedSampleData();
+  }, [_seedSampleData, setTxs, setCatTree, setBudgets, setAccounts, setBills, setGoals, setGoalContributions, setSelectedPeriod, setHidden, setBudgetStartDay, setInvestments, setTrades, setDismissedAlertIds, setTxFilterRaw, setRates, setRatesUpdated, setFxMigrationToastSeen, setWelcomeSeen]);
+
+  const reset = React.useCallback(() => {
+    setTxs([]);
+    setCatTree(DEFAULT_CAT_TREE);
+    setBudgets([]);
+    setAccounts([]);
+    setBills([]);
+    setGoals([]);
+    setGoalContributions([]);
+    setSelectedPeriod(monthKey(new Date()));
+    setHidden([]);
+    setBudgetStartDay(1);
+    setInvestments([]);
+    setTrades([]);
+    setDismissedAlertIds([]);
+    setTxFilterRaw(null);
+    setRates(DEFAULT_RATES);
+    setRatesUpdated({});
+    setFxMigrationToastSeen(false);
+    setWelcomeSeen(false);
+  }, [setTxs, setCatTree, setBudgets, setAccounts, setBills, setGoals, setGoalContributions, setSelectedPeriod, setHidden, setBudgetStartDay, setInvestments, setTrades, setDismissedAlertIds, setTxFilterRaw, setRates, setRatesUpdated, setFxMigrationToastSeen, setWelcomeSeen]);
 
   return (
     <StoreCtx.Provider value={{
@@ -567,6 +669,11 @@ export function StoreProvider({ children }) {
       resetRates,
       fxMigrationToastSeen,
       setFxMigrationToastSeen,
+      welcomeSeen,
+      dismissWelcome,
+      loadSampleData,
+      resetAndLoadSampleData,
+      isAppEmpty,
     }}>
       {children}
     </StoreCtx.Provider>

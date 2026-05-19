@@ -4,6 +4,7 @@ import { ALabel, ARule } from '../../components/Shared';
 import { CATEGORIES, CCY_SYM } from '../../data';
 import { useStore } from '../../store';
 import { getDaysInPeriod } from '../../period.mjs';
+import AccountFormModal from '../../components/AccountFormModal';
 
 export default function WebAddModal({ t, onClose, editTx = null }) {
   const { addTransactions, updateTx, deleteTx, deleteTransfer, createTransfer, updateTransfer, transactions, accountsWithBalance, selectedPeriod } = useStore();
@@ -38,6 +39,8 @@ export default function WebAddModal({ t, onClose, editTx = null }) {
   const [amtFrom, setAmtFrom]       = React.useState(transferLegs ? String(Math.abs(transferLegs.out.amt)) : '');
   const [amtTo, setAmtTo]           = React.useState(transferLegs ? String(Math.abs(transferLegs.in.amt)) : '');
   const [transferNote, setTransferNote] = React.useState(transferLegs?.out.note || '');
+
+  const [showAddAccount, setShowAddAccount] = React.useState(false);
 
   const fromAcctObj = accountsWithBalance.find(a => a.id === fromAcct);
   const toAcctObj   = accountsWithBalance.find(a => a.id === toAcct);
@@ -99,6 +102,46 @@ export default function WebAddModal({ t, onClose, editTx = null }) {
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, [onClose]);
+
+  if (accountsWithBalance.length === 0) {
+    return (
+      <>
+        <div onClick={onClose} style={{
+          position: 'fixed', inset: 0, zIndex: 1000,
+          background: 'rgba(0,0,0,0.5)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontFamily: A.font,
+        }}>
+          <div onClick={(e) => e.stopPropagation()} style={{
+            background: A.bg, color: A.ink, border: '2px solid ' + A.ink,
+            padding: '28px 24px', width: 'min(380px, 90vw)',
+          }}>
+            <div style={{ fontSize: 9, color: A.muted, letterSpacing: 1.2 }}>ADD TRANSACTION</div>
+            <div style={{ fontSize: 14, marginTop: 12, lineHeight: 1.5 }}>
+              No accounts yet. Add an account to start tracking transactions.
+            </div>
+            <div style={{ display: 'flex', gap: 8, marginTop: 18, justifyContent: 'flex-end' }}>
+              <button onClick={onClose} style={{
+                all: 'unset', cursor: 'pointer', fontSize: 10, letterSpacing: 1.2,
+                padding: '5px 12px', border: '1px solid ' + A.rule2, color: A.muted,
+              }}>CANCEL</button>
+              <button onClick={() => setShowAddAccount(true)} style={{
+                all: 'unset', cursor: 'pointer', fontSize: 10, letterSpacing: 1.2,
+                padding: '5px 12px', border: '1px solid ' + A.ink, background: A.ink, color: A.bg,
+              }}>+ ADD ACCOUNT</button>
+            </div>
+          </div>
+        </div>
+        {showAddAccount && (
+          <AccountFormModal
+            account={null}
+            t={t}
+            onClose={() => { setShowAddAccount(false); onClose(); }}
+          />
+        )}
+      </>
+    );
+  }
 
   return (
     <div onClick={onClose} style={{

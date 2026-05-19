@@ -9,6 +9,7 @@ import {
 import { useStore } from '../../store';
 import { buildNetWorthDailyTrend } from '../../charts.mjs';
 import { useFx } from '../../useFx';
+import EmptySectionHint from '../../components/EmptySectionHint';
 
 const PERIOD_DAYS  = { '1D': 1, '1W': 7, '1M': 30, '3M': 90, '1Y': 365 };
 const PERIOD_LABEL = { '1D': '1D', '1W': '7D', '1M': '30D', '3M': '90D', '1Y': '1Y', 'MAX': 'ALL' };
@@ -65,38 +66,51 @@ export default function Dashboard({ t, onNavigate, onAdd }) {
   return (
     <WebShell active="dashboard" t={t} onNavigate={onNavigate} onAdd={onAdd}>
       {/* Hero */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+      {accountsIncludedInTotals.length === 0 ? (
         <div>
-          <ALabel>[01] NET WORTH · {todayLabel}</ALabel>
-          <div style={{ fontSize: 64, letterSpacing: -2, fontVariantNumeric: 'tabular-nums', lineHeight: 1, marginTop: 8 }}>
-            {fmtMoney(heroVal, t.currency, t.decimals)}
+          <ALabel>[01] NET WORTH</ALabel>
+          <EmptySectionHint
+            message="Add your first account to see your net worth."
+            ctaLabel="ADD ACCOUNT"
+            onCta={onAdd}
+          />
+        </div>
+      ) : (
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+          <div>
+            <ALabel>[01] NET WORTH · {todayLabel}</ALabel>
+            <div style={{ fontSize: 64, letterSpacing: -2, fontVariantNumeric: 'tabular-nums', lineHeight: 1, marginTop: 8 }}>
+              {fmtMoney(heroVal, t.currency, t.decimals)}
+            </div>
+            <div style={{ fontSize: 12, marginTop: 6 }}>
+              <span style={{ color: t.accent }}>{fmtSigned(NW_DELTA, t.currency, t.decimals)} · {fmtPct(NW_PCT)}</span>
+              <span style={{ color: A.muted, marginLeft: 12 }}>{PERIOD_LABEL[period]}</span>
+            </div>
           </div>
-          <div style={{ fontSize: 12, marginTop: 6 }}>
-            <span style={{ color: t.accent }}>{fmtSigned(NW_DELTA, t.currency, t.decimals)} · {fmtPct(NW_PCT)}</span>
-            <span style={{ color: A.muted, marginLeft: 12 }}>{PERIOD_LABEL[period]}</span>
+          <div style={{ display: 'flex', gap: 6 }}>
+            {['1D','1W','1M','3M','1Y','MAX'].map(p => (
+              <span key={p} onClick={() => setPeriod(p)} style={{
+                fontSize: 10, letterSpacing: 1.2, padding: '5px 10px',
+                border: '1px solid ' + (period === p ? A.ink : A.rule2),
+                background: period === p ? A.ink : 'transparent',
+                color: period === p ? A.bg : A.ink, cursor: 'pointer',
+              }}>{p}</span>
+            ))}
           </div>
         </div>
-        <div style={{ display: 'flex', gap: 6 }}>
-          {['1D','1W','1M','3M','1Y','MAX'].map(p => (
-            <span key={p} onClick={() => setPeriod(p)} style={{
-              fontSize: 10, letterSpacing: 1.2, padding: '5px 10px',
-              border: '1px solid ' + (period === p ? A.ink : A.rule2),
-              background: period === p ? A.ink : 'transparent',
-              color: period === p ? A.bg : A.ink, cursor: 'pointer',
-            }}>{p}</span>
-          ))}
-        </div>
-      </div>
+      )}
 
       {/* Sparkline */}
-      <div style={{ marginTop: 18, borderTop: '2px solid ' + A.ink, borderBottom: '1px solid ' + A.rule2, paddingTop: 18 }}>
-        <AsciiSpark data={netWorthSpark} width={780} height={160} stroke={t.accent} hover={scrubIdx} onScrub={setScrub} />
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 9, color: A.muted, marginTop: 6 }}>
-          {chartTicks.map(point => (
-            <span key={point.date}>{dayLabel(point.date)}</span>
-          ))}
+      {transactions.length > 0 && (
+        <div style={{ marginTop: 18, borderTop: '2px solid ' + A.ink, borderBottom: '1px solid ' + A.rule2, paddingTop: 18 }}>
+          <AsciiSpark data={netWorthSpark} width={780} height={160} stroke={t.accent} hover={scrubIdx} onScrub={setScrub} />
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 9, color: A.muted, marginTop: 6 }}>
+            {chartTicks.map(point => (
+              <span key={point.date}>{dayLabel(point.date)}</span>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Alerts */}
       <div style={{ marginTop: 20, marginBottom: 8 }}>
@@ -126,20 +140,28 @@ export default function Dashboard({ t, onNavigate, onAdd }) {
       {/* Cash flow */}
       <div style={{ marginTop: 20, marginBottom: 8 }}>
         <ALabel>[04] {PERIOD_LABEL[period]} · CASH FLOW</ALabel>
-        <div style={{ marginTop: 8, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 1, background: A.rule2, border: '1px solid ' + A.rule2 }}>
-          {[
-            { l: 'IN',  v: inflow,  c: t.accent },
-            { l: 'OUT', v: outflow, c: A.neg    },
-            { l: 'NET', v: net,     c: A.ink    },
-          ].map(x => (
-            <div key={x.l} style={{ background: A.bg, padding: '14px 16px' }}>
-              <div style={{ fontSize: 9, color: A.muted, letterSpacing: 1.2 }}>{x.l}</div>
-              <div style={{ fontSize: 18, fontVariantNumeric: 'tabular-nums', color: x.c, marginTop: 6 }}>
-                {fmtSigned(x.v, t.currency, t.decimals)}
+        {transactions.length === 0 ? (
+          <EmptySectionHint
+            message="Cash flow appears once you have transactions."
+            ctaLabel="ADD TRANSACTION"
+            onCta={onAdd}
+          />
+        ) : (
+          <div style={{ marginTop: 8, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 1, background: A.rule2, border: '1px solid ' + A.rule2 }}>
+            {[
+              { l: 'IN',  v: inflow,  c: t.accent },
+              { l: 'OUT', v: outflow, c: A.neg    },
+              { l: 'NET', v: net,     c: A.ink    },
+            ].map(x => (
+              <div key={x.l} style={{ background: A.bg, padding: '14px 16px' }}>
+                <div style={{ fontSize: 9, color: A.muted, letterSpacing: 1.2 }}>{x.l}</div>
+                <div style={{ fontSize: 18, fontVariantNumeric: 'tabular-nums', color: x.c, marginTop: 6 }}>
+                  {fmtSigned(x.v, t.currency, t.decimals)}
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Two columns */}
@@ -231,15 +253,21 @@ export default function Dashboard({ t, onNavigate, onAdd }) {
       <div style={{ marginTop: 28 }}>
         <ALabel>[08] RECENT · TRANSACTIONS</ALabel>
         <div style={{ marginTop: 8, borderTop: '2px solid ' + A.ink }}>
-          {transactions.slice(0, 8).map(tx => (
-            <div key={tx.id} style={{ display: 'grid', gridTemplateColumns: '80px 16px 1fr 100px 100px', padding: t.density === 'compact' ? '7px 0' : '9px 0', fontSize: 11, borderBottom: '1px solid ' + A.rule2, alignItems: 'center' }}>
-              <div style={{ fontSize: 9, color: A.muted, letterSpacing: 1 }}>{dayLabel(tx.date)}</div>
-              <div>{catGlyph(tx.path || [tx.cat])}</div>
-              <div>{tx.name}<span style={{ color: A.muted, marginLeft: 8, fontSize: 10 }}>{CATEGORIES[tx.cat]?.label}</span></div>
-              <div style={{ color: A.muted, fontSize: 10 }}>{accountsWithBalance.find(a => a.id === tx.acct)?.code}</div>
-              <div style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: tx.amt >= 0 ? t.accent : A.ink }}>{fmtSigned(tx.amt, tx.ccy, t.decimals)}</div>
+          {transactions.length === 0 ? (
+            <div style={{ padding: '12px 0', fontSize: 11, color: A.muted, letterSpacing: 1 }}>
+              NO TRANSACTIONS YET
             </div>
-          ))}
+          ) : (
+            transactions.slice(0, 8).map(tx => (
+              <div key={tx.id} style={{ display: 'grid', gridTemplateColumns: '80px 16px 1fr 100px 100px', padding: t.density === 'compact' ? '7px 0' : '9px 0', fontSize: 11, borderBottom: '1px solid ' + A.rule2, alignItems: 'center' }}>
+                <div style={{ fontSize: 9, color: A.muted, letterSpacing: 1 }}>{dayLabel(tx.date)}</div>
+                <div>{catGlyph(tx.path || [tx.cat])}</div>
+                <div>{tx.name}<span style={{ color: A.muted, marginLeft: 8, fontSize: 10 }}>{CATEGORIES[tx.cat]?.label}</span></div>
+                <div style={{ color: A.muted, fontSize: 10 }}>{accountsWithBalance.find(a => a.id === tx.acct)?.code}</div>
+                <div style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: tx.amt >= 0 ? t.accent : A.ink }}>{fmtSigned(tx.amt, tx.ccy, t.decimals)}</div>
+              </div>
+            ))
+          )}
         </div>
       </div>
     </WebShell>

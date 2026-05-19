@@ -8,6 +8,7 @@ export default defineConfig({
   test: {
     include: [
       'src/renderer/fx.test.mjs',
+      'src/renderer/sampleData.test.mjs',
     ],
     environment: 'node',
     globals: false,

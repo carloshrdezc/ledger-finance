@@ -91,6 +91,23 @@ export const CATEGORY_TREE = {
   }},
 };
 
+// Minimal category tree for new users (Start Fresh). Top-level categories
+// only, no children. Users can extend via the Settings category editor.
+// `CATEGORY_TREE` above is the demo seed used by store.loadSampleData().
+export const DEFAULT_CAT_TREE = {
+  income:  { label: 'INCOME',     glyph: '↑' },
+  food:    { label: 'GROCERIES',  glyph: '◇' },
+  dining:  { label: 'DINING',     glyph: '◆' },
+  rent:    { label: 'RENT',       glyph: '▣' },
+  trans:   { label: 'TRANSPORT',  glyph: '▷' },
+  bills:   { label: 'UTILITIES',  glyph: '▢' },
+  shop:    { label: 'SHOPPING',   glyph: '○' },
+  travel:  { label: 'TRAVEL',     glyph: '▲' },
+  health:  { label: 'HEALTH',     glyph: '+' },
+  subs:    { label: 'SUBSCRIPT.', glyph: '∞' },
+  edu:     { label: 'EDUCATION',  glyph: '✎' },
+};
+
 export function catBreadcrumb(path) {
   const parts = [];
   let node = CATEGORY_TREE;
