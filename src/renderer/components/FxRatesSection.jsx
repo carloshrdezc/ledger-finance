@@ -1,15 +1,20 @@
 import React from 'react';
 import { A } from '../theme';
 import { useStore } from '../store';
-import { DEFAULT_RATES } from '../fx.mjs';
-
-const ALL_CURRENCIES = ['USD', 'EUR', 'GBP', 'JPY', 'CAD', 'AUD', 'CHF', 'MXN'];
+import { ALL_CURRENCIES, DEFAULT_RATES, formatRate } from '../fx.mjs';
 
 export default function FxRatesSection() {
   const { rates, ratesUpdated, setRate, removeRate, resetRates, accounts, allTransactions } = useStore();
   const [editing, setEditing] = React.useState(null);
   const [editVal, setEditVal] = React.useState('');
   const [confirmReset, setConfirmReset] = React.useState(false);
+  const resetTimerRef = React.useRef(null);
+
+  // Clean up the confirm-reset timeout on unmount so we never call setState
+  // on an unmounted component (matches the pattern in mobile Settings).
+  React.useEffect(() => () => {
+    if (resetTimerRef.current) clearTimeout(resetTimerRef.current);
+  }, []);
 
   const ccysInUse = React.useMemo(() => {
     const s = new Set();
@@ -46,6 +51,23 @@ export default function FxRatesSection() {
     setRate(ccy, DEFAULT_RATES[ccy] ?? 1.0);
   };
 
+  const handleResetClick = () => {
+    if (!confirmReset) {
+      setConfirmReset(true);
+      resetTimerRef.current = setTimeout(() => {
+        setConfirmReset(false);
+        resetTimerRef.current = null;
+      }, 3000);
+    } else {
+      if (resetTimerRef.current) {
+        clearTimeout(resetTimerRef.current);
+        resetTimerRef.current = null;
+      }
+      resetRates();
+      setConfirmReset(false);
+    }
+  };
+
   const candidateCurrencies = ALL_CURRENCIES.filter(c => rates[c] == null);
 
   return (
@@ -68,7 +90,7 @@ export default function FxRatesSection() {
               {isEditing ? (
                 <span>1 USD = </span>
               ) : (
-                <span>1 USD = {Number(rate).toFixed(rate >= 10 ? 2 : 4)} {ccy}</span>
+                <span>{formatRate(ccy, Number(rate))}</span>
               )}
               {isEditing && (
                 <input
@@ -128,15 +150,7 @@ export default function FxRatesSection() {
       )}
 
       <div style={{ padding: '10px 0' }}>
-        <button onClick={() => {
-          if (!confirmReset) {
-            setConfirmReset(true);
-            setTimeout(() => setConfirmReset(false), 3000);
-          } else {
-            resetRates();
-            setConfirmReset(false);
-          }
-        }} style={{
+        <button onClick={handleResetClick} style={{
           all: 'unset', cursor: 'pointer', fontSize: 10, letterSpacing: 1.2,
           padding: '5px 12px', border: '1px solid ' + (confirmReset ? A.neg : A.rule2),
           color: confirmReset ? A.bg : A.ink,

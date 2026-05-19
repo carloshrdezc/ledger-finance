@@ -14,6 +14,11 @@ export const DEFAULT_RATES = {
   MXN: 17.2,
 };
 
+// Single source of truth for the currencies the app supports. Settings
+// pickers, the FxRatesSection, and the ALL_CURRENCIES tests all import
+// from here so adding a currency is a one-line change.
+export const ALL_CURRENCIES = Object.keys(DEFAULT_RATES);
+
 function isUsableRate(r) {
   return typeof r === 'number' && Number.isFinite(r) && r > 0;
 }
