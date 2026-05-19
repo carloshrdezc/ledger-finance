@@ -215,17 +215,18 @@ export function ReportsCalendar({ t, onBack }) {
 }
 
 // ── Credit Card Detail ────────────────────────────────────────────────────────
-export function CCDetail({ t, onBack }) {
+export function CCDetail({ t, acct, onBack }) {
   const { transactions, accountsWithBalance } = useStore();
-  const a = accountsWithBalance.find(x => x.id === 'amex') || {};
-  const limit = 10000, used = Math.abs(a.balance), util = used / limit;
-  const txns = transactions.filter(x => x.acct === 'amex').slice(0, 8);
+  const ccAccounts = accountsWithBalance.filter(x => x.type === 'CC');
+  const a = accountsWithBalance.find(x => x.id === acct) || ccAccounts[0] || {};
+  const limit = 10000, used = Math.abs(a.balance || 0), util = limit > 0 ? used / limit : 0;
+  const txns = transactions.filter(x => x.acct === a.id).slice(0, 8);
 
   return (
     <div style={{ padding: '0 18px 20px' }}>
       <div style={{ padding: '10px 0 6px', display: 'flex', justifyContent: 'space-between' }}>
         <button onClick={onBack} style={{ all: 'unset', cursor: 'pointer', fontSize: 10, letterSpacing: 1.2 }}>◂ BACK</button>
-        <div style={{ fontSize: 10, letterSpacing: 1.2, color: A.muted }}>AMEX · ··1009</div>
+        <div style={{ fontSize: 10, letterSpacing: 1.2, color: A.muted }}>{a.name || 'CC'} · {a.code || ''}</div>
       </div>
       <ARule thick />
       <div style={{ padding: '16px 0 8px' }}>
