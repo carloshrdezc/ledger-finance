@@ -177,7 +177,7 @@ export default function Home({ t, onAcct, onAdd, onViewAll }) {
           <EmptySectionHint
             message="Cash flow appears once you have transactions."
             ctaLabel="ADD TRANSACTION"
-            onCta={onAddTx}
+            onCta={onAdd}
           />
         ) : (
           <div style={{ marginTop: 8, display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 1, background: A.rule2, border: '1px solid ' + A.rule2 }}>
