@@ -61,17 +61,6 @@ export default function WebReports({ t, onNavigate, onAdd }) {
     onNavigate('tx');
   }, [setTxFilter, onNavigate]);
 
-  const handleExport = React.useCallback(() => {
-    const csv = exportReportCSV({
-      rangeLabel: heroLabel,
-      transactions: reportTxs,
-      byCategory: cats,
-      topMerchants: merchants,
-    });
-    const stamp = new Date().toISOString().slice(0, 10);
-    downloadFile(`ledger-report-${stamp}.csv`, csv);
-  }, [heroLabel, reportTxs, cats, merchants]);
-
   const byCat = {};
   reportTxs.filter(x => x.amt < 0).forEach(x => {
     const k = (x.path || [x.cat])[0];
@@ -98,6 +87,20 @@ export default function WebReports({ t, onNavigate, onAdd }) {
     merchantMap[key] = curr;
   });
   const merchants = Object.values(merchantMap).sort((a, b) => b.amt - a.amt).slice(0, 8);
+
+  // Defined after cats/merchants so the closure captures the current values.
+  // Plain function (not useCallback) — avoids the temporal-dead-zone trap
+  // that referencing them in a deps array caused.
+  const handleExport = () => {
+    const csv = exportReportCSV({
+      rangeLabel: heroLabel,
+      transactions: reportTxs,
+      byCategory: cats,
+      topMerchants: merchants,
+    });
+    const stamp = new Date().toISOString().slice(0, 10);
+    downloadFile(`ledger-report-${stamp}.csv`, csv);
+  };
 
   return (
     <WebShell active="reports" t={t} onNavigate={onNavigate} onAdd={onAdd}>
