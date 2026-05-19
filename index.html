@@ -8,6 +8,42 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
     <style>
+      /* LEDGER theme tokens. data-theme on <html> swaps palettes. */
+      :root,
+      html[data-theme="light"] {
+        --ledger-bg:    #f4f1ea;
+        --ledger-bg2:   #ece7dd;
+        --ledger-ink:   #15130f;
+        --ledger-ink2:  #4a463e;
+        --ledger-muted: #8c8678;
+        --ledger-rule:  #15130f;
+        --ledger-rule2: #bdb6a3;
+        color-scheme: light;
+      }
+      html[data-theme="dark"] {
+        --ledger-bg:    #14110d;
+        --ledger-bg2:   #1d1a14;
+        --ledger-ink:   #f4f1ea;
+        --ledger-ink2:  #b9b3a3;
+        --ledger-muted: #7a7464;
+        --ledger-rule:  #f4f1ea;
+        --ledger-rule2: #4a463e;
+        color-scheme: dark;
+      }
+      @media (prefers-color-scheme: dark) {
+        html[data-theme="auto"] {
+          --ledger-bg:    #14110d;
+          --ledger-bg2:   #1d1a14;
+          --ledger-ink:   #f4f1ea;
+          --ledger-ink2:  #b9b3a3;
+          --ledger-muted: #7a7464;
+          --ledger-rule:  #f4f1ea;
+          --ledger-rule2: #4a463e;
+          color-scheme: dark;
+        }
+      }
+      html, body { background: var(--ledger-bg); color: var(--ledger-ink); }
+
       @media print {
         @page { margin: 18mm 14mm; size: auto; }
         html, body, #root {

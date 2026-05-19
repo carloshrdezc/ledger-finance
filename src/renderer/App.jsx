@@ -49,7 +49,22 @@ function useTweaks() {
   const [density, setDensity]   = useLS('ledger:density',  'comfortable');
   const [decimals, setDecimals] = useLS('ledger:decimals', true);
   const [currency, setCurrency] = useLS('ledger:currency', 'USD');
-  return { accent, setAccent, density, setDensity, decimals, setDecimals, currency, setCurrency };
+  const [theme, setTheme]       = useLS('ledger:theme',    'light');
+
+  // Apply the theme by setting data-theme on <html>. CSS variables in
+  // index.html resolve from there. 'auto' uses prefers-color-scheme.
+  React.useEffect(() => {
+    const valid = ['light', 'dark', 'auto'].includes(theme) ? theme : 'light';
+    document.documentElement.setAttribute('data-theme', valid);
+  }, [theme]);
+
+  return {
+    accent, setAccent,
+    density, setDensity,
+    decimals, setDecimals,
+    currency, setCurrency,
+    theme, setTheme,
+  };
 }
 
 // ─── Mobile ────────────────────────────────────────────────────────────────
@@ -89,7 +104,7 @@ function ATabs({ active, onTab }) {
   );
 }
 
-function MobileApp({ t, setAccent, setDensity, setDecimals, setCurrency }) {
+function MobileApp({ t, setAccent, setDensity, setDecimals, setCurrency, setTheme }) {
   const [tab, setTab] = React.useState('home');
   const [navStack, setNavStack] = React.useState([]);
   const [showAdd, setShowAdd] = React.useState(false);
@@ -137,7 +152,7 @@ function MobileApp({ t, setAccent, setDensity, setDecimals, setCurrency }) {
       case 'bills':      return <BillsHub {...props} />;
       case 'alerts':     return <AlertsHub {...props} onNavigate={goToRoute} />;
       case 'investments':return <Investments {...props} />;
-      case 'settings':   return <Settings {...props} setAccent={setAccent} setDensity={setDensity} setDecimals={setDecimals} setCurrency={setCurrency} />;
+      case 'settings':   return <Settings {...props} setAccent={setAccent} setDensity={setDensity} setDecimals={setDecimals} setCurrency={setCurrency} setTheme={setTheme} />;
       case 'categories': return <CategoriesEditor {...props} />;
       default: return null;
     }
@@ -177,12 +192,12 @@ function MobileApp({ t, setAccent, setDensity, setDecimals, setCurrency }) {
 
 // ─── Desktop ───────────────────────────────────────────────────────────────
 
-function DesktopApp({ t, setAccent, setDensity, setDecimals, setCurrency }) {
+function DesktopApp({ t, setAccent, setDensity, setDecimals, setCurrency, setTheme }) {
   const [page, setPage] = React.useState('dashboard');
   const [showIO, setShowIO] = React.useState(false);
   const [showAdd, setShowAdd] = React.useState(false);
 
-  const settingsProps = { setAccent, setDensity, setDecimals, setCurrency };
+  const settingsProps = { setAccent, setDensity, setDecimals, setCurrency, setTheme };
   const props = { t, onNavigate: setPage, onAdd: () => setShowAdd(true) };
 
   const renderPage = () => {
@@ -218,7 +233,7 @@ function DesktopApp({ t, setAccent, setDensity, setDecimals, setCurrency }) {
 // ─── Root ──────────────────────────────────────────────────────────────────
 
 export default function App() {
-  const { accent, setAccent, density, setDensity, decimals, setDecimals, currency, setCurrency } = useTweaks();
+  const { accent, setAccent, density, setDensity, decimals, setDecimals, currency, setCurrency, theme, setTheme } = useTweaks();
   const [isMobile, setIsMobile] = React.useState(window.innerWidth < 1024);
 
   React.useEffect(() => {
@@ -227,8 +242,8 @@ export default function App() {
     return () => window.removeEventListener('resize', handler);
   }, []);
 
-  const t = { accent, density, decimals, currency };
-  const tweakProps = { setAccent, setDensity, setDecimals, setCurrency };
+  const t = { accent, density, decimals, currency, theme };
+  const tweakProps = { setAccent, setDensity, setDecimals, setCurrency, setTheme };
 
   return (
     <StoreProvider>
