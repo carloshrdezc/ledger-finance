@@ -1,7 +1,11 @@
 import React from 'react';
 import { A, ACCENTS } from './theme';
-import { StoreProvider } from './store';
+import { StoreProvider, useStore } from './store';
 import ImportExport from './components/ImportExport';
+import Welcome from './screens/Welcome';
+import EmptyApp from './screens/EmptyApp';
+import AccountFormSheet from './components/AccountFormSheet';
+import AccountFormModal from './components/AccountFormModal';
 
 // Mobile screens
 import Home from './screens/mobile/Home';
@@ -232,9 +236,18 @@ function DesktopApp({ t, setAccent, setDensity, setDecimals, setCurrency, setThe
 
 // ─── Root ──────────────────────────────────────────────────────────────────
 
-export default function App() {
+function AccountFromEmpty({ onClose, t, isMobile }) {
+  return isMobile
+    ? <AccountFormSheet onClose={onClose} t={t} account={null} />
+    : <AccountFormModal onClose={onClose} t={t} account={null} />;
+}
+
+function AppShell() {
+  const { welcomeSeen, isAppEmpty } = useStore();
   const { accent, setAccent, density, setDensity, decimals, setDecimals, currency, setCurrency, theme, setTheme } = useTweaks();
   const [isMobile, setIsMobile] = React.useState(window.innerWidth < 1024);
+  const [showImport, setShowImport] = React.useState(false);
+  const [pendingAddAccount, setPendingAddAccount] = React.useState(false);
 
   React.useEffect(() => {
     const handler = () => setIsMobile(window.innerWidth < 1024);
@@ -245,11 +258,41 @@ export default function App() {
   const t = { accent, density, decimals, currency, theme };
   const tweakProps = { setAccent, setDensity, setDecimals, setCurrency, setTheme };
 
+  // Render priority:
+  // 1. Welcome modal overlays everything when welcomeSeen === false.
+  // 2. EmptyApp replaces the normal layout when isAppEmpty.
+  // 3. Otherwise the existing MobileApp / DesktopApp.
+
+  return (
+    <>
+      {isAppEmpty
+        ? <EmptyApp
+            onAddAccount={() => setPendingAddAccount(true)}
+            onImport={() => setShowImport(true)}
+          />
+        : (isMobile
+            ? <MobileApp t={t} {...tweakProps} />
+            : <DesktopApp t={t} {...tweakProps} />)
+      }
+      {!welcomeSeen && (
+        <Welcome onImport={() => setShowImport(true)} />
+      )}
+      {showImport && <ImportExport onClose={() => setShowImport(false)} />}
+      {pendingAddAccount && (
+        <AccountFromEmpty
+          onClose={() => setPendingAddAccount(false)}
+          t={t}
+          isMobile={isMobile}
+        />
+      )}
+    </>
+  );
+}
+
+export default function App() {
   return (
     <StoreProvider>
-      {isMobile
-        ? <MobileApp t={t} {...tweakProps} />
-        : <DesktopApp t={t} {...tweakProps} />}
+      <AppShell />
     </StoreProvider>
   );
 }
