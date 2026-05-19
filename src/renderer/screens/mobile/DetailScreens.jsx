@@ -6,6 +6,7 @@ import { MERCHANTS, fmtMoney, fmtSigned, fmtPct, dayLabel, catBreadcrumb } from 
 import { useStore } from '../../store';
 import ImportExport from '../../components/ImportExport';
 import RecurringFormSheet from '../../components/RecurringFormSheet';
+import GoalFormSheet from '../../components/GoalFormSheet';
 import { addMonths, filterTransactionsForPeriod, formatShortPeriodLabel, getDaysInPeriod } from '../../period.mjs';
 import {
   buildCategoryTrend,
@@ -424,6 +425,19 @@ export function GoalDetail({ t, goalId = 'g1', goal, onBack }) {
   const g = goals.find(x => x.id === actualGoalId) || goals[0];
   const [contribAmt, setContribAmt] = React.useState('');
   const [acct, setAcct] = React.useState(accountsWithBalance.find(a => a.type === 'SAV')?.id || accountsWithBalance[0]?.id || 'chk');
+  const [showEdit, setShowEdit] = React.useState(false);
+  if (!g) {
+    return (
+      <div style={{ padding: '0 18px 20px' }}>
+        <div style={{ padding: '10px 0 6px' }}>
+          <button onClick={onBack} style={{ all: 'unset', cursor: 'pointer', fontSize: 10, letterSpacing: 1.2 }}>◂ BACK</button>
+        </div>
+        <div style={{ padding: 24, fontSize: 12, color: A.muted, letterSpacing: 0.6, textAlign: 'center' }}>
+          NO GOAL SELECTED
+        </div>
+      </div>
+    );
+  }
   const defaultDay = Math.min(new Date().getDate(), getDaysInPeriod(selectedPeriod));
   const defaultDate = `${selectedPeriod}-${String(defaultDay).padStart(2, '0')}`;
   const pct = g.current / g.target;
@@ -492,7 +506,10 @@ export function GoalDetail({ t, goalId = 'g1', goal, onBack }) {
     <div style={{ padding: '0 18px 20px' }}>
       <div style={{ padding: '10px 0 6px', display: 'flex', justifyContent: 'space-between' }}>
         <button onClick={onBack} style={{ all: 'unset', cursor: 'pointer', fontSize: 10, letterSpacing: 1.2 }}>◂ BACK</button>
-        <div style={{ fontSize: 10, letterSpacing: 1.2, color: A.muted }}>GOAL · {g.id.toUpperCase()}</div>
+        <div style={{ display: 'flex', gap: 14, alignItems: 'baseline' }}>
+          <button onClick={() => setShowEdit(true)} style={{ all: 'unset', cursor: 'pointer', fontSize: 10, letterSpacing: 1.2, color: t.accent }}>EDIT</button>
+          <div style={{ fontSize: 10, letterSpacing: 1.2, color: A.muted }}>GOAL · {g.id.toUpperCase()}</div>
+        </div>
       </div>
       <ARule thick />
       <div style={{ padding: '16px 0 8px' }}>
@@ -560,6 +577,14 @@ export function GoalDetail({ t, goalId = 'g1', goal, onBack }) {
       <button onClick={contribute} style={{ all: 'unset', cursor: 'pointer', display: 'block', textAlign: 'center', width: '100%', padding: '14px', background: A.ink, color: A.bg, fontSize: 11, letterSpacing: 2, fontWeight: 700, marginTop: 8 }}>
         + CONTRIBUTE
       </button>
+      {showEdit && (
+        <GoalFormSheet
+          t={t}
+          editGoal={g}
+          onClose={() => setShowEdit(false)}
+          onAfterDelete={() => { setShowEdit(false); onBack(); }}
+        />
+      )}
     </div>
   );
 }
