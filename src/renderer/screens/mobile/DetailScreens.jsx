@@ -229,6 +229,18 @@ export function ReportsCalendar({ t, onBack }) {
   const max = Math.max(...cells, 1);
   const total = cells.reduce((a, b) => a + b, 0);
 
+  // Weekday breakdown: spend per day-of-week (MON..SUN), absolute values.
+  const weekdayLabels = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
+  const weekdayTotals = [0, 0, 0, 0, 0, 0, 0];
+  for (const tx of periodTransactions) {
+    if (tx.amt >= 0 || !tx.date) continue;
+    const d = new Date(`${tx.date}T00:00:00`);
+    // Date.getDay(): 0 = Sunday. Re-map so Mon = 0 ... Sun = 6.
+    const dow = (d.getDay() + 6) % 7;
+    weekdayTotals[dow] += Math.abs(tx.ccy === 'USD' ? tx.amt : tx.amt * 1.08);
+  }
+  const maxWeekday = Math.max(...weekdayTotals, 1);
+
   return (
     <div style={{ padding: '0 18px 20px' }}>
       <div style={{ padding: '10px 0 6px', display: 'flex', justifyContent: 'space-between' }}>
@@ -266,15 +278,18 @@ export function ReportsCalendar({ t, onBack }) {
       <ARule style={{ marginTop: 18 }} />
       <div style={{ padding: '14px 0 0' }}>
         <ALabel>BY · WEEKDAY</ALabel>
-        {[['MON',612.20],['TUE',484.30],['WED',612.10],['THU',348.20],['FRI',892.40],['SAT',1142.80],['SUN',842.18]].map(([day, v]) => (
-          <div key={day} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 0', borderBottom: '1px solid ' + A.rule2 }}>
-            <div style={{ fontSize: 10, letterSpacing: 1.4, width: 30 }}>{day}</div>
-            <div style={{ flex: 1, height: 4, background: A.rule2 }}>
-              <div style={{ width: (v / 1142.80 * 100) + '%', height: '100%', background: t.accent }} />
+        {weekdayLabels.map((day, i) => {
+          const v = weekdayTotals[i];
+          return (
+            <div key={day} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 0', borderBottom: '1px solid ' + A.rule2 }}>
+              <div style={{ fontSize: 10, letterSpacing: 1.4, width: 30 }}>{day}</div>
+              <div style={{ flex: 1, height: 4, background: A.rule2 }}>
+                <div style={{ width: (v / maxWeekday * 100) + '%', height: '100%', background: t.accent }} />
+              </div>
+              <div style={{ fontSize: 11, fontVariantNumeric: 'tabular-nums', width: 80, textAlign: 'right' }}>{fmtMoney(v, t.currency, t.decimals)}</div>
             </div>
-            <div style={{ fontSize: 11, fontVariantNumeric: 'tabular-nums', width: 80, textAlign: 'right' }}>{fmtMoney(v, t.currency, t.decimals)}</div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
