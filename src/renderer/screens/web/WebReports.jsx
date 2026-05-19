@@ -32,7 +32,7 @@ function downloadFile(name, content, mime = 'text/csv') {
 }
 
 export default function WebReports({ t, onNavigate, onAdd }) {
-  const { transactions, periodTransactions, categoryTree, selectedPeriod, periodLabel, accounts, setTxFilter } = useStore();
+  const { transactions, periodTransactions, categoryTree, selectedPeriod, periodLabel, accounts, setTxFilter, rates } = useStore();
 
   const [range, setRange] = React.useState({ kind: 'preset', preset: 'thisMonth' });
   const isMonthRange = range.kind === 'preset' && (range.preset === 'thisMonth' || range.preset === 'lastMonth');
@@ -52,9 +52,9 @@ export default function WebReports({ t, onNavigate, onAdd }) {
   const previousPeriod = addMonths(selectedPeriod, -1);
   const previousTotal = spendTotal(filterTransactionsForPeriod(transactions, previousPeriod));
   const trendPeriods = getRecentPeriods(selectedPeriod, 6);
-  const incomeExpense = buildIncomeExpenseSeries(transactions, trendPeriods);
-  const netWorthTrend = buildNetWorthTrend(accounts, transactions, trendPeriods);
-  const categoryTrend = buildCategoryTrend(transactions, trendPeriods, 5);
+  const incomeExpense = buildIncomeExpenseSeries(transactions, trendPeriods, rates);
+  const netWorthTrend = buildNetWorthTrend(accounts, transactions, trendPeriods, rates);
+  const categoryTrend = buildCategoryTrend(transactions, trendPeriods, 5, rates);
 
   const drillTo = React.useCallback((filter) => {
     setTxFilter(filter || null);

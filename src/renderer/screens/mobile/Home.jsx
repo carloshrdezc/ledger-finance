@@ -6,7 +6,7 @@ import { buildNetWorthDailyTrend } from '../../charts.mjs';
 import { useStore } from '../../store';
 
 export default function Home({ t, onAcct, onAddTx, onViewAll }) {
-  const { accounts, accountsWithBalance, accountsIncludedInTotals, transactions, billRows, alertRows } = useStore();
+  const { accounts, accountsWithBalance, accountsIncludedInTotals, transactions, billRows, alertRows, rates } = useStore();
   const now = new Date();
   const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   const todayIso = now.toISOString().slice(0, 10);
@@ -28,8 +28,8 @@ export default function Home({ t, onAcct, onAddTx, onViewAll }) {
 
   // 30-day net worth daily trend, derived from real transaction history.
   const nwTrend = React.useMemo(
-    () => buildNetWorthDailyTrend(accounts, transactions, todayIso, 30).map(p => p.value),
-    [accounts, transactions, todayIso],
+    () => buildNetWorthDailyTrend(accounts, transactions, todayIso, 30, rates).map(p => p.value),
+    [accounts, transactions, todayIso, rates],
   );
   // Daily spend trend (rolling 30 days, absolute value of expenses per day).
   const spendTrend = React.useMemo(() => {

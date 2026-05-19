@@ -20,7 +20,7 @@ function windowStart(period) {
 }
 
 export default function Dashboard({ t, onNavigate, onAdd }) {
-  const { transactions, budgetRows, accounts, accountsWithBalance, accountsIncludedInTotals, periodLabel, billRows, goals, alertRows } = useStore();
+  const { transactions, budgetRows, accounts, accountsWithBalance, accountsIncludedInTotals, periodLabel, billRows, goals, alertRows, rates } = useStore();
   const [scrub, setScrub] = React.useState(null);
   const [period, setPeriod] = React.useState('1M');
 
@@ -34,8 +34,8 @@ export default function Dashboard({ t, onNavigate, onAdd }) {
 
   const netWorthTrend = React.useMemo(() => {
     const days = period === 'MAX' ? 365 : PERIOD_DAYS[period];
-    return buildNetWorthDailyTrend(accountsIncludedInTotals, transactions, todayIso, days);
-  }, [accountsIncludedInTotals, transactions, todayIso, period]);
+    return buildNetWorthDailyTrend(accountsIncludedInTotals, transactions, todayIso, days, rates);
+  }, [accountsIncludedInTotals, transactions, todayIso, period, rates]);
   const netWorthSpark = netWorthTrend.map(point => point.value);
   const chartTicks = React.useMemo(() => {
     if (netWorthTrend.length <= 5) return netWorthTrend;

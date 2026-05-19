@@ -1,7 +1,7 @@
-const EUR_TO_USD = 1.08;
+import { toReportingCurrency } from './fx.mjs';
 
-function toUsd(amount, ccy = 'USD') {
-  return ccy === 'USD' ? amount : amount * EUR_TO_USD;
+function toUsd(amount, ccy, rates) {
+  return toReportingCurrency(amount, ccy, rates, 'USD');
 }
 
 function roundCents(value) {
@@ -28,7 +28,7 @@ export function getRecentPeriods(selectedPeriod, count = 6) {
   });
 }
 
-export function buildCategoryTrend(transactions, periods, limit = 6) {
+export function buildCategoryTrend(transactions, periods, limit = 6, rates = { USD: 1 }) {
   const totals = new Map();
   for (const tx of transactions) {
     if (tx.amt >= 0) continue;
@@ -36,7 +36,7 @@ export function buildCategoryTrend(transactions, periods, limit = 6) {
     if (!periods.includes(period)) continue;
     const cat = txCategory(tx);
     if (!totals.has(cat)) totals.set(cat, Object.fromEntries(periods.map(p => [p, 0])));
-    totals.get(cat)[period] += Math.abs(toUsd(tx.amt, tx.ccy));
+    totals.get(cat)[period] += Math.abs(toUsd(tx.amt, tx.ccy, rates));
   }
 
   return [...totals.entries()]
@@ -48,11 +48,11 @@ export function buildCategoryTrend(transactions, periods, limit = 6) {
     .slice(0, limit);
 }
 
-export function buildIncomeExpenseSeries(transactions, periods) {
+export function buildIncomeExpenseSeries(transactions, periods, rates = { USD: 1 }) {
   return periods.map(period => {
     const periodTxs = transactions.filter(tx => txPeriod(tx) === period);
-    const income = periodTxs.filter(tx => tx.amt > 0).reduce((s, tx) => s + toUsd(tx.amt, tx.ccy), 0);
-    const expense = periodTxs.filter(tx => tx.amt < 0).reduce((s, tx) => s + Math.abs(toUsd(tx.amt, tx.ccy)), 0);
+    const income = periodTxs.filter(tx => tx.amt > 0).reduce((s, tx) => s + toUsd(tx.amt, tx.ccy, rates), 0);
+    const expense = periodTxs.filter(tx => tx.amt < 0).reduce((s, tx) => s + Math.abs(toUsd(tx.amt, tx.ccy, rates)), 0);
     return {
       period,
       income: roundCents(income),
@@ -62,21 +62,21 @@ export function buildIncomeExpenseSeries(transactions, periods) {
   });
 }
 
-export function buildNetWorthTrend(accounts, transactions, periods) {
+export function buildNetWorthTrend(accounts, transactions, periods, rates = { USD: 1 }) {
   return periods.map(period => {
     const value = accounts.reduce((sum, account) => {
       if (!countedAccount(account)) return sum;
-      const opening = toUsd(account.openingBal || 0, account.ccy);
+      const opening = toUsd(account.openingBal || 0, account.ccy, rates);
       const delta = transactions
         .filter(tx => tx.acct === account.id && txPeriod(tx) <= period)
-        .reduce((s, tx) => s + toUsd(tx.amt, tx.ccy), 0);
+        .reduce((s, tx) => s + toUsd(tx.amt, tx.ccy, rates), 0);
       return sum + opening + delta;
     }, 0);
     return { period, value: roundCents(value) };
   });
 }
 
-export function buildNetWorthDailyTrend(accounts, transactions, endDateIso, dayCount) {
+export function buildNetWorthDailyTrend(accounts, transactions, endDateIso, dayCount, rates = { USD: 1 }) {
   const safeCount = Math.max(1, Number(dayCount) || 1);
   const endDate = new Date(`${endDateIso}T00:00:00`);
   return Array.from({ length: safeCount }, (_, i) => {
@@ -86,10 +86,10 @@ export function buildNetWorthDailyTrend(accounts, transactions, endDateIso, dayC
     const value = accounts
       .filter(countedAccount)
       .reduce((sum, account) => {
-        const opening = toUsd(account.openingBal || 0, account.ccy);
+        const opening = toUsd(account.openingBal || 0, account.ccy, rates);
         const delta = transactions
           .filter(tx => tx.acct === account.id && tx.date <= iso)
-          .reduce((s, tx) => s + toUsd(tx.amt, tx.ccy), 0);
+          .reduce((s, tx) => s + toUsd(tx.amt, tx.ccy, rates), 0);
         return sum + opening + delta;
       }, 0);
     return { date: iso, value: roundCents(value) };
