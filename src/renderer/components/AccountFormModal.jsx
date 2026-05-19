@@ -27,6 +27,10 @@ export default function AccountFormModal({ t, onClose, editAccount = null }) {
   const [openingBal, setOpeningBal] = React.useState(editAccount != null ? String(editAccount.openingBal) : '');
   const [openingDate, setOpeningDate] = React.useState(editAccount?.openingDate ?? defaultOpeningDate());
   const [includeInTotals, setIncludeInTotals] = React.useState(editAccount?.includeInTotals !== false);
+  const [creditLimit, setCreditLimit]   = React.useState(editAccount?.creditLimit != null ? String(editAccount.creditLimit) : '');
+  const [apr, setApr]                   = React.useState(editAccount?.apr != null ? String(editAccount.apr) : '');
+  const [statementDay, setStatementDay] = React.useState(editAccount?.statementDay != null ? String(editAccount.statementDay) : '');
+  const [apy, setApy]                   = React.useState(editAccount?.apy != null ? String(editAccount.apy) : '');
   const [archiving, setArchiving]   = React.useState(false);
 
   const txCount  = editAccount ? transactions.filter(tx => tx.acct === editAccount.id).length : 0;
@@ -44,6 +48,13 @@ export default function AccountFormModal({ t, onClose, editAccount = null }) {
       code: editAccount?.code ?? '',
       includeInTotals,
     };
+    if (type === 'CC') {
+      if (creditLimit !== '' && !isNaN(parseFloat(creditLimit))) fields.creditLimit = parseFloat(creditLimit);
+      if (apr !== '' && !isNaN(parseFloat(apr))) fields.apr = parseFloat(apr);
+      if (statementDay !== '' && !isNaN(parseInt(statementDay, 10))) fields.statementDay = parseInt(statementDay, 10);
+    } else if (type === 'SAV') {
+      if (apy !== '' && !isNaN(parseFloat(apy))) fields.apy = parseFloat(apy);
+    }
     if (archiving) {
       updateAccount(editAccount.id, fields);
       archiveAccount(editAccount.id);
@@ -112,6 +123,28 @@ export default function AccountFormModal({ t, onClose, editAccount = null }) {
             <input type="checkbox" checked={includeInTotals} onChange={e => setIncludeInTotals(e.target.checked)} />
             INCLUDE IN TOTALS
           </label>
+          {type === 'CC' && (
+            <>
+              <div>
+                <div style={fieldLabel}>CREDIT LIMIT</div>
+                <input type="number" value={creditLimit} onChange={e => setCreditLimit(e.target.value)} placeholder="10000" style={input} />
+              </div>
+              <div>
+                <div style={fieldLabel}>APR (%)</div>
+                <input type="number" step="0.01" value={apr} onChange={e => setApr(e.target.value)} placeholder="22.74" style={input} />
+              </div>
+              <div>
+                <div style={fieldLabel}>STATEMENT DAY (1-28)</div>
+                <input type="number" min="1" max="28" value={statementDay} onChange={e => setStatementDay(e.target.value)} placeholder="28" style={input} />
+              </div>
+            </>
+          )}
+          {type === 'SAV' && (
+            <div>
+              <div style={fieldLabel}>APY (%)</div>
+              <input type="number" step="0.01" value={apy} onChange={e => setApy(e.target.value)} placeholder="4.20" style={input} />
+            </div>
+          )}
         </div>
 
         {editAccount && (
