@@ -767,6 +767,48 @@ export function exportCSV(transactions) {
   ].join('\n');
 }
 
+// ─── Reports summary CSV ──────────────────────────────────────────────────
+//
+// Builds a multi-section CSV: header line per section, then rows.
+// Sections: SUMMARY, BY_CATEGORY, TOP_MERCHANTS, TRANSACTIONS.
+export function exportReportCSV({ rangeLabel, transactions, byCategory, topMerchants }) {
+  const esc = s => `"${(s ?? '').toString().replace(/"/g, '""')}"`;
+  const lines = [];
+  lines.push(`# LEDGER REPORT`);
+  lines.push(`# Range,${esc(rangeLabel)}`);
+  lines.push(`# Exported,${new Date().toISOString()}`);
+  lines.push('');
+
+  lines.push('## BY_CATEGORY');
+  lines.push('Category,Total');
+  byCategory.forEach(([cat, amt]) => {
+    lines.push([esc(cat), amt.toFixed(2)].join(','));
+  });
+  lines.push('');
+
+  lines.push('## TOP_MERCHANTS');
+  lines.push('Merchant,Visits,Total');
+  topMerchants.forEach(m => {
+    lines.push([esc(m.name), m.n, m.amt.toFixed(2)].join(','));
+  });
+  lines.push('');
+
+  lines.push('## TRANSACTIONS');
+  lines.push('Date,Description,Amount,Category,Account,Currency');
+  transactions.forEach(tx => {
+    lines.push([
+      tx.date || '',
+      esc(tx.name),
+      (tx.amt || 0).toFixed(2),
+      tx.cat || '',
+      tx.acct || '',
+      tx.ccy || 'USD',
+    ].join(','));
+  });
+
+  return lines.join('\n');
+}
+
 // ─── MMBAK: JSON backup (our own format) ──────────────────────────────────
 
 export function exportMMBAK(store) {
