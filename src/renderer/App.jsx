@@ -9,6 +9,7 @@ import { Accounts, AccountDetail } from './screens/mobile/Accounts';
 import Transactions from './screens/mobile/Transactions';
 import Budgets from './screens/mobile/Budgets';
 import More from './screens/mobile/More';
+import Investments from './screens/mobile/Investments';
 import AddSheet from './screens/mobile/AddSheet';
 import {
   Reports, ReportsCalendar, CCDetail, GoalDetail,
@@ -112,10 +113,9 @@ function MobileApp({ t, setAccent, setDensity, setDecimals, setCurrency }) {
       setTab('more');
       return;
     }
-    // Investments do not exist on mobile yet - fall back to More
+    // Investments: now a real overlay screen.
     if (route === 'investments') {
-      setNavStack([]);
-      setTab('more');
+      push('investments', params);
       return;
     }
     // Otherwise treat as an overlay screen key
@@ -136,6 +136,7 @@ function MobileApp({ t, setAccent, setDensity, setDecimals, setCurrency }) {
       case 'cc':         return <CCDetail {...props} acct={params.acct} />;
       case 'bills':      return <BillsHub {...props} />;
       case 'alerts':     return <AlertsHub {...props} onNavigate={goToRoute} />;
+      case 'investments':return <Investments {...props} />;
       case 'settings':   return <Settings {...props} setAccent={setAccent} setDensity={setDensity} setDecimals={setDecimals} setCurrency={setCurrency} />;
       case 'categories': return <CategoriesEditor {...props} />;
       default: return null;
