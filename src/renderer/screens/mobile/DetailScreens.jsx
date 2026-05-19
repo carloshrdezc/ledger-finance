@@ -870,7 +870,7 @@ const SETTINGS_CURRENCIES = ['USD', 'EUR', 'GBP', 'JPY', 'CAD', 'AUD', 'CHF', 'M
 const SETTINGS_THEMES = ['light', 'dark', 'auto'];
 
 export function Settings({ t, onBack, onNavigate, setAccent, setDensity, setDecimals, setCurrency, setTheme }) {
-  const { budgetStartDay, setBudgetStartDay, reset, loadSampleData } = useStore();
+  const { budgetStartDay, setBudgetStartDay, reset, loadSampleData, resetAndLoadSampleData } = useStore();
   const [showIO, setShowIO] = React.useState(false);
   const [confirmReset, setConfirmReset] = React.useState(false);
   const [editingDay, setEditingDay] = React.useState(false);
@@ -891,10 +891,8 @@ export function Settings({ t, onBack, onNavigate, setAccent, setDensity, setDeci
   };
 
   const handleResetAndLoad = () => {
-    reset();
-    Promise.resolve().then(() => {
-      try { loadSampleData(); } catch (err) { console.warn(err); }
-    });
+    // Atomic reset+seed via the store action — see CAR-76 review notes.
+    resetAndLoadSampleData();
     setShowResetAndLoad(false);
   };
 

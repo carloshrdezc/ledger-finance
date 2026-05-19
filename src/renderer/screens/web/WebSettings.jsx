@@ -9,7 +9,7 @@ import FxRatesSection from '../../components/FxRatesSection';
 const CURRENCIES = ['USD', 'EUR', 'GBP', 'JPY', 'CAD', 'AUD', 'CHF', 'MXN'];
 
 export default function WebSettings({ t, onNavigate, onAdd, setAccent, setDensity, setDecimals, setCurrency, setTheme }) {
-  const { categoryTree, addCategory, renameCategory, removeCategory, budgetStartDay, setBudgetStartDay, reset, loadSampleData } = useStore();
+  const { categoryTree, addCategory, renameCategory, removeCategory, budgetStartDay, setBudgetStartDay, reset, loadSampleData, resetAndLoadSampleData } = useStore();
   const [expanded, setExpanded] = React.useState({ edu: true, 'edu.school': true, 'edu.school.supplies': true, food: true });
   const [adding, setAdding] = React.useState(null);
   const [renaming, setRenaming] = React.useState(null);
@@ -71,12 +71,9 @@ export default function WebSettings({ t, onNavigate, onAdd, setAccent, setDensit
   };
 
   const handleResetAndLoad = () => {
-    reset();
-    // After reset, isAppEmpty becomes true synchronously on next render.
-    // Defer the load via a microtask so React processes the reset first.
-    Promise.resolve().then(() => {
-      try { loadSampleData(); } catch (err) { console.warn(err); }
-    });
+    // Use the store's atomic reset+seed action — bypasses the precondition
+    // check that would observe stale closure state, and batches the writes.
+    resetAndLoadSampleData();
     setShowResetAndLoad(false);
   };
 

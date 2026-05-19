@@ -50,6 +50,43 @@ function migrateBills(bills) {
 
 export const StoreCtx = React.createContext(null);
 
+// CAR-76: synchronous pre-render migration. Existing users upgrading from a
+// pre-CAR-76 build have non-empty slices in localStorage but no
+// `ledger:welcomeSeen` key — they should NOT see the welcome modal flicker
+// on first post-upgrade boot. By writing `ledger:welcomeSeen=true` here
+// (before any React render), `useLS` picks up the right initial value and
+// the welcome modal never mounts for them.
+//
+// Brand-new users (everything empty) still get welcomeSeen=false and see
+// the welcome modal.
+//
+// Runs once per page load. Safe across hot reloads (idempotent).
+(function migrateWelcomeSeenForExistingUsers() {
+  try {
+    if (typeof localStorage === 'undefined') return;
+    if (localStorage.getItem('ledger:welcomeSeen') !== null) return;
+
+    const slices = ['ledger:tx', 'ledger:accounts', 'ledger:bills', 'ledger:goals',
+                    'ledger:budgets', 'ledger:investments', 'ledger:trades'];
+    for (const key of slices) {
+      const raw = localStorage.getItem(key);
+      if (!raw) continue;
+      try {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          localStorage.setItem('ledger:welcomeSeen', JSON.stringify(true));
+          return;
+        }
+      } catch {
+        // Malformed JSON in a slice — skip; useLS will fall back to default.
+      }
+    }
+  } catch {
+    // localStorage unavailable (private browsing, denied permissions, etc.)
+    // — leave welcomeSeen unset; user will see the welcome modal once.
+  }
+})();
+
 export function StoreProvider({ children }) {
   const [txs, setTxs]         = useLS('ledger:tx',      []);
   const [catTree, setCatTree]  = useLS('ledger:cats',    DEFAULT_CAT_TREE);
@@ -80,15 +117,9 @@ export function StoreProvider({ children }) {
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  React.useEffect(() => {
-    // CAR-76: existing users with non-empty data should not see the welcome
-    // modal on first post-upgrade boot. Read slices directly from initial
-    // state — useLS already loaded localStorage synchronously.
-    if (!welcomeSeen && !isAppEmptyFor({ txs, accounts, bills, goals, budgets, investments, trades })) {
-      setWelcomeSeen(true);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // run once on mount; reading initial state is intentional
+  // (CAR-76 migration is handled by the module-scope IIFE above, before any
+  // StoreProvider render — that avoids the welcome-modal flicker for existing
+  // users.)
 
   const hiddenSet = React.useMemo(() => new Set(hidden), [hidden]);
   const transactions = React.useMemo(() => txs.filter(t => !hiddenSet.has(t.id)), [txs, hiddenSet]);
@@ -490,10 +521,12 @@ export function StoreProvider({ children }) {
     setWelcomeSeen(true);
   }, [setWelcomeSeen]);
 
-  const loadSampleData = React.useCallback(() => {
-    if (!isAppEmptyFor({ txs, accounts, bills, goals, budgets, investments, trades })) {
-      throw new Error('LEDGER_NOT_EMPTY');
-    }
+  // Internal: actually seed the store with demo data. No precondition check.
+  // Used by both `loadSampleData` (with check) and `resetAndLoadSampleData`
+  // (which has just wiped the store, so the check would be a tautology AND
+  // would observe stale closure state from before the reset — see CAR-76
+  // code review notes).
+  const _seedSampleData = React.useCallback(() => {
     setTxs(TRANSACTIONS);
     setAccounts(ACCOUNTS);
     setBudgets(BUDGETS);
@@ -502,7 +535,40 @@ export function StoreProvider({ children }) {
     setInvestments(INVESTMENTS);
     setTrades(TRADES);
     setCatTree(prev => isDefaultCatTreeFor(prev) ? CATEGORY_TREE : prev);
-  }, [txs, accounts, bills, goals, budgets, investments, trades, setTxs, setAccounts, setBudgets, setBills, setGoals, setInvestments, setTrades, setCatTree]);
+  }, [setTxs, setAccounts, setBudgets, setBills, setGoals, setInvestments, setTrades, setCatTree]);
+
+  const loadSampleData = React.useCallback(() => {
+    if (!isAppEmptyFor({ txs, accounts, bills, goals, budgets, investments, trades })) {
+      throw new Error('LEDGER_NOT_EMPTY');
+    }
+    _seedSampleData();
+  }, [txs, accounts, bills, goals, budgets, investments, trades, _seedSampleData]);
+
+  // Atomic "reset then load samples" — performs both updates in the same React
+  // batch, so the user goes from non-empty → empty → seeded in a single render.
+  // Bypasses loadSampleData's precondition because we just wiped the store; the
+  // closure-captured `txs`/`accounts`/etc. would still be non-empty here.
+  const resetAndLoadSampleData = React.useCallback(() => {
+    setTxs([]);
+    setCatTree(DEFAULT_CAT_TREE);
+    setBudgets([]);
+    setAccounts([]);
+    setBills([]);
+    setGoals([]);
+    setGoalContributions([]);
+    setSelectedPeriod(monthKey(new Date()));
+    setHidden([]);
+    setBudgetStartDay(1);
+    setInvestments([]);
+    setTrades([]);
+    setDismissedAlertIds([]);
+    setTxFilterRaw(null);
+    setRates(DEFAULT_RATES);
+    setRatesUpdated({});
+    setFxMigrationToastSeen(false);
+    setWelcomeSeen(true); // already past the welcome — don't re-show it
+    _seedSampleData();
+  }, [_seedSampleData, setTxs, setCatTree, setBudgets, setAccounts, setBills, setGoals, setGoalContributions, setSelectedPeriod, setHidden, setBudgetStartDay, setInvestments, setTrades, setDismissedAlertIds, setTxFilterRaw, setRates, setRatesUpdated, setFxMigrationToastSeen, setWelcomeSeen]);
 
   const reset = React.useCallback(() => {
     setTxs([]);
@@ -606,6 +672,7 @@ export function StoreProvider({ children }) {
       welcomeSeen,
       dismissWelcome,
       loadSampleData,
+      resetAndLoadSampleData,
       isAppEmpty,
     }}>
       {children}
