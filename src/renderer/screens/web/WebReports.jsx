@@ -4,6 +4,7 @@ import { ALabel, CategoryTrendChart, IncomeExpenseChart, LineChart } from '../..
 import PeriodSwitcher from '../../components/PeriodSwitcher';
 import RangeSelector from '../../components/RangeSelector';
 import WebShell from './WebShell';
+import EmptySectionHint from '../../components/EmptySectionHint';
 import { fmtMoney, fmtSigned } from '../../data';
 import { useStore } from '../../store';
 import { useFx } from '../../useFx';
@@ -149,6 +150,9 @@ export default function WebReports({ t, onNavigate, onAdd }) {
             <CategoryTrendChart rows={categoryTrend} periods={trendPeriods} accent={t.accent} categoryTree={categoryTree} />
           </div>
           <div style={{ marginTop: 12, borderTop: '1px solid ' + A.rule2 }}>
+            {reportTxs.length === 0 ? (
+              <EmptySectionHint message="No spending data for this period." />
+            ) : null}
             {cats.map(([k, v]) => {
               const c = categoryTree[k] || { label: k, glyph: '·' };
               return (

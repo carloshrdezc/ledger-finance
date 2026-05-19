@@ -3,6 +3,7 @@ import { A } from '../../theme';
 import { ALabel, ARule } from '../../components/Shared';
 import WebShell from './WebShell';
 import AccountFormModal from '../../components/AccountFormModal';
+import EmptySectionHint from '../../components/EmptySectionHint';
 import { fmtMoney, fmtSigned, dayLabel, catGlyph } from '../../data';
 import { useStore } from '../../store';
 import { useFx } from '../../useFx';
@@ -126,6 +127,13 @@ export default function WebAccounts({ t, onNavigate, onAdd }) {
           ) : (
             /* ── Normal grouped view ── */
             <>
+              {accountsWithBalance.length === 0 ? (
+                <EmptySectionHint
+                  message="No accounts yet."
+                  ctaLabel="ADD ACCOUNT"
+                  onCta={() => setModalAccount(null)}
+                />
+              ) : null}
               {grouped.map(({ type, accounts }) => (
                 <div key={type} style={{ marginBottom: 20 }}>
                   <div style={{ fontSize: 9, color: A.muted, letterSpacing: 1.6, marginBottom: 6 }}>

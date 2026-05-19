@@ -2,6 +2,7 @@ import React from 'react';
 import { A } from '../../theme';
 import { ALabel, ARule } from '../../components/Shared';
 import WebShell from './WebShell';
+import EmptySectionHint from '../../components/EmptySectionHint';
 import { useStore } from '../../store';
 import { CATEGORIES, fmtMoney } from '../../data';
 
@@ -252,6 +253,13 @@ export default function WebBills({ t, onNavigate, onAdd }) {
         <div style={{ display: 'grid', gridTemplateColumns: '86px 1fr 70px 80px 90px 90px 86px', padding: '8px 0', fontSize: 9, color: A.muted, letterSpacing: 1.2, borderBottom: '1px solid ' + A.rule2 }}>
           <div>STATUS</div><div>NAME</div><div>ACCT</div><div>FREQ</div><div>CATEGORY</div><div style={{ textAlign: 'right' }}>AMOUNT</div><div style={{ textAlign: 'right' }}>ACTION</div>
         </div>
+        {billRows.length === 0 ? (
+          <EmptySectionHint
+            message="No bills yet."
+            ctaLabel="ADD BILL"
+            onCta={openAdd}
+          />
+        ) : null}
         {billRows.map(b => {
           const acct = accountsWithBalance.find(a => a.id === b.acct);
           const cat = CATEGORIES[b.cat];
