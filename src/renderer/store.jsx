@@ -127,8 +127,12 @@ export function StoreProvider({ children }) {
       accountsWithBalance,
       investments,
       dismissedAlertIds,
+      rates,
+      ratesUpdated,
+      transactions,
+      fxMigrationToastSeen,
     }),
-    [billRows, budgetRows, goals, accountsWithBalance, investments, dismissedAlertIds],
+    [billRows, budgetRows, goals, accountsWithBalance, investments, dismissedAlertIds, rates, ratesUpdated, transactions, fxMigrationToastSeen],
   );
 
   const addTransactions = React.useCallback(incoming => setTxs(prev => {
@@ -454,8 +458,12 @@ export function StoreProvider({ children }) {
   }, [setInvestments, setTrades]);
 
   const dismissAlert = React.useCallback(id => {
+    if (id === 'fx:migration-notice') {
+      setFxMigrationToastSeen(true);
+      return;
+    }
     setDismissedAlertIds(prev => prev.includes(id) ? prev : [...prev, id]);
-  }, [setDismissedAlertIds]);
+  }, [setDismissedAlertIds, setFxMigrationToastSeen]);
 
   const restoreAlerts = React.useCallback(() => {
     setDismissedAlertIds([]);
