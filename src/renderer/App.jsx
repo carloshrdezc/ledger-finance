@@ -106,7 +106,7 @@ function MobileApp({ t, setAccent, setDensity, setDecimals, setCurrency }) {
       case 'acct':       return <AccountDetail {...props} acct={params.acct} />;
       case 'reports':    return <Reports {...props} />;
       case 'reports-cal':return <ReportsCalendar {...props} />;
-      case 'goal':       return <GoalDetail {...props} goal={params.goal} />;
+      case 'goal':       return <GoalDetail {...props} goal={params.goalId} />;
       case 'cc':         return <CCDetail {...props} acct={params.acct} />;
       case 'bills':      return <BillsHub {...props} />;
       case 'alerts':     return <AlertsHub {...props} />;
