@@ -427,13 +427,59 @@ export function GoalDetail({ t, goalId = 'g1', goal, onBack }) {
   const defaultDay = Math.min(new Date().getDate(), getDaysInPeriod(selectedPeriod));
   const defaultDate = `${selectedPeriod}-${String(defaultDay).padStart(2, '0')}`;
   const pct = g.current / g.target;
-  const monthly = 800;
   const remaining = g.target - g.current;
-  const monthsLeft = Math.ceil(remaining / monthly);
-  const projection = Array.from({ length: 12 }, (_, i) => Math.min(g.current + monthly * i, g.target));
+
   const contributions = goalContributions
     .filter(c => c.goalId === g.id)
     .sort((a, b) => b.date.localeCompare(a.date));
+
+  // Compute average monthly contribution from history. If we have at least
+  // one contribution, divide total by months elapsed (min 1). Otherwise
+  // fall back to a reasonable default proportional to target.
+  const monthly = (() => {
+    if (contributions.length > 0) {
+      const dates = contributions.map(c => new Date(c.date)).sort((a, b) => a - b);
+      const first = dates[0];
+      const now = new Date();
+      const monthsSpan = Math.max(1,
+        (now.getFullYear() - first.getFullYear()) * 12 + (now.getMonth() - first.getMonth()) + 1
+      );
+      const total = contributions.reduce((s, c) => s + (c.amount || 0), 0);
+      return Math.max(50, Math.round(total / monthsSpan));
+    }
+    return Math.max(50, Math.round(g.target * 0.05));
+  })();
+
+  const monthsLeft = monthly > 0 ? Math.ceil(remaining / monthly) : null;
+  const projection = Array.from({ length: 12 }, (_, i) => Math.min(g.current + monthly * i, g.target));
+
+  // Opened date: earliest contribution; otherwise goal.createdAt; otherwise unknown.
+  const openedLabel = (() => {
+    if (contributions.length > 0) {
+      const earliest = contributions[contributions.length - 1].date;
+      const d = new Date(earliest);
+      return d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }).toUpperCase();
+    }
+    if (g.createdAt) {
+      const d = new Date(g.createdAt);
+      return d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }).toUpperCase();
+    }
+    return '—';
+  })();
+
+  // On-track: if goal has a targetDate, compare projected completion to it.
+  // Otherwise call it "on track" when avg monthly clears at least 5% of target.
+  const onTrack = (() => {
+    if (g.targetDate && monthsLeft != null) {
+      const target = new Date(g.targetDate);
+      const now = new Date();
+      const monthsToTarget = (target.getFullYear() - now.getFullYear()) * 12 + (target.getMonth() - now.getMonth());
+      return monthsLeft <= monthsToTarget;
+    }
+    return monthly >= g.target * 0.05 && pct < 1;
+  })();
+  const completed = pct >= 1;
+
   const contribute = () => {
     const amount = parseFloat(contribAmt);
     if (!isNaN(amount) && amount > 0) {
@@ -471,9 +517,9 @@ export function GoalDetail({ t, goalId = 'g1', goal, onBack }) {
       <ARule style={{ marginTop: 16 }} />
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1, marginTop: 12, border: '1px solid ' + A.rule2, background: A.rule2 }}>
         <ADetailCell label="MONTHLY" val={fmtMoney(monthly, t.currency, false)} />
-        <ADetailCell label="ETA" val={monthsLeft + ' MO'} c={t.accent} />
-        <ADetailCell label="OPENED" val="JAN 2024" />
-        <ADetailCell label="ON TRACK" val="YES" c={t.accent} />
+        <ADetailCell label="ETA" val={completed ? 'DONE' : (monthsLeft != null ? monthsLeft + ' MO' : '—')} c={completed ? t.accent : (onTrack ? t.accent : A.neg)} />
+        <ADetailCell label="OPENED" val={openedLabel} />
+        <ADetailCell label="ON TRACK" val={completed ? 'DONE' : (onTrack ? 'YES' : 'NO')} c={completed || onTrack ? t.accent : A.neg} />
       </div>
       <ARule style={{ marginTop: 16 }} />
       <div style={{ padding: '14px 0 0' }}>
