@@ -7,7 +7,8 @@ import { useStore } from '../../store';
 import ImportExport from '../../components/ImportExport';
 import RecurringFormSheet from '../../components/RecurringFormSheet';
 import GoalFormSheet from '../../components/GoalFormSheet';
-import { addMonths, filterTransactionsForPeriod, formatShortPeriodLabel, getDaysInPeriod } from '../../period.mjs';
+import RangeSelector from '../../components/RangeSelector';
+import { addMonths, filterTransactionsForPeriod, filterTransactionsForRange, formatShortPeriodLabel, getDaysInPeriod, resolveRangePreset } from '../../period.mjs';
 import {
   buildCategoryTrend,
   buildIncomeExpenseSeries,
@@ -23,23 +24,30 @@ export function Reports({ t, onBack, onGoToRoute }) {
     setTxFilter(filter || null);
     onGoToRoute('tx');
   };
+  const [range, setRange] = React.useState({ kind: 'preset', preset: 'thisMonth' });
+  const isMonthRange = range.kind === 'preset' && (range.preset === 'thisMonth' || range.preset === 'lastMonth');
+  const useRange = range.kind === 'custom' || (range.preset !== 'thisMonth' && range.preset !== 'lastMonth');
+  const resolved = range.kind === 'custom' ? { start: range.start, end: range.end, label: `${range.start} → ${range.end}` } : resolveRangePreset(range.preset);
+  const rangeTxs = React.useMemo(() => useRange ? filterTransactionsForRange(transactions, resolved?.start, resolved?.end) : null, [useRange, transactions, resolved?.start, resolved?.end]);
+  const reportTxs = useRange ? rangeTxs : periodTransactions;
+  const heroLabel = useRange ? (resolved?.label || 'CUSTOM') : periodLabel;
   const previousPeriod = addMonths(selectedPeriod, -1);
   const previousPeriodTxs = filterTransactionsForPeriod(transactions, previousPeriod);
   const previousTotal = previousPeriodTxs.filter(x => x.amt < 0)
     .reduce((s, x) => s + Math.abs(x.ccy === 'USD' ? x.amt : x.amt * 1.08), 0);
-  const total = periodTransactions.filter(x => x.amt < 0)
+  const total = reportTxs.filter(x => x.amt < 0)
     .reduce((s, x) => s + Math.abs(x.ccy === 'USD' ? x.amt : x.amt * 1.08), 0);
   const byCat = {};
-  periodTransactions.filter(x => x.amt < 0).forEach(x => {
+  reportTxs.filter(x => x.amt < 0).forEach(x => {
     const k = (x.path || [x.cat])[0];
     byCat[k] = (byCat[k] || 0) + Math.abs(x.ccy === 'USD' ? x.amt : x.amt * 1.08);
   });
   const cats = Object.entries(byCat).sort((a, b) => b[1] - a[1]).slice(0, 6);
   const maxCat = cats[0] ? cats[0][1] : 1;
 
-  // Top merchants computed from periodTransactions (matches WebReports).
+  // Top merchants computed from reportTxs (matches WebReports).
   const merchantMap = {};
-  periodTransactions.filter(x => x.amt < 0).forEach(tx => {
+  reportTxs.filter(x => x.amt < 0).forEach(tx => {
     const key = (tx.name || '').split(' · ')[0];
     if (!key) return;
     const curr = merchantMap[key] || { name: key, amt: 0, n: 0 };
@@ -104,7 +112,7 @@ export function Reports({ t, onBack, onGoToRoute }) {
   const unusedSub = subBills.find(b => !recentNames.has((b.name || '').toUpperCase()));
 
   // 4. Savings rate for current period: (income - expenses) / income.
-  const periodIncome = periodTransactions.filter(x => x.amt > 0 && x.cat !== 'transfer')
+  const periodIncome = reportTxs.filter(x => x.amt > 0 && x.cat !== 'transfer')
     .reduce((s, x) => s + (x.ccy === 'USD' ? x.amt : x.amt * 1.08), 0);
   const periodExpense = total;
   const savingsRate = periodIncome > 0 ? ((periodIncome - periodExpense) / periodIncome) * 100 : null;
@@ -137,17 +145,27 @@ export function Reports({ t, onBack, onGoToRoute }) {
       </div>
       <ARule thick />
       <div style={{ padding: '12px 0 0' }}>
-        <PeriodSwitcher compact />
+        {isMonthRange && range.preset === 'thisMonth' && <PeriodSwitcher compact />}
+        <div style={{ marginTop: 8 }}>
+          <RangeSelector range={range} onChange={setRange} t={t} />
+        </div>
       </div>
       <div style={{ padding: '14px 0' }}>
-        <ALabel>[01] TOTAL · SPEND · {periodLabel}</ALabel>
+        <ALabel>[01] TOTAL · SPEND · {heroLabel}</ALabel>
         <div style={{ fontSize: 32, fontVariantNumeric: 'tabular-nums', letterSpacing: -1, marginTop: 6 }}>
           {fmtMoney(total, t.currency, t.decimals)}
         </div>
-        <div style={{ fontSize: 11, marginTop: 2 }}>
-          <span style={{ color: total - previousTotal > 0 ? A.neg : t.accent }}>{fmtSigned(total - previousTotal, t.currency, t.decimals)}</span>
-          <span style={{ color: A.muted, marginLeft: 8 }}>VS · {formatShortPeriodLabel(previousPeriod)}</span>
-        </div>
+        {!useRange && (
+          <div style={{ fontSize: 11, marginTop: 2 }}>
+            <span style={{ color: total - previousTotal > 0 ? A.neg : t.accent }}>{fmtSigned(total - previousTotal, t.currency, t.decimals)}</span>
+            <span style={{ color: A.muted, marginLeft: 8 }}>VS · {formatShortPeriodLabel(previousPeriod)}</span>
+          </div>
+        )}
+        {useRange && (
+          <div style={{ fontSize: 10, color: A.muted, marginTop: 2, letterSpacing: 1 }}>
+            {reportTxs.length} TXS IN RANGE
+          </div>
+        )}
       </div>
       <ARule />
       <div style={{ padding: '14px 0 0' }}>
