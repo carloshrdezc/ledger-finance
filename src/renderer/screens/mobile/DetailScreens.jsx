@@ -827,9 +827,29 @@ export function CategoriesEditor({ t, onBack }) {
       <div style={{ marginTop: 4 }}>
         {Object.entries(categoryTree).map(([k, n]) => renderNode(k, n, [k], 0))}
       </div>
-      <div style={{ marginTop: 16, padding: '12px', border: '1.5px dashed ' + A.ink, fontSize: 10, color: A.muted, letterSpacing: 1, textAlign: 'center', cursor: 'pointer' }}>
-        + ADD · TOP · LEVEL · CATEGORY
-      </div>
+      {adding === '__root__' ? (
+        <div style={{ display: 'flex', gap: 8, padding: '12px', marginTop: 16, border: '1.5px dashed ' + A.ink, background: A.bg }}>
+          <span style={{ fontSize: 11, color: A.muted, alignSelf: 'center', letterSpacing: 1 }}>›</span>
+          <input autoFocus value={newName} onChange={e => setNewName(e.target.value)}
+            placeholder="NEW · TOP · LEVEL · CATEGORY"
+            onKeyDown={e => {
+              if (e.key === 'Enter' && newName.trim()) {
+                addCategory([], newName.trim().toUpperCase());
+                setNewName(''); setAdding(null);
+              }
+              if (e.key === 'Escape') { setNewName(''); setAdding(null); }
+            }}
+            style={{ flex: 1, fontFamily: A.font, fontSize: 11, background: 'transparent', border: 'none', borderBottom: '1px solid ' + A.ink, outline: 'none', padding: '2px 0', color: A.ink, letterSpacing: 0.8 }}
+          />
+          <button onClick={() => { setNewName(''); setAdding(null); }}
+            style={{ all: 'unset', cursor: 'pointer', fontSize: 10, color: A.muted }}>×</button>
+        </div>
+      ) : (
+        <button onClick={() => setAdding('__root__')}
+          style={{ all: 'unset', cursor: 'pointer', display: 'block', width: '100%', boxSizing: 'border-box', marginTop: 16, padding: '12px', border: '1.5px dashed ' + A.ink, fontSize: 10, color: A.muted, letterSpacing: 1, textAlign: 'center' }}>
+          + ADD · TOP · LEVEL · CATEGORY
+        </button>
+      )}
     </div>
   );
 }
