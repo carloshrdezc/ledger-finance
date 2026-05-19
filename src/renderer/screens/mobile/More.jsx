@@ -6,9 +6,10 @@ import { useStore } from '../../store';
 import RecurringFormSheet from '../../components/RecurringFormSheet';
 
 export default function More({ t, onNavigate }) {
-  const { goals, billRows, bills, alertRows } = useStore();
+  const { goals, billRows, bills, alertRows, accountsWithBalance } = useStore();
   const activeRules = bills.filter(b => b.active !== false).length;
   const billTotal = billRows.filter(b => b.type !== 'income').reduce((s, b) => s + b.amt, 0);
+  const ccAccounts = accountsWithBalance.filter(a => a.type === 'CC' && !a.archived);
   const [showAddRecurring, setShowAddRecurring] = React.useState(false);
   const sections = [
     {
@@ -30,9 +31,14 @@ export default function More({ t, onNavigate }) {
     },
     {
       title: 'CREDIT CARDS',
-      rows: [
-        { label: 'AMEX PLATINUM · ··1009', sub: 'UTILIZATION · PAYOFF', screen: 'cc' },
-      ],
+      rows: ccAccounts.length
+        ? ccAccounts.map(a => ({
+            label: a.name + (a.code ? ' · ' + a.code : ''),
+            sub: 'UTILIZATION · PAYOFF',
+            screen: 'cc',
+            params: { acct: a.id },
+          }))
+        : [{ label: 'NO CREDIT CARDS', sub: 'ADD ONE FROM ACCOUNTS', screen: null }],
     },
     {
       title: 'RECURRING',
@@ -66,8 +72,9 @@ export default function More({ t, onNavigate }) {
           <div style={{ marginTop: 6 }}>
             {sec.rows.map((row, i) => (
               <button key={i}
-                onClick={() => onNavigate(row.screen, row.params || {})}
-                style={{ all: 'unset', cursor: 'pointer', display: 'block', width: '100%' }}>
+                onClick={() => row.screen && onNavigate(row.screen, row.params || {})}
+                disabled={!row.screen}
+                style={{ all: 'unset', cursor: row.screen ? 'pointer' : 'default', display: 'block', width: '100%', opacity: row.screen ? 1 : 0.6 }}>
                 <div style={{
                   display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                   padding: t.density === 'compact' ? '9px 0' : '11px 0',
@@ -77,7 +84,7 @@ export default function More({ t, onNavigate }) {
                     <div style={{ fontSize: 12, fontWeight: 500 }}>{row.label}</div>
                     <div style={{ fontSize: 10, color: A.muted, marginTop: 2, letterSpacing: 0.6 }}>{row.sub}</div>
                   </div>
-                  <span style={{ fontSize: 11, color: A.muted }}>▸</span>
+                  {row.screen && <span style={{ fontSize: 11, color: A.muted }}>▸</span>}
                 </div>
               </button>
             ))}
