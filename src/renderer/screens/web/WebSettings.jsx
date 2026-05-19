@@ -4,6 +4,7 @@ import { ALabel } from '../../components/Shared';
 import WebShell from './WebShell';
 import { useStore } from '../../store';
 import ImportExport from '../../components/ImportExport';
+import FxRatesSection from '../../components/FxRatesSection';
 
 const CURRENCIES = ['USD', 'EUR', 'GBP', 'JPY', 'CAD', 'AUD', 'CHF', 'MXN'];
 
@@ -241,6 +242,12 @@ export default function WebSettings({ t, onNavigate, onAdd, setAccent, setDensit
                 {CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
+          </div>
+
+          {/* FX RATES */}
+          <div style={{ marginTop: 20 }}>
+            <ALabel>FX RATES</ALabel>
+            <FxRatesSection />
           </div>
 
           {/* BUDGETS */}
