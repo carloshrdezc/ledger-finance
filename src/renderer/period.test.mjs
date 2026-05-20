@@ -4,8 +4,12 @@ import {
   addMonths,
   buildBudgetRows,
   filterTransactionsForPeriod,
+  filterTransactionsForRange,
   formatPeriodLabel,
+  formatShortPeriodLabel,
+  getDaysInPeriod,
   monthKey,
+  resolveRangePreset,
 } from './period.mjs';
 
 const txs = [
@@ -77,4 +81,56 @@ test('formatPeriodLabel with startDay=1 matches existing behavior', () => {
 
 test('formatPeriodLabel with startDay=15 shows date range', () => {
   expect(formatPeriodLabel('2026-05', 15)).toBe('MAY 15 – JUN 14, 2026');
+});
+
+test('formatShortPeriodLabel renders three-letter uppercase month', () => {
+  expect(formatShortPeriodLabel('2026-05')).toBe('MAY');
+  expect(formatShortPeriodLabel('2026-12')).toBe('DEC');
+});
+
+test('getDaysInPeriod returns the calendar length of a month', () => {
+  expect(getDaysInPeriod('2026-01')).toBe(31);
+  expect(getDaysInPeriod('2026-02')).toBe(28); // 2026 is not a leap year
+  expect(getDaysInPeriod('2024-02')).toBe(29); // 2024 is a leap year
+  expect(getDaysInPeriod('2026-04')).toBe(30);
+});
+
+test('filterTransactionsForRange keeps transactions within an inclusive ISO range', () => {
+  expect(filterTransactionsForRange(txs, '2026-05-01', '2026-05-31').map(tx => tx.id))
+    .toEqual(['may-food', 'may-dining', 'may-eur']);
+});
+
+test('filterTransactionsForRange treats falsy bounds as open-ended', () => {
+  // No start, end at end of April → only April transactions
+  expect(filterTransactionsForRange(txs, null, '2026-04-30').map(tx => tx.id))
+    .toEqual(['apr-food', 'apr-income']);
+  // Start at June 1, no end → June onward
+  expect(filterTransactionsForRange(txs, '2026-06-01', null).map(tx => tx.id))
+    .toEqual(['jun-food']);
+  // Drops transactions with no date
+  expect(filterTransactionsForRange([{ id: 'no-date', amt: 1 }], null, null)).toEqual([]);
+});
+
+test('resolveRangePreset thisMonth returns the calendar month bounds', () => {
+  const today = new Date(2026, 4, 14); // May 14, 2026
+  const range = resolveRangePreset('thisMonth', today);
+  expect(range).toEqual({ start: '2026-05-01', end: '2026-05-31', label: 'THIS MONTH' });
+});
+
+test('resolveRangePreset lastMonth returns the prior calendar month', () => {
+  const today = new Date(2026, 4, 14); // May 14, 2026
+  const range = resolveRangePreset('lastMonth', today);
+  expect(range).toEqual({ start: '2026-04-01', end: '2026-04-30', label: 'LAST MONTH' });
+});
+
+test('resolveRangePreset ytd returns Jan 1 through today', () => {
+  const today = new Date(2026, 4, 14); // May 14, 2026
+  const range = resolveRangePreset('ytd', today);
+  expect(range.start).toBe('2026-01-01');
+  expect(range.end).toBe('2026-05-14');
+  expect(range.label).toBe('YEAR TO DATE');
+});
+
+test('resolveRangePreset returns null for unknown presets', () => {
+  expect(resolveRangePreset('nonsense', new Date(2026, 4, 14))).toBeNull();
 });
