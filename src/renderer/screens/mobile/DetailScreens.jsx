@@ -11,6 +11,7 @@ import RecurringFormSheet from '../../components/RecurringFormSheet';
 import GoalFormSheet from '../../components/GoalFormSheet';
 import RangeSelector from '../../components/RangeSelector';
 import FxRatesSection from '../../components/FxRatesSection';
+import BackupSection from '../../components/BackupSection';
 import { addMonths, filterTransactionsForPeriod, filterTransactionsForRange, formatShortPeriodLabel, getDaysInPeriod, resolveRangePreset } from '../../period.mjs';
 import {
   buildCategoryTrend,
@@ -1018,6 +1019,11 @@ export function Settings({ t, onBack, onNavigate, setAccent, setDensity, setDeci
             </button>
           )}
         </div>
+      </div>
+
+      {/* BACKUP */}
+      <div style={{ marginTop: 14 }}>
+        <BackupSection />
       </div>
 
       {/* DATA */}
