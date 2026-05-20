@@ -11,6 +11,7 @@ import {
 import { buildBillRows, markRecurringPaid as createRecurringPayment, getBillDueDate, slug, createGoalContribution } from './planning.mjs';
 import { buildAlertRows } from './alerts.mjs';
 import { DEFAULT_RATES } from './fx.mjs';
+import { ACCENTS } from './theme';
 
 function useLS(key, def) {
   const [v, setV] = React.useState(() => {
@@ -108,6 +109,22 @@ export function StoreProvider({ children }) {
   const [rates, setRates] = useLS('ledger:fxRates', DEFAULT_RATES);
   const [ratesUpdated, setRatesUpdated] = useLS('ledger:fxRatesUpdated', {});
   const [fxMigrationToastSeen, setFxMigrationToastSeen] = useLS('ledger:fxMigrationToastSeen', false);
+
+  // CAR-77: settings keys moved from App.jsx's useTweaks. Same keys, same
+  // defaults — zero migration. App.jsx no longer maintains its own useLS;
+  // <AppShell> reads these via useStore() so backup/restore can see and
+  // write them through the same surface as everything else.
+  const [accent, setAccent]       = useLS('ledger:accent',   ACCENTS[0].val);
+  const [density, setDensity]     = useLS('ledger:density',  'comfortable');
+  const [decimals, setDecimals]   = useLS('ledger:decimals', true);
+  const [currency, setCurrency]   = useLS('ledger:currency', 'USD');
+  const [theme, setTheme]         = useLS('ledger:theme',    'light');
+
+  // Move the data-theme effect from useTweaks to here.
+  React.useEffect(() => {
+    const valid = ['light', 'dark', 'auto'].includes(theme) ? theme : 'light';
+    document.documentElement.setAttribute('data-theme', valid);
+  }, [theme]);
 
   React.useEffect(() => {
     // Intentional: txs is read from the initial synchronous localStorage load.
@@ -669,6 +686,11 @@ export function StoreProvider({ children }) {
       resetRates,
       fxMigrationToastSeen,
       setFxMigrationToastSeen,
+      accent, setAccent,
+      density, setDensity,
+      decimals, setDecimals,
+      currency, setCurrency,
+      theme, setTheme,
       welcomeSeen,
       dismissWelcome,
       loadSampleData,

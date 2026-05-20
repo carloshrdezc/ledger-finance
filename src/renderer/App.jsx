@@ -1,5 +1,5 @@
 import React from 'react';
-import { A, ACCENTS } from './theme';
+import { A } from './theme';
 import { StoreProvider, useStore } from './store';
 import ImportExport from './components/ImportExport';
 import Welcome from './screens/Welcome';
@@ -32,44 +32,6 @@ import WebInvestments from './screens/web/WebInvestments';
 import WebSettings from './screens/web/WebSettings';
 import WebAddModal from './screens/web/WebAddModal';
 import WebAlerts from './screens/web/WebAlerts';
-
-// ─── Tweaks ────────────────────────────────────────────────────────────────
-
-function useLS(key, def) {
-  const [v, setV] = React.useState(() => {
-    try { const s = localStorage.getItem(key); return s !== null ? JSON.parse(s) : def; }
-    catch { return def; }
-  });
-  const set = React.useCallback(u => setV(prev => {
-    const next = typeof u === 'function' ? u(prev) : u;
-    try { localStorage.setItem(key, JSON.stringify(next)); } catch {}
-    return next;
-  }), [key]);
-  return [v, set];
-}
-
-function useTweaks() {
-  const [accent, setAccent]     = useLS('ledger:accent',   ACCENTS[0].val);
-  const [density, setDensity]   = useLS('ledger:density',  'comfortable');
-  const [decimals, setDecimals] = useLS('ledger:decimals', true);
-  const [currency, setCurrency] = useLS('ledger:currency', 'USD');
-  const [theme, setTheme]       = useLS('ledger:theme',    'light');
-
-  // Apply the theme by setting data-theme on <html>. CSS variables in
-  // index.html resolve from there. 'auto' uses prefers-color-scheme.
-  React.useEffect(() => {
-    const valid = ['light', 'dark', 'auto'].includes(theme) ? theme : 'light';
-    document.documentElement.setAttribute('data-theme', valid);
-  }, [theme]);
-
-  return {
-    accent, setAccent,
-    density, setDensity,
-    decimals, setDecimals,
-    currency, setCurrency,
-    theme, setTheme,
-  };
-}
 
 // ─── Mobile ────────────────────────────────────────────────────────────────
 
@@ -243,8 +205,14 @@ function AccountFromEmpty({ onClose, t, isMobile }) {
 }
 
 function AppShell() {
-  const { welcomeSeen, isAppEmpty } = useStore();
-  const { accent, setAccent, density, setDensity, decimals, setDecimals, currency, setCurrency, theme, setTheme } = useTweaks();
+  const {
+    welcomeSeen, isAppEmpty,
+    accent, setAccent,
+    density, setDensity,
+    decimals, setDecimals,
+    currency, setCurrency,
+    theme, setTheme,
+  } = useStore();
   const [isMobile, setIsMobile] = React.useState(window.innerWidth < 1024);
   const [showImport, setShowImport] = React.useState(false);
   const [pendingAddAccount, setPendingAddAccount] = React.useState(false);
