@@ -126,7 +126,7 @@ export default function ImportExport({ onClose }) {
         <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid ' + A.rule2, display: 'flex', alignItems: 'center', fontSize: 9, color: A.muted, letterSpacing: 1 }}>
           <span>{store.transactions.length} TRANSACTIONS · STORED LOCALLY</span>
           <button
-            onClick={() => { store.reset(); setStatus({ ok: true, msg: 'Reset to sample data' }); }}
+            onClick={() => { store.reset(); setStatus({ ok: true, msg: 'Reset to empty' }); }}
             style={{ all: 'unset', cursor: 'pointer', marginLeft: 'auto', fontSize: 9, letterSpacing: 1, color: A.neg }}
           >
             RESET TO DEFAULTS
