@@ -1,5 +1,4 @@
-import test from 'node:test';
-import assert from 'node:assert/strict';
+import { test, expect } from 'vitest';
 
 import {
   buildCategoryTrend,
@@ -24,17 +23,14 @@ const transactions = [
 const RATES = { USD: 1, EUR: 1 / 1.08 };
 
 test('buildCategoryTrend totals spending by category across periods', () => {
-  assert.deepEqual(
-    buildCategoryTrend(transactions, ['2026-04', '2026-05'], 6, RATES),
-    [
+  expect(buildCategoryTrend(transactions, ['2026-04', '2026-05'], 6, RATES)).toEqual([
       { cat: 'food', values: [120, 160.8], total: 280.8 },
       { cat: 'dining', values: [0, 50], total: 50 },
-    ],
-  );
+    ]);
 });
 
 test('buildIncomeExpenseSeries separates income and expenses by month', () => {
-  assert.deepEqual(buildIncomeExpenseSeries(transactions, ['2026-04', '2026-05'], RATES), [
+  expect(buildIncomeExpenseSeries(transactions, ['2026-04', '2026-05'], RATES)).toEqual([
     { period: '2026-04', income: 1000, expense: 120, net: 880 },
     { period: '2026-05', income: 2000, expense: 210.8, net: 1789.2 },
   ]);
@@ -48,7 +44,7 @@ test('buildNetWorthTrend accumulates transactions from opening balances', () => 
     { id: 'eur', openingBal: 10, ccy: 'EUR' },
   ];
 
-  assert.deepEqual(buildNetWorthTrend(accounts, transactions, ['2026-04', '2026-05'], RATES), [
+  expect(buildNetWorthTrend(accounts, transactions, ['2026-04', '2026-05'], RATES)).toEqual([
     { period: '2026-04', value: 990.8 },
     { period: '2026-05', value: 2780 },
   ]);
@@ -65,7 +61,7 @@ test('buildNetWorthDailyTrend returns bounded daily values for dashboard ranges'
     { id: 'future', date: '2026-05-16', acct: 'chk', amt: 999, ccy: 'USD' },
   ];
 
-  assert.deepEqual(buildNetWorthDailyTrend(accounts, txs, '2026-05-15', 3), [
+  expect(buildNetWorthDailyTrend(accounts, txs, '2026-05-15', 3)).toEqual([
     { date: '2026-05-13', value: 150 },
     { date: '2026-05-14', value: 130 },
     { date: '2026-05-15', value: 130 },
@@ -73,9 +69,9 @@ test('buildNetWorthDailyTrend returns bounded daily values for dashboard ranges'
 });
 
 test('svgLinePath converts points into a bounded SVG path', () => {
-  assert.equal(svgLinePath([10, 20, 15], 100, 50), 'M0.0 50.0 L50.0 0.0 L100.0 25.0');
+  expect(svgLinePath([10, 20, 15], 100, 50)).toBe('M0.0 50.0 L50.0 0.0 L100.0 25.0');
 });
 
 test('svgLinePath renders a visible single-point range', () => {
-  assert.equal(svgLinePath([10], 100, 50), 'M0.0 25.0 L100.0 25.0');
+  expect(svgLinePath([10], 100, 50)).toBe('M0.0 25.0 L100.0 25.0');
 });

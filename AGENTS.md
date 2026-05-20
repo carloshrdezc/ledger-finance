@@ -33,13 +33,11 @@ No lint script is configured. Self-review the diff manually before moving an iss
 - IBM Plex Mono is the only font. All-caps labels use the `<ALabel>` component (`Shared.jsx`).
 - Pure logic modules use `.mjs` extension and have no React imports. Tests for `.mjs` modules co-locate as `<module>.test.mjs`.
 
-## Test runners
+## Test runner
 
-The repo currently has two test runners coexisting:
-- **`node:test`** — used by `alerts.test.mjs`, `charts.test.mjs`, `period.test.mjs`, `planning.test.mjs`. These predate CAR-75.
-- **`vitest`** — installed in CAR-75. The Vitest config narrows the include glob so it only picks up Vitest-style files (anything outside the explicit allowlist must be `node:test` style).
+All tests use **Vitest** (`import { test, expect } from 'vitest'`). A single `npm test` invocation runs every `src/**/*.test.{js,mjs,jsx}` — no separate `node --test` step. CAR-153 unified the previously-coexisting `node:test` files (`alerts`/`charts`/`period`/`planning`) onto Vitest in 2026-05.
 
-**A separate Linear issue (TBD) tracks unifying these onto Vitest.** Until that ships, do not change the include glob without checking the runner each existing test file uses.
+Pure-logic modules (`.mjs`) use Vitest's flat `test()` form; you can also use `describe`/`it` if you want grouping. New test files are picked up automatically by the include glob — no allowlist edit needed.
 
 ## When opening a PR
 

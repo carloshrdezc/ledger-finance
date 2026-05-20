@@ -1,5 +1,4 @@
-import test from 'node:test';
-import assert from 'node:assert/strict';
+import { test, expect } from 'vitest';
 
 import {
   buildBillRows,
@@ -17,8 +16,8 @@ const bill = {
 };
 
 test('getBillDueDate clamps days to the selected month length', () => {
-  assert.equal(getBillDueDate({ day: 31 }, '2026-02'), '2026-02-28');
-  assert.equal(getBillDueDate({ day: 6 }, '2026-05'), '2026-05-06');
+  expect(getBillDueDate({ day: 31 }, '2026-02')).toBe('2026-02-28');
+  expect(getBillDueDate({ day: 6 }, '2026-05')).toBe('2026-05-06');
 });
 
 test('buildBillRows marks paid, due, overdue, and upcoming bills', () => {
@@ -34,14 +33,14 @@ test('buildBillRows marks paid, due, overdue, and upcoming bills', () => {
   const comcast = rows.find(row => row.name === 'COMCAST XFINITY');
   const rent = rows.find(row => row.name === 'RENT');
 
-  assert.equal(comcast.status, 'paid');
-  assert.equal(comcast.paidTxId, 'tx_paid');
-  assert.equal(rent.status, 'overdue');
-  assert.equal(rent.dueDate, '2026-05-01');
+  expect(comcast.status).toBe('paid');
+  expect(comcast.paidTxId).toBe('tx_paid');
+  expect(rent.status).toBe('overdue');
+  expect(rent.dueDate).toBe('2026-05-01');
 });
 
 test('createBillPaymentTransaction creates an expense on the due date', () => {
-  assert.deepEqual(createBillPaymentTransaction(bill, '2026-05'), {
+  expect(createBillPaymentTransaction(bill, '2026-05')).toEqual({
     id: 'bill_comcast-xfinity_2026-05-06',
     name: 'COMCAST XFINITY',
     amt: -89,
@@ -60,9 +59,9 @@ test('createGoalContribution returns linked contribution and transaction records
     { amount: 75, date: '2026-05-14', acct: 'chk' },
   );
 
-  assert.equal(result.goal.current, 175);
-  assert.equal(result.contribution.amount, 75);
-  assert.equal(result.contribution.txId, result.transaction.id);
-  assert.equal(result.transaction.amt, -75);
-  assert.equal(result.transaction.goalId, 'g1');
+  expect(result.goal.current).toBe(175);
+  expect(result.contribution.amount).toBe(75);
+  expect(result.contribution.txId).toBe(result.transaction.id);
+  expect(result.transaction.amt).toBe(-75);
+  expect(result.transaction.goalId).toBe('g1');
 });

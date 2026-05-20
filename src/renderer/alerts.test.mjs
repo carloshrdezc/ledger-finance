@@ -1,5 +1,4 @@
-import test from 'node:test';
-import assert from 'node:assert/strict';
+import { test, expect } from 'vitest';
 
 import { buildAlertRows } from './alerts.mjs';
 
@@ -27,14 +26,14 @@ test('buildAlertRows ranks overdue bills and overspent budgets first', () => {
     investments: [],
   }, '2026-05-15');
 
-  assert.deepEqual(alerts.map(a => a.id), [
+  expect(alerts.map(a => a.id)).toEqual([
     'bill:rent|2026-05-01',
     'budget:food:over',
     'budget:subs:near',
   ]);
-  assert.equal(alerts[0].severity, 'critical');
-  assert.equal(alerts[0].kind, 'bill');
-  assert.equal(alerts[1].metric, '120%');
+  expect(alerts[0].severity).toBe('critical');
+  expect(alerts[0].kind).toBe('bill');
+  expect(alerts[1].metric).toBe('120%');
 });
 
 test('buildAlertRows supports due bills, low cash, goal gaps, investment drops, and dismissals', () => {
@@ -57,13 +56,13 @@ test('buildAlertRows supports due bills, low cash, goal gaps, investment drops, 
     dismissedAlertIds: ['goal:g1:behind'],
   }, '2026-05-15');
 
-  assert.deepEqual(alerts.map(a => a.id), [
+  expect(alerts.map(a => a.id)).toEqual([
     'account:chk:negative',
     'bill:electric|2026-05-15',
     'investment:VTI:drop',
   ]);
-  assert.equal(alerts.find(a => a.id === 'bill:electric|2026-05-15').severity, 'high');
-  assert.equal(alerts.some(a => a.id === 'goal:g1:behind'), false);
+  expect(alerts.find(a => a.id === 'bill:electric|2026-05-15').severity).toBe('high');
+  expect(alerts.some(a => a.id === 'goal:g1:behind')).toBe(false);
 });
 
 test('buildAlertRows emits backup reminder when last backup is older than the interval', () => {
@@ -74,11 +73,11 @@ test('buildAlertRows emits backup reminder when last backup is older than the in
     backupReminderSnoozedUntil: null,
   }, '2026-05-15'); // 44 days later
   const reminder = alerts.find(a => a.id === 'backup:reminder');
-  assert.ok(reminder, 'expected a backup:reminder alert');
-  assert.equal(reminder.kind, 'backup');
-  assert.equal(reminder.severity, 'low');
-  assert.equal(reminder.action, 'BACKUP');
-  assert.equal(reminder.route, 'settings');
+  expect(reminder).toBeTruthy();
+  expect(reminder.kind).toBe('backup');
+  expect(reminder.severity).toBe('low');
+  expect(reminder.action).toBe('BACKUP');
+  expect(reminder.route).toBe('settings');
 });
 
 test('buildAlertRows emits backup reminder when no backup has ever been taken', () => {
@@ -88,7 +87,7 @@ test('buildAlertRows emits backup reminder when no backup has ever been taken', 
     backupReminderInterval: 30,
     backupReminderSnoozedUntil: null,
   }, '2026-05-15');
-  assert.ok(alerts.find(a => a.id === 'backup:reminder'));
+  expect(alerts.find(a => a.id === 'backup:reminder')).toBeTruthy();
 });
 
 test('buildAlertRows skips backup reminder when isAppEmpty is true', () => {
@@ -98,7 +97,7 @@ test('buildAlertRows skips backup reminder when isAppEmpty is true', () => {
     backupReminderInterval: 30,
     backupReminderSnoozedUntil: null,
   }, '2026-05-15');
-  assert.equal(alerts.find(a => a.id === 'backup:reminder'), undefined);
+  expect(alerts.find(a => a.id === 'backup:reminder')).toBeUndefined();
 });
 
 test('buildAlertRows skips backup reminder when interval is 0 (Off)', () => {
@@ -108,7 +107,7 @@ test('buildAlertRows skips backup reminder when interval is 0 (Off)', () => {
     backupReminderInterval: 0,
     backupReminderSnoozedUntil: null,
   }, '2026-05-15');
-  assert.equal(alerts.find(a => a.id === 'backup:reminder'), undefined);
+  expect(alerts.find(a => a.id === 'backup:reminder')).toBeUndefined();
 });
 
 test('buildAlertRows skips backup reminder while snoozed', () => {
@@ -118,7 +117,7 @@ test('buildAlertRows skips backup reminder while snoozed', () => {
     backupReminderInterval: 30,
     backupReminderSnoozedUntil: '2026-06-01', // future
   }, '2026-05-15');
-  assert.equal(alerts.find(a => a.id === 'backup:reminder'), undefined);
+  expect(alerts.find(a => a.id === 'backup:reminder')).toBeUndefined();
 });
 
 test('buildAlertRows re-emits backup reminder once snooze date passes', () => {
@@ -128,7 +127,7 @@ test('buildAlertRows re-emits backup reminder once snooze date passes', () => {
     backupReminderInterval: 30,
     backupReminderSnoozedUntil: '2026-05-01', // past
   }, '2026-05-15');
-  assert.ok(alerts.find(a => a.id === 'backup:reminder'));
+  expect(alerts.find(a => a.id === 'backup:reminder')).toBeTruthy();
 });
 
 test('buildAlertRows skips backup reminder when last backup is fresh', () => {
@@ -138,7 +137,7 @@ test('buildAlertRows skips backup reminder when last backup is fresh', () => {
     backupReminderInterval: 30,
     backupReminderSnoozedUntil: null,
   }, '2026-05-15'); // 5 days later
-  assert.equal(alerts.find(a => a.id === 'backup:reminder'), undefined);
+  expect(alerts.find(a => a.id === 'backup:reminder')).toBeUndefined();
 });
 
 // CAR-77 boundary tests added during code review (see commit body).
@@ -150,7 +149,7 @@ test('buildAlertRows suppresses backup reminder on the snooze date itself (>= se
     backupReminderInterval: 30,
     backupReminderSnoozedUntil: '2026-05-15', // === todayIso
   }, '2026-05-15');
-  assert.equal(alerts.find(a => a.id === 'backup:reminder'), undefined);
+  expect(alerts.find(a => a.id === 'backup:reminder')).toBeUndefined();
 });
 
 test('buildAlertRows emits backup reminder exactly at the interval boundary (days === interval)', () => {
@@ -161,8 +160,8 @@ test('buildAlertRows emits backup reminder exactly at the interval boundary (day
     backupReminderSnoozedUntil: null,
   }, '2026-05-15'); // exactly 30 days
   const reminder = alerts.find(a => a.id === 'backup:reminder');
-  assert.ok(reminder, 'expected reminder when days === interval');
-  assert.equal(reminder.detail, 'LAST BACKUP 30 DAYS AGO');
+  expect(reminder).toBeTruthy();
+  expect(reminder.detail).toBe('LAST BACKUP 30 DAYS AGO');
 });
 
 test('buildAlertRows treats malformed lastBackupAt as no-record (no NaN leakage)', () => {
@@ -173,9 +172,9 @@ test('buildAlertRows treats malformed lastBackupAt as no-record (no NaN leakage)
     backupReminderSnoozedUntil: null,
   }, '2026-05-15');
   const reminder = alerts.find(a => a.id === 'backup:reminder');
-  assert.ok(reminder);
-  assert.equal(reminder.detail, 'NO BACKUP ON RECORD');
-  assert.ok(!String(reminder.detail).includes('NaN'), 'detail must not contain NaN');
+  expect(reminder).toBeTruthy();
+  expect(reminder.detail).toBe('NO BACKUP ON RECORD');
+  expect(String(reminder.detail)).not.toContain('NaN');
 });
 
 test('buildAlertRows treats future lastBackupAt as no-record (clock skew safety)', () => {
@@ -186,6 +185,6 @@ test('buildAlertRows treats future lastBackupAt as no-record (clock skew safety)
     backupReminderSnoozedUntil: null,
   }, '2026-05-15');
   const reminder = alerts.find(a => a.id === 'backup:reminder');
-  assert.ok(reminder);
-  assert.equal(reminder.detail, 'NO BACKUP ON RECORD');
+  expect(reminder).toBeTruthy();
+  expect(reminder.detail).toBe('NO BACKUP ON RECORD');
 });
