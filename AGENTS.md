@@ -39,6 +39,8 @@ All tests use **Vitest** (`import { test, expect } from 'vitest'`). A single `np
 
 Pure-logic modules (`.mjs`) use Vitest's flat `test()` form; you can also use `describe`/`it` if you want grouping. New test files are picked up automatically by the include glob — no allowlist edit needed.
 
+CI (GitHub Actions, `.github/workflows/ci.yml`) runs the same `npm test` and `npx vite build` on every push and pull request to `dev-master` and `main`.
+
 ## When opening a PR
 
 1. Ensure the issue is in `QA` (self-reviewed) before pushing.
