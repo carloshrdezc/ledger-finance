@@ -5,6 +5,7 @@ import WebShell from './WebShell';
 import { useStore } from '../../store';
 import ImportExport from '../../components/ImportExport';
 import FxRatesSection from '../../components/FxRatesSection';
+import BackupSection from '../../components/BackupSection';
 
 const CURRENCIES = ['USD', 'EUR', 'GBP', 'JPY', 'CAD', 'AUD', 'CHF', 'MXN'];
 
@@ -295,6 +296,11 @@ export default function WebSettings({ t, onNavigate, onAdd, setAccent, setDensit
                 </div>
               </div>
             </div>
+          </div>
+
+          {/* BACKUP */}
+          <div style={{ marginTop: 20 }}>
+            <BackupSection />
           </div>
 
           {/* DATA */}
