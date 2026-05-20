@@ -1,5 +1,5 @@
 const SEVERITY_RANK = { critical: 0, high: 1, medium: 2, low: 3 };
-const KIND_RANK = { bill: 0, budget: 1, account: 2, goal: 3, investment: 4, fx: 5 };
+const KIND_RANK = { bill: 0, budget: 1, account: 2, goal: 3, investment: 4, fx: 5, backup: 6 };
 
 function pct(n) {
   return Math.round(n * 100) + '%';
@@ -21,6 +21,53 @@ function compareAlerts(a, b) {
   return String(a.sortDate || a.title).localeCompare(String(b.sortDate || b.title));
 }
 
+// CAR-77: Returns a backup reminder alert if the user hasn't backed up
+// within the configured interval, or null. Pure: takes the inputs it
+// needs, returns the alert shape used by AlertsHub.
+//
+// Caller is responsible for app-empty gating — `detectBackupReminder`
+// does not know about app state by design (see buildAlertRows below).
+export function detectBackupReminder({
+  lastBackupAt,
+  interval,
+  snoozedUntil,
+  todayIso,
+}) {
+  if (!Number.isFinite(interval) || interval <= 0) return null;
+  // `>=` so the alert is suppressed THROUGH the snooze date inclusive
+  // (a user who picks "snooze until June 1" means "don't bother me on
+  // June 1 either"). Comparison is lexical on YYYY-MM-DD which is correct
+  // for that format.
+  if (snoozedUntil && snoozedUntil >= todayIso) return null;
+
+  const reminder = (detail) => ({
+    id: 'backup:reminder',
+    kind: 'backup',
+    severity: 'low',
+    title: 'BACK UP YOUR DATA',
+    detail,
+    metric: '',
+    action: 'BACKUP',
+    route: 'settings',
+  });
+
+  if (!lastBackupAt) return reminder('NO BACKUP ON RECORD');
+
+  // Both inputs are 'YYYY-MM-DD'. Use UTC midnight to avoid DST drift.
+  const ms = Date.parse(todayIso + 'T00:00:00Z') - Date.parse(lastBackupAt + 'T00:00:00Z');
+  const days = Math.floor(ms / 86_400_000);
+
+  // Treat unparseable / future dates as "no record" — same UX, never NaN.
+  // (Negative `days` happens if `lastBackupAt` is later than today, e.g.
+  // clock skew or a corrupted future date — fall through to no-record
+  // since we can't trust it.)
+  if (!Number.isFinite(days) || days < 0) return reminder('NO BACKUP ON RECORD');
+
+  if (days < interval) return null;
+
+  return reminder(`LAST BACKUP ${days} DAYS AGO`);
+}
+
 export function buildAlertRows({
   billRows = [],
   budgetRows = [],
@@ -32,6 +79,10 @@ export function buildAlertRows({
   ratesUpdated = {},
   transactions = [],
   fxMigrationToastSeen = false,
+  isAppEmpty = false,
+  lastBackupAt = null,
+  backupReminderInterval = 30,
+  backupReminderSnoozedUntil = null,
 } = {}, todayIso = new Date().toISOString().slice(0, 10)) {
   const dismissed = new Set(dismissedAlertIds);
   const alerts = [];
@@ -165,6 +216,19 @@ export function buildAlertRows({
       action: 'OPEN',
       route: 'settings',
     });
+  }
+
+  // CAR-77: backup reminder. Suppressed entirely when the app has no data
+  // (an empty store has nothing to back up — and would just nag a brand-new
+  // user). Otherwise gated by interval/snooze.
+  if (!isAppEmpty) {
+    const reminder = detectBackupReminder({
+      lastBackupAt,
+      interval: backupReminderInterval,
+      snoozedUntil: backupReminderSnoozedUntil,
+      todayIso,
+    });
+    if (reminder) alerts.push(reminder);
   }
 
   return alerts

@@ -3,8 +3,17 @@ import assert from 'node:assert/strict';
 
 import { buildAlertRows } from './alerts.mjs';
 
+// CAR-77: the two pre-existing tests below pass `isAppEmpty: true` to
+// suppress the new backup reminder alert. They're testing other alert
+// categories (bills, budgets, accounts, goals, investments) and assert
+// exact alert ID arrays via deepEqual, so without this opt-out the
+// reminder would leak in via the default `isAppEmpty: false` and break
+// those assertions. Don't remove these lines without updating the
+// expected ID arrays accordingly.
+
 test('buildAlertRows ranks overdue bills and overspent budgets first', () => {
   const alerts = buildAlertRows({
+    isAppEmpty: true,
     billRows: [
       { key: 'rent|2026-05-01', name: 'RENT', amt: 2400, status: 'overdue', dueDate: '2026-05-01', type: 'expense' },
       { key: 'payroll|2026-05-16', name: 'PAYROLL', amt: 3800, status: 'upcoming', dueDate: '2026-05-16', type: 'income' },
@@ -30,6 +39,7 @@ test('buildAlertRows ranks overdue bills and overspent budgets first', () => {
 
 test('buildAlertRows supports due bills, low cash, goal gaps, investment drops, and dismissals', () => {
   const alerts = buildAlertRows({
+    isAppEmpty: true,
     billRows: [
       { key: 'electric|2026-05-15', name: 'ELECTRIC', amt: 112, status: 'due', dueDate: '2026-05-15', type: 'expense' },
     ],
@@ -129,4 +139,53 @@ test('buildAlertRows skips backup reminder when last backup is fresh', () => {
     backupReminderSnoozedUntil: null,
   }, '2026-05-15'); // 5 days later
   assert.equal(alerts.find(a => a.id === 'backup:reminder'), undefined);
+});
+
+// CAR-77 boundary tests added during code review (see commit body).
+
+test('buildAlertRows suppresses backup reminder on the snooze date itself (>= semantics)', () => {
+  const alerts = buildAlertRows({
+    isAppEmpty: false,
+    lastBackupAt: null,
+    backupReminderInterval: 30,
+    backupReminderSnoozedUntil: '2026-05-15', // === todayIso
+  }, '2026-05-15');
+  assert.equal(alerts.find(a => a.id === 'backup:reminder'), undefined);
+});
+
+test('buildAlertRows emits backup reminder exactly at the interval boundary (days === interval)', () => {
+  const alerts = buildAlertRows({
+    isAppEmpty: false,
+    lastBackupAt: '2026-04-15',
+    backupReminderInterval: 30,
+    backupReminderSnoozedUntil: null,
+  }, '2026-05-15'); // exactly 30 days
+  const reminder = alerts.find(a => a.id === 'backup:reminder');
+  assert.ok(reminder, 'expected reminder when days === interval');
+  assert.equal(reminder.detail, 'LAST BACKUP 30 DAYS AGO');
+});
+
+test('buildAlertRows treats malformed lastBackupAt as no-record (no NaN leakage)', () => {
+  const alerts = buildAlertRows({
+    isAppEmpty: false,
+    lastBackupAt: 'not a date',
+    backupReminderInterval: 30,
+    backupReminderSnoozedUntil: null,
+  }, '2026-05-15');
+  const reminder = alerts.find(a => a.id === 'backup:reminder');
+  assert.ok(reminder);
+  assert.equal(reminder.detail, 'NO BACKUP ON RECORD');
+  assert.ok(!String(reminder.detail).includes('NaN'), 'detail must not contain NaN');
+});
+
+test('buildAlertRows treats future lastBackupAt as no-record (clock skew safety)', () => {
+  const alerts = buildAlertRows({
+    isAppEmpty: false,
+    lastBackupAt: '2027-01-01',
+    backupReminderInterval: 30,
+    backupReminderSnoozedUntil: null,
+  }, '2026-05-15');
+  const reminder = alerts.find(a => a.id === 'backup:reminder');
+  assert.ok(reminder);
+  assert.equal(reminder.detail, 'NO BACKUP ON RECORD');
 });
