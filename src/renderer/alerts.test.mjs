@@ -55,3 +55,78 @@ test('buildAlertRows supports due bills, low cash, goal gaps, investment drops, 
   assert.equal(alerts.find(a => a.id === 'bill:electric|2026-05-15').severity, 'high');
   assert.equal(alerts.some(a => a.id === 'goal:g1:behind'), false);
 });
+
+test('buildAlertRows emits backup reminder when last backup is older than the interval', () => {
+  const alerts = buildAlertRows({
+    isAppEmpty: false,
+    lastBackupAt: '2026-04-01',
+    backupReminderInterval: 30,
+    backupReminderSnoozedUntil: null,
+  }, '2026-05-15'); // 44 days later
+  const reminder = alerts.find(a => a.id === 'backup:reminder');
+  assert.ok(reminder, 'expected a backup:reminder alert');
+  assert.equal(reminder.kind, 'backup');
+  assert.equal(reminder.severity, 'low');
+  assert.equal(reminder.action, 'BACKUP');
+  assert.equal(reminder.route, 'settings');
+});
+
+test('buildAlertRows emits backup reminder when no backup has ever been taken', () => {
+  const alerts = buildAlertRows({
+    isAppEmpty: false,
+    lastBackupAt: null,
+    backupReminderInterval: 30,
+    backupReminderSnoozedUntil: null,
+  }, '2026-05-15');
+  assert.ok(alerts.find(a => a.id === 'backup:reminder'));
+});
+
+test('buildAlertRows skips backup reminder when isAppEmpty is true', () => {
+  const alerts = buildAlertRows({
+    isAppEmpty: true,
+    lastBackupAt: null,
+    backupReminderInterval: 30,
+    backupReminderSnoozedUntil: null,
+  }, '2026-05-15');
+  assert.equal(alerts.find(a => a.id === 'backup:reminder'), undefined);
+});
+
+test('buildAlertRows skips backup reminder when interval is 0 (Off)', () => {
+  const alerts = buildAlertRows({
+    isAppEmpty: false,
+    lastBackupAt: null,
+    backupReminderInterval: 0,
+    backupReminderSnoozedUntil: null,
+  }, '2026-05-15');
+  assert.equal(alerts.find(a => a.id === 'backup:reminder'), undefined);
+});
+
+test('buildAlertRows skips backup reminder while snoozed', () => {
+  const alerts = buildAlertRows({
+    isAppEmpty: false,
+    lastBackupAt: null,
+    backupReminderInterval: 30,
+    backupReminderSnoozedUntil: '2026-06-01', // future
+  }, '2026-05-15');
+  assert.equal(alerts.find(a => a.id === 'backup:reminder'), undefined);
+});
+
+test('buildAlertRows re-emits backup reminder once snooze date passes', () => {
+  const alerts = buildAlertRows({
+    isAppEmpty: false,
+    lastBackupAt: null,
+    backupReminderInterval: 30,
+    backupReminderSnoozedUntil: '2026-05-01', // past
+  }, '2026-05-15');
+  assert.ok(alerts.find(a => a.id === 'backup:reminder'));
+});
+
+test('buildAlertRows skips backup reminder when last backup is fresh', () => {
+  const alerts = buildAlertRows({
+    isAppEmpty: false,
+    lastBackupAt: '2026-05-10',
+    backupReminderInterval: 30,
+    backupReminderSnoozedUntil: null,
+  }, '2026-05-15'); // 5 days later
+  assert.equal(alerts.find(a => a.id === 'backup:reminder'), undefined);
+});
