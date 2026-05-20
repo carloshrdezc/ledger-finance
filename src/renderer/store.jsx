@@ -11,6 +11,7 @@ import {
 import { buildBillRows, markRecurringPaid as createRecurringPayment, getBillDueDate, slug, createGoalContribution } from './planning.mjs';
 import { buildAlertRows } from './alerts.mjs';
 import { DEFAULT_RATES } from './fx.mjs';
+import { buildBackup } from './backup.mjs';
 import { ACCENTS } from './theme';
 
 function useLS(key, def) {
@@ -126,6 +127,22 @@ export function StoreProvider({ children }) {
     document.documentElement.setAttribute('data-theme', valid);
   }, [theme]);
 
+  // CAR-77: backup metadata.
+  // - lastBackupAt: ISO date string (YYYY-MM-DD) of the most recent successful
+  //   exportBackup call, or null if the user has never backed up.
+  // - backupReminderInterval: 0=Off, 7, 30, 90.
+  // - backupReminderSnoozedUntil: ISO date until which the reminder is
+  //   suppressed. Set when the user dismisses the reminder.
+  const [lastBackupAt, setLastBackupAt] = useLS('ledger:lastBackupAt', null);
+  const [backupReminderInterval, setBackupReminderIntervalRaw] = useLS('ledger:backupReminderInterval', 30);
+  const [backupReminderSnoozedUntil, setBackupReminderSnoozedUntil] = useLS('ledger:backupReminderSnoozedUntil', null);
+
+  const setBackupReminderInterval = React.useCallback(value => {
+    const allowed = [0, 7, 30, 90];
+    const next = allowed.includes(Number(value)) ? Number(value) : 30;
+    setBackupReminderIntervalRaw(next);
+  }, [setBackupReminderIntervalRaw]);
+
   React.useEffect(() => {
     // Intentional: txs is read from the initial synchronous localStorage load.
     // Empty deps ensures this runs only once on mount.
@@ -179,6 +196,11 @@ export function StoreProvider({ children }) {
     [accountsWithBalance],
   );
 
+  const isAppEmpty = React.useMemo(
+    () => isAppEmptyFor({ txs, accounts, bills, goals, budgets, investments, trades }),
+    [txs, accounts, bills, goals, budgets, investments, trades],
+  );
+
   const alertRowsWithAccounts = React.useMemo(
     () => buildAlertRows({
       billRows,
@@ -191,13 +213,12 @@ export function StoreProvider({ children }) {
       ratesUpdated,
       transactions,
       fxMigrationToastSeen,
+      isAppEmpty,
+      lastBackupAt,
+      backupReminderInterval,
+      backupReminderSnoozedUntil,
     }),
-    [billRows, budgetRows, goals, accountsWithBalance, investments, dismissedAlertIds, rates, ratesUpdated, transactions, fxMigrationToastSeen],
-  );
-
-  const isAppEmpty = React.useMemo(
-    () => isAppEmptyFor({ txs, accounts, bills, goals, budgets, investments, trades }),
-    [txs, accounts, bills, goals, budgets, investments, trades],
+    [billRows, budgetRows, goals, accountsWithBalance, investments, dismissedAlertIds, rates, ratesUpdated, transactions, fxMigrationToastSeen, isAppEmpty, lastBackupAt, backupReminderInterval, backupReminderSnoozedUntil],
   );
 
   const addTransactions = React.useCallback(incoming => setTxs(prev => {
@@ -527,8 +548,16 @@ export function StoreProvider({ children }) {
       setFxMigrationToastSeen(true);
       return;
     }
+    if (id === 'backup:reminder') {
+      // Snooze for one full interval. Anchored to the dismiss-time interval,
+      // not whatever the user changes it to afterwards.
+      const days = Number(backupReminderInterval) || 30;
+      const next = new Date(Date.now() + days * 86_400_000).toISOString().slice(0, 10);
+      setBackupReminderSnoozedUntil(next);
+      return;
+    }
     setDismissedAlertIds(prev => prev.includes(id) ? prev : [...prev, id]);
-  }, [setDismissedAlertIds, setFxMigrationToastSeen]);
+  }, [setDismissedAlertIds, setFxMigrationToastSeen, backupReminderInterval, setBackupReminderSnoozedUntil]);
 
   const restoreAlerts = React.useCallback(() => {
     setDismissedAlertIds([]);
@@ -584,8 +613,89 @@ export function StoreProvider({ children }) {
     setRatesUpdated({});
     setFxMigrationToastSeen(false);
     setWelcomeSeen(true); // already past the welcome — don't re-show it
+    setLastBackupAt(null);
+    setBackupReminderSnoozedUntil(null);
+    setBackupReminderIntervalRaw(30);
     _seedSampleData();
-  }, [_seedSampleData, setTxs, setCatTree, setBudgets, setAccounts, setBills, setGoals, setGoalContributions, setSelectedPeriod, setHidden, setBudgetStartDay, setInvestments, setTrades, setDismissedAlertIds, setTxFilterRaw, setRates, setRatesUpdated, setFxMigrationToastSeen, setWelcomeSeen]);
+  }, [_seedSampleData, setTxs, setCatTree, setBudgets, setAccounts, setBills, setGoals, setGoalContributions, setSelectedPeriod, setHidden, setBudgetStartDay, setInvestments, setTrades, setDismissedAlertIds, setTxFilterRaw, setRates, setRatesUpdated, setFxMigrationToastSeen, setWelcomeSeen, setLastBackupAt, setBackupReminderSnoozedUntil, setBackupReminderIntervalRaw]);
+
+  // CAR-77: returns the JSON string the user will download. Reads the
+  // current state synchronously via the captured useLS values; if React
+  // hasn't yet committed a recent setter, the reader still sees the
+  // committed copy in localStorage on next render — but for export-now,
+  // these closure values are the live ones. Pure builder lives in
+  // backup.mjs.
+  const exportBackup = React.useCallback(() => {
+    const obj = buildBackup({
+      txs, accounts, catTree, budgets, hidden, bills, goals, goalContributions,
+      investments, trades, rates, ratesUpdated,
+      selectedPeriod, budgetStartDay,
+      settings: { accent, density, decimals, currency, theme },
+    });
+    return JSON.stringify(obj, null, 2);
+  }, [txs, accounts, catTree, budgets, hidden, bills, goals, goalContributions, investments, trades, rates, ratesUpdated, selectedPeriod, budgetStartDay, accent, density, decimals, currency, theme]);
+
+  const recordBackupTaken = React.useCallback(() => {
+    setLastBackupAt(new Date().toISOString().slice(0, 10));
+    setBackupReminderSnoozedUntil(null); // a real backup clears any snooze.
+  }, [setLastBackupAt, setBackupReminderSnoozedUntil]);
+
+  // CAR-77: replaces the entire user-data state with the contents of a
+  // validated backup. Single React batch — every setter fires before the
+  // next render. Session ephemera (txFilter, dismissedAlerts, welcomeSeen,
+  // fxMigrationToastSeen) is reset explicitly: post-restore they should
+  // not carry over. lastBackupAt is NOT updated — restore is not a backup.
+  const restoreBackup = React.useCallback(data => {
+    // CAR-77 review hardening: defense-in-depth. Callers should always pass
+    // validated data (parseBackup result), but a future regression that
+    // forgets the .ok gate shouldn't crash the entire app.
+    if (!data || typeof data !== 'object') return;
+    setTxs(Array.isArray(data.transactions) ? data.transactions : []);
+    setAccounts(Array.isArray(data.accounts) ? data.accounts : []);
+    setCatTree(data.categoryTree && typeof data.categoryTree === 'object' ? data.categoryTree : DEFAULT_CAT_TREE);
+    setBudgets(Array.isArray(data.budgets) ? data.budgets : []);
+    setHidden(Array.isArray(data.hidden) ? data.hidden : []);
+    setBills(Array.isArray(data.bills) ? data.bills : []);
+    setGoals(Array.isArray(data.goals) ? data.goals : []);
+    setGoalContributions(Array.isArray(data.goalContributions) ? data.goalContributions : []);
+    setInvestments(Array.isArray(data.investments) ? data.investments : []);
+    setTrades(Array.isArray(data.trades) ? data.trades : []);
+    setRates(data.fxRates && typeof data.fxRates === 'object' ? data.fxRates : DEFAULT_RATES);
+    setRatesUpdated(data.fxRatesUpdated && typeof data.fxRatesUpdated === 'object' ? data.fxRatesUpdated : {});
+    if (data.selectedPeriod) setSelectedPeriod(data.selectedPeriod);
+    // CAR-77 review hardening: clamp budgetStartDay to [1, 28] to mirror the
+    // UI invariant in commitDay. Backup files are human-readable JSON by
+    // design — a hand-edited "99" or "banana" would otherwise corrupt period
+    // calculations until the user opens settings.
+    if (data.budgetStartDay != null) {
+      const n = parseInt(data.budgetStartDay, 10);
+      setBudgetStartDay(Number.isFinite(n) ? Math.max(1, Math.min(28, n)) : 1);
+    }
+
+    // Settings: only apply keys the backup actually contains; missing keys
+    // preserve the user's current setting.
+    const s = data.settings || {};
+    if (s.accent   !== undefined) setAccent(s.accent);
+    if (s.density  !== undefined) setDensity(s.density);
+    if (s.decimals !== undefined) setDecimals(s.decimals);
+    if (s.currency !== undefined) setCurrency(s.currency);
+    if (s.theme    !== undefined) setTheme(s.theme);
+
+    // Session ephemera reset.
+    setTxFilterRaw(null);
+    setDismissedAlertIds([]);
+    setWelcomeSeen(true);          // user is past the welcome by definition.
+    setFxMigrationToastSeen(true); // restored data already has whatever rates it has.
+    setBackupReminderSnoozedUntil(null);
+    // Note: NOT touching lastBackupAt — restoring is not the same as backing up.
+  }, [
+    setTxs, setAccounts, setCatTree, setBudgets, setHidden, setBills, setGoals,
+    setGoalContributions, setInvestments, setTrades, setRates, setRatesUpdated,
+    setSelectedPeriod, setBudgetStartDay,
+    setAccent, setDensity, setDecimals, setCurrency, setTheme,
+    setTxFilterRaw, setDismissedAlertIds, setWelcomeSeen, setFxMigrationToastSeen,
+    setBackupReminderSnoozedUntil,
+  ]);
 
   const reset = React.useCallback(() => {
     setTxs([]);
@@ -606,7 +716,10 @@ export function StoreProvider({ children }) {
     setRatesUpdated({});
     setFxMigrationToastSeen(false);
     setWelcomeSeen(false);
-  }, [setTxs, setCatTree, setBudgets, setAccounts, setBills, setGoals, setGoalContributions, setSelectedPeriod, setHidden, setBudgetStartDay, setInvestments, setTrades, setDismissedAlertIds, setTxFilterRaw, setRates, setRatesUpdated, setFxMigrationToastSeen, setWelcomeSeen]);
+    setLastBackupAt(null);
+    setBackupReminderSnoozedUntil(null);
+    setBackupReminderIntervalRaw(30);
+  }, [setTxs, setCatTree, setBudgets, setAccounts, setBills, setGoals, setGoalContributions, setSelectedPeriod, setHidden, setBudgetStartDay, setInvestments, setTrades, setDismissedAlertIds, setTxFilterRaw, setRates, setRatesUpdated, setFxMigrationToastSeen, setWelcomeSeen, setLastBackupAt, setBackupReminderSnoozedUntil, setBackupReminderIntervalRaw]);
 
   return (
     <StoreCtx.Provider value={{
@@ -639,6 +752,13 @@ export function StoreProvider({ children }) {
       dismissedAlertIds,
       dismissAlert,
       restoreAlerts,
+      lastBackupAt,
+      backupReminderInterval,
+      setBackupReminderInterval,
+      backupReminderSnoozedUntil,
+      exportBackup,
+      restoreBackup,
+      recordBackupTaken,
       markBillPaid,
       addRecurring,
       updateRecurring,
