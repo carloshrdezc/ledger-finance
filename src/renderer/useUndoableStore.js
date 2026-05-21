@@ -62,9 +62,13 @@ export function useUndoableStore() {
       batchKey: 'archiveAccount',
       pluralize: (n) => `${n} accounts archived`,
       do:   () => store.archiveAccount(id),
-      undo: () => store.setAccounts(prev =>
-        prev.map(a => a.id === id ? { ...a, archived: false } : a)
-      ),
+      undo: () => store.setAccounts(prev => {
+        const next = prev.map(a => a.id === id ? { ...a, archived: false } : a);
+        // Re-derive `order` for non-archived accounts to keep contiguous numbering.
+        // Matches the pattern used by addAccount and restoreAccount.
+        let i = 0;
+        return next.map(a => a.archived ? a : { ...a, order: i++ });
+      }),
     });
   }, [store, stack]);
 

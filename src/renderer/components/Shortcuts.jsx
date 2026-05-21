@@ -12,6 +12,7 @@ const SECTIONS = [
       ['Cmd/Ctrl+K',        'Command palette'],
       ['Cmd/Ctrl+Z',        'Undo last destructive action'],
       ['Cmd/Ctrl+Shift+Z',  'Redo'],
+      ['Cmd/Ctrl+Y',        'Redo (Windows)'],
     ],
   },
   {
