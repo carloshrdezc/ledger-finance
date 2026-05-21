@@ -2,7 +2,7 @@ import React from 'react';
 import { A } from '../../theme';
 import { AsciiSpark, ARule, ALabel } from '../../components/Shared';
 import { fmtMoney, fmtSigned, fmtPct } from '../../data';
-import { useStore } from '../../store';
+import { useUndoableStore } from '../../useUndoableStore';
 
 const PERIOD_DAYS = { '1M': 30, '3M': 90, '1Y': 365 };
 
@@ -31,7 +31,7 @@ function portfolioCurve(investments, trades, period, points = 30) {
 }
 
 export default function Investments({ t, onBack }) {
-  const { investments, trades, addTrade, updateHolding, removeHolding, setInvestments } = useStore();
+  const { investments, trades, addTrade, updateHolding, removeHolding, setInvestments } = useUndoableStore();
   const [period, setPeriod] = React.useState('3M');
   const [sheet, setSheet] = React.useState(null);
 

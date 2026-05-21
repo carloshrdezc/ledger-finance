@@ -1,10 +1,10 @@
 import React from 'react';
 import { A } from '../theme';
 import { ARule } from './Shared';
-import { useStore } from '../store';
+import { useUndoableStore } from '../useUndoableStore';
 
 export default function GoalFormSheet({ t, onClose, editGoal = null, onAfterDelete }) {
-  const { addGoal, updateGoal, deleteGoal, goalContributions } = useStore();
+  const { addGoal, updateGoal, deleteGoal, goalContributions } = useUndoableStore();
 
   const [name, setName]             = React.useState(editGoal?.name ?? '');
   const [target, setTarget]         = React.useState(editGoal != null ? String(editGoal.target) : '');
