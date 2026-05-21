@@ -42,4 +42,50 @@ describe('useKeyboardShortcuts', () => {
     fireKey('n');
     expect(handler).not.toHaveBeenCalled();
   });
+
+  it('does NOT fire single-key binding when target is <input>', () => {
+    const handler = vi.fn();
+    renderHook(() => useKeyboardShortcuts({
+      bindings: [{ keys: 'n', handler }],
+    }));
+    const input = document.createElement('input');
+    document.body.appendChild(input);
+    fireKey('n', input);
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it('does NOT fire single-key binding when target is <textarea>', () => {
+    const handler = vi.fn();
+    renderHook(() => useKeyboardShortcuts({
+      bindings: [{ keys: 'n', handler }],
+    }));
+    const ta = document.createElement('textarea');
+    document.body.appendChild(ta);
+    fireKey('n', ta);
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it('does NOT fire when target has contenteditable', () => {
+    const handler = vi.fn();
+    renderHook(() => useKeyboardShortcuts({
+      bindings: [{ keys: 'n', handler }],
+    }));
+    const div = document.createElement('div');
+    div.setAttribute('contenteditable', 'true');
+    Object.defineProperty(div, 'isContentEditable', { value: true });
+    document.body.appendChild(div);
+    fireKey('n', div);
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it('fires binding with allowInInput: true even inside <input>', () => {
+    const handler = vi.fn();
+    renderHook(() => useKeyboardShortcuts({
+      bindings: [{ keys: 'Escape', handler, allowInInput: true }],
+    }));
+    const input = document.createElement('input');
+    document.body.appendChild(input);
+    fireKey('Escape', input);
+    expect(handler).toHaveBeenCalledTimes(1);
+  });
 });
