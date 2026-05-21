@@ -27,5 +27,32 @@ export function useUndoableStore() {
     });
   }, [store, stack]);
 
-  return { ...store, deleteTx };
+  const hideTx = React.useCallback((id) => {
+    if (!id) return;
+    stack.register({
+      label: 'Transaction hidden',
+      batchKey: 'hideTx',
+      pluralize: (n) => `${n} transactions hidden`,
+      do:   () => store.hideTx(id),
+      undo: () => store.setHidden(prev => prev.filter(x => x !== id)),
+    });
+  }, [store, stack]);
+
+  const deleteTransfer = React.useCallback((transferId) => {
+    const legs = store.allTransactions.filter(t => t.transferId === transferId);
+    if (legs.length === 0) return;
+    stack.register({
+      label: 'Transfer deleted',
+      batchKey: 'deleteTransfer',
+      pluralize: (n) => `${n} transfers deleted`,
+      do:   () => store.deleteTransfer(transferId),
+      undo: () => store.setTransactions(prev => {
+        const have = new Set(prev.map(t => t.id));
+        const additions = legs.filter(l => !have.has(l.id));
+        return additions.length === 0 ? prev : [...prev, ...additions];
+      }),
+    });
+  }, [store, stack]);
+
+  return { ...store, deleteTx, hideTx, deleteTransfer };
 }

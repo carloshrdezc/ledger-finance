@@ -784,6 +784,7 @@ export function StoreProvider({ children }) {
       setTransactions: setTxs,
       addTransactions,
       hideTx,
+      setHidden,
       deleteTx,
       createTransfer,
       updateTransfer,
