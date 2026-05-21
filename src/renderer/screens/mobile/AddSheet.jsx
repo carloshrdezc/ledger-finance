@@ -2,12 +2,12 @@ import React from 'react';
 import { A } from '../../theme';
 import { ARule, ALabel } from '../../components/Shared';
 import { CATEGORIES, CCY_SYM } from '../../data';
-import { useStore } from '../../store';
+import { useUndoableStore } from '../../useUndoableStore';
 import { getDaysInPeriod } from '../../period.mjs';
 import AccountFormSheet from '../../components/AccountFormSheet';
 
 export default function AddSheet({ t, onClose, editTx = null }) {
-  const { addTransactions, updateTx, deleteTx, deleteTransfer, createTransfer, updateTransfer, transactions, accountsWithBalance, selectedPeriod } = useStore();
+  const { addTransactions, updateTx, deleteTx, deleteTransfer, createTransfer, updateTransfer, transactions, accountsWithBalance, selectedPeriod } = useUndoableStore();
   const defaultDay = Math.min(new Date().getDate(), getDaysInPeriod(selectedPeriod));
   const defaultDate = `${selectedPeriod}-${String(defaultDay).padStart(2, '0')}`;
 
