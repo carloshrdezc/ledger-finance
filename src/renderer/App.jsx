@@ -1,6 +1,7 @@
 import React from 'react';
 import { A } from './theme';
 import { StoreProvider, useStore } from './store';
+import { UndoProvider } from './UndoContext';
 import ImportExport from './components/ImportExport';
 import Welcome from './screens/Welcome';
 import EmptyApp from './screens/EmptyApp';
@@ -330,7 +331,9 @@ function AppShell() {
 export default function App() {
   return (
     <StoreProvider>
-      <AppShell />
+      <UndoProvider>
+        <AppShell />
+      </UndoProvider>
     </StoreProvider>
   );
 }
