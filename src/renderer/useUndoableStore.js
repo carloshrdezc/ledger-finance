@@ -54,5 +54,82 @@ export function useUndoableStore() {
     });
   }, [store, stack]);
 
-  return { ...store, deleteTx, hideTx, deleteTransfer };
+  const archiveAccount = React.useCallback((id) => {
+    const account = store.accounts.find(a => a.id === id);
+    if (!account) return;
+    stack.register({
+      label: 'Account archived',
+      batchKey: 'archiveAccount',
+      pluralize: (n) => `${n} accounts archived`,
+      do:   () => store.archiveAccount(id),
+      undo: () => store.setAccounts(prev =>
+        prev.map(a => a.id === id ? { ...a, archived: false } : a)
+      ),
+    });
+  }, [store, stack]);
+
+  const deleteAccount = React.useCallback((id) => {
+    const account = store.accounts.find(a => a.id === id);
+    if (!account) return;
+    // Capture the original index for restoration. `accounts` is the full list
+    // (including archived).
+    const originalIndex = store.accounts.findIndex(a => a.id === id);
+    stack.register({
+      label: 'Account deleted',
+      batchKey: 'deleteAccount',
+      pluralize: (n) => `${n} accounts deleted`,
+      do:   () => store.deleteAccount(id),
+      undo: () => store.restoreAccount(account, originalIndex),
+    });
+  }, [store, stack]);
+
+  const deleteRecurring = React.useCallback((id) => {
+    const rule = store.bills.find(b => b.id === id);
+    if (!rule) return;
+    stack.register({
+      label: 'Recurring rule deleted',
+      batchKey: 'deleteRecurring',
+      pluralize: (n) => `${n} recurring rules deleted`,
+      do:   () => store.deleteRecurring(id),
+      undo: () => store.setBills(prev =>
+        prev.some(b => b.id === id) ? prev : [...prev, rule]
+      ),
+    });
+  }, [store, stack]);
+
+  const removeBudget = React.useCallback((cat) => {
+    const budget = store.budgets.find(b => b.cat === cat);
+    if (!budget) return;
+    stack.register({
+      label: 'Budget removed',
+      batchKey: 'removeBudget',
+      pluralize: (n) => `${n} budgets removed`,
+      do:   () => store.removeBudget(cat),
+      undo: () => store.setBudgets(prev =>
+        prev.some(b => b.cat === cat) ? prev : [...prev, budget]
+      ),
+    });
+  }, [store, stack]);
+
+  const deleteGoal = React.useCallback((id) => {
+    const goal = store.goals.find(g => g.id === id);
+    if (!goal) return;
+    const contributions = store.goalContributions.filter(c => c.goalId === id);
+    stack.register({
+      label: 'Goal deleted',
+      batchKey: 'deleteGoal',
+      pluralize: (n) => `${n} goals deleted`,
+      do:   () => store.deleteGoal(id),
+      undo: () => store.restoreGoal(goal, contributions),
+    });
+  }, [store, stack]);
+
+  return {
+    ...store,
+    deleteTx, hideTx, deleteTransfer,
+    archiveAccount, deleteAccount,
+    deleteRecurring,
+    removeBudget,
+    deleteGoal,
+  };
 }
