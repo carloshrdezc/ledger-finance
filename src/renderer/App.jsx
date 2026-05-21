@@ -1,7 +1,7 @@
 import React from 'react';
 import { A } from './theme';
 import { StoreProvider, useStore } from './store';
-import { UndoProvider } from './UndoContext';
+import { UndoProvider, useUndo } from './UndoContext';
 import UndoToast from './components/UndoToast';
 import ImportExport from './components/ImportExport';
 import Welcome from './screens/Welcome';
@@ -294,6 +294,35 @@ function AppShell() {
     window.addEventListener('resize', handler);
     return () => window.removeEventListener('resize', handler);
   }, []);
+
+  const undoStack = useUndo();
+
+  React.useEffect(() => {
+    const onKey = (e) => {
+      // Bail when an overlay is open — match the existing Ctrl+K policy.
+      if (showImport || pendingAddAccount) return;
+
+      const tgt = e.target;
+      const tag = tgt?.tagName;
+      const isEditable = tag === 'INPUT' || tag === 'TEXTAREA' || tgt?.isContentEditable;
+      if (isEditable) return;
+
+      const mod = e.metaKey || e.ctrlKey;
+      if (!mod) return;
+
+      const key = (e.key || '').toLowerCase();
+      if (key === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        undoStack.undo();
+      } else if ((key === 'z' && e.shiftKey) || key === 'y') {
+        e.preventDefault();
+        undoStack.redo();
+      }
+    };
+
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [undoStack, showImport, pendingAddAccount]);
 
   const t = { accent, density, decimals, currency, theme };
   const tweakProps = { setAccent, setDensity, setDecimals, setCurrency, setTheme };
