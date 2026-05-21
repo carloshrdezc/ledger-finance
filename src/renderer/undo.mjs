@@ -1,8 +1,6 @@
 // In-memory undo/redo stack. Pure (no React).
 // See docs/superpowers/specs/2026-05-21-car-81-undo-redo-design.md
 
-let __nextId = 1;
-
 export function createUndoStack({
   maxSize = 50,
   batchWindowMs = 1500,
@@ -12,6 +10,7 @@ export function createUndoStack({
   const redoStack = [];
   let fresh = null; // { entry, mode: 'undo' | 'redo' } | null
   const listeners = new Set();
+  let nextId = 1;
 
   const notify = () => listeners.forEach(fn => fn());
 
@@ -40,7 +39,7 @@ export function createUndoStack({
       fresh = { entry: top, mode: 'undo' };
     } else {
       const entry = {
-        id: __nextId++,
+        id: nextId++,
         label,
         do: doFn,
         undo: undoFn,
@@ -66,7 +65,13 @@ export function createUndoStack({
 
   function redo() {
     const entry = redoStack.pop();
-    if (!entry) return;
+    if (!entry) {
+      if (fresh !== null) {
+        fresh = null;
+        notify();
+      }
+      return;
+    }
     entry.do();
     undoStack.push(entry);
     fresh = null;
