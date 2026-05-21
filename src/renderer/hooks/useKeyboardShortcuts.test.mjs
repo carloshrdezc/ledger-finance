@@ -88,4 +88,61 @@ describe('useKeyboardShortcuts', () => {
     fireKey('Escape', input);
     expect(handler).toHaveBeenCalledTimes(1);
   });
+
+  it('fires two-key binding when prefix and key are pressed in order', () => {
+    vi.useFakeTimers();
+    const handler = vi.fn();
+    renderHook(() => useKeyboardShortcuts({
+      bindings: [{ keys: 'g d', handler }],
+    }));
+    fireKey('g');
+    fireKey('d');
+    expect(handler).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
+  });
+
+  it('clears prefix after 1500ms timeout (no fire)', () => {
+    vi.useFakeTimers();
+    const handler = vi.fn();
+    renderHook(() => useKeyboardShortcuts({
+      bindings: [{ keys: 'g d', handler }],
+    }));
+    fireKey('g');
+    vi.advanceTimersByTime(1600);
+    fireKey('d');
+    expect(handler).not.toHaveBeenCalled();
+    vi.useRealTimers();
+  });
+
+  it('non-matching second key clears prefix and is processed fresh', () => {
+    vi.useFakeTimers();
+    const gd = vi.fn();
+    const x = vi.fn();
+    renderHook(() => useKeyboardShortcuts({
+      bindings: [
+        { keys: 'g d', handler: gd },
+        { keys: 'x', handler: x },
+      ],
+    }));
+    fireKey('g');
+    fireKey('x');
+    expect(gd).not.toHaveBeenCalled();
+    expect(x).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
+  });
+
+  it('repeated prefix re-arms the timeout', () => {
+    vi.useFakeTimers();
+    const handler = vi.fn();
+    renderHook(() => useKeyboardShortcuts({
+      bindings: [{ keys: 'g d', handler }],
+    }));
+    fireKey('g');
+    vi.advanceTimersByTime(1000);
+    fireKey('g');
+    vi.advanceTimersByTime(1000);
+    fireKey('d');
+    expect(handler).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
+  });
 });
