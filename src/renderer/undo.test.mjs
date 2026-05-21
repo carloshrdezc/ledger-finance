@@ -135,3 +135,45 @@ test('different batchKeys never coalesce', () => {
   stack.undo();
   expect(log).toEqual(['B', 'A']);
 });
+
+test('maxSize bounds the undo stack with FIFO eviction', () => {
+  const stack = createUndoStack({ maxSize: 3 });
+  const undone = [];
+  for (let i = 0; i < 5; i++) {
+    stack.register({ label: String(i), do: () => {}, undo: () => undone.push(i) });
+  }
+  // Only the last 3 entries (2, 3, 4) remain
+  stack.undo();
+  stack.undo();
+  stack.undo();
+  expect(undone).toEqual([4, 3, 2]);
+  // Fourth undo is a no-op
+  stack.undo();
+  expect(undone).toEqual([4, 3, 2]);
+});
+
+test('subscribe fires on register/undo/redo/dismissCurrent and unsubscribe stops fires', () => {
+  const stack = createUndoStack();
+  let count = 0;
+  const unsub = stack.subscribe(() => { count += 1; });
+  stack.register({ label: 'A', do: () => {}, undo: () => {} });
+  stack.undo();
+  stack.redo();
+  stack.dismissCurrent(); // current is null after redo, so this is a no-op
+  expect(count).toBe(3);
+  unsub();
+  stack.register({ label: 'B', do: () => {}, undo: () => {} });
+  expect(count).toBe(3); // no further increments after unsubscribe
+});
+
+test('dismissCurrent clears fresh without disturbing stacks', () => {
+  const stack = createUndoStack();
+  const log = [];
+  stack.register({ label: 'A', do: () => {}, undo: () => log.push('A') });
+  expect(stack.current()).not.toBeNull();
+  stack.dismissCurrent();
+  expect(stack.current()).toBeNull();
+  // Stack still works
+  stack.undo();
+  expect(log).toEqual(['A']);
+});
