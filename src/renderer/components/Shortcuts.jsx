@@ -5,11 +5,13 @@ const SECTIONS = [
   {
     title: 'GLOBAL',
     items: [
-      ['?',           'Toggle this cheatsheet'],
-      ['Esc',         'Close any open modal'],
-      ['n',           'New transaction'],
-      ['[ / ]',       'Previous / next period'],
-      ['Cmd/Ctrl+K',  'Command palette'],
+      ['?',                 'Toggle this cheatsheet'],
+      ['Esc',               'Close any open modal'],
+      ['n',                 'New transaction'],
+      ['[ / ]',             'Previous / next period'],
+      ['Cmd/Ctrl+K',        'Command palette'],
+      ['Cmd/Ctrl+Z',        'Undo last destructive action'],
+      ['Cmd/Ctrl+Shift+Z',  'Redo'],
     ],
   },
   {
