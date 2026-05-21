@@ -3,7 +3,7 @@ import { A } from '../../theme';
 import { ALabel, ARule } from '../../components/Shared';
 import WebShell from './WebShell';
 import EmptySectionHint from '../../components/EmptySectionHint';
-import { useStore } from '../../store';
+import { useUndoableStore } from '../../useUndoableStore';
 import { CATEGORIES, fmtMoney } from '../../data';
 
 const STATUS_LABELS = { paid: 'PAID', due: 'DUE TODAY', overdue: 'OVERDUE', upcoming: 'UPCOMING' };
@@ -179,7 +179,7 @@ function RecurringPanel({ t, editRule, onClose, onSave, onDelete, accountsWithBa
 }
 
 export default function WebBills({ t, onNavigate, onAdd }) {
-  const { accountsWithBalance, billRows, markRecurringPaid, addRecurring, updateRecurring, deleteRecurring, bills, periodLabel } = useStore();
+  const { accountsWithBalance, billRows, markRecurringPaid, addRecurring, updateRecurring, deleteRecurring, bills, periodLabel } = useUndoableStore();
 
   const [showPanel, setShowPanel] = React.useState(false);
   const [editRule, setEditRule]   = React.useState(null);

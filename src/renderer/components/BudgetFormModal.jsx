@@ -2,10 +2,10 @@ import React from 'react';
 import { A } from '../theme';
 import { ALabel, ARule } from './Shared';
 import { CATEGORIES } from '../data';
-import { useStore } from '../store';
+import { useUndoableStore } from '../useUndoableStore';
 
 export default function BudgetFormModal({ t, onClose, editBudget = null }) {
-  const { addBudget, updateBudget, removeBudget, budgets } = useStore();
+  const { addBudget, updateBudget, removeBudget, budgets } = useUndoableStore();
 
   // Categories that don't already have a budget (when creating a new one)
   const usedCats = new Set(budgets.map(b => b.cat));

@@ -1,7 +1,7 @@
 import React from 'react';
 import { A } from '../theme';
 import { ALabel, ARule } from './Shared';
-import { useStore } from '../store';
+import { useUndoableStore } from '../useUndoableStore';
 
 const ACCOUNT_TYPES = [
   { value: 'CHK',  label: 'Checking' },
@@ -20,7 +20,7 @@ function defaultOpeningDate() {
 }
 
 export default function AccountFormModal({ t, onClose, editAccount = null }) {
-  const { addAccount, updateAccount, archiveAccount, deleteAccount, transactions } = useStore();
+  const { addAccount, updateAccount, archiveAccount, deleteAccount, transactions } = useUndoableStore();
 
   const [name, setName]             = React.useState(editAccount?.name ?? '');
   const [type, setType]             = React.useState(editAccount?.type ?? 'CHK');

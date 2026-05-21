@@ -2,7 +2,7 @@ import React from 'react';
 import { A, ACCENTS, THEMES } from '../../theme';
 import { ALabel } from '../../components/Shared';
 import WebShell from './WebShell';
-import { useStore } from '../../store';
+import { useUndoableStore } from '../../useUndoableStore';
 import ImportExport from '../../components/ImportExport';
 import FxRatesSection from '../../components/FxRatesSection';
 import BackupSection from '../../components/BackupSection';
@@ -10,7 +10,7 @@ import BackupSection from '../../components/BackupSection';
 const CURRENCIES = ['USD', 'EUR', 'GBP', 'JPY', 'CAD', 'AUD', 'CHF', 'MXN'];
 
 export default function WebSettings({ t, onNavigate, onAdd, setAccent, setDensity, setDecimals, setCurrency, setTheme }) {
-  const { categoryTree, addCategory, renameCategory, removeCategory, budgetStartDay, setBudgetStartDay, reset, loadSampleData, resetAndLoadSampleData } = useStore();
+  const { categoryTree, addCategory, renameCategory, removeCategory, budgetStartDay, setBudgetStartDay, reset, loadSampleData, resetAndLoadSampleData } = useUndoableStore();
   const [expanded, setExpanded] = React.useState({ edu: true, 'edu.school': true, 'edu.school.supplies': true, food: true });
   const [adding, setAdding] = React.useState(null);
   const [renaming, setRenaming] = React.useState(null);

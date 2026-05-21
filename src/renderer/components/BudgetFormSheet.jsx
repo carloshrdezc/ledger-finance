@@ -2,10 +2,10 @@ import React from 'react';
 import { A } from '../theme';
 import { ARule } from './Shared';
 import { CATEGORIES } from '../data';
-import { useStore } from '../store';
+import { useUndoableStore } from '../useUndoableStore';
 
 export default function BudgetFormSheet({ t, onClose, editBudget = null }) {
-  const { addBudget, updateBudget, removeBudget, budgets } = useStore();
+  const { addBudget, updateBudget, removeBudget, budgets } = useUndoableStore();
 
   const usedCats = new Set(budgets.map(b => b.cat));
   const availableCats = Object.entries(CATEGORIES).filter(([k]) => !usedCats.has(k) || (editBudget && editBudget.cat === k));

@@ -4,6 +4,7 @@ import { AsciiSpark, ARule, ALabel, ADetailCell, CategoryTrendChart, IncomeExpen
 import PeriodSwitcher from '../../components/PeriodSwitcher';
 import { fmtMoney, fmtSigned, fmtPct, dayLabel, catBreadcrumb } from '../../data';
 import { useStore } from '../../store';
+import { useUndoableStore } from '../../useUndoableStore';
 import { useFx } from '../../useFx';
 import ImportExport from '../../components/ImportExport';
 import { exportReportCSV } from '../../importExport';
@@ -1106,7 +1107,7 @@ export function Settings({ t, onBack, onNavigate, setAccent, setDensity, setDeci
 
 // ── Categories Editor ─────────────────────────────────────────────────────────
 export function CategoriesEditor({ t, onBack }) {
-  const { categoryTree, addCategory, renameCategory, removeCategory } = useStore();
+  const { categoryTree, addCategory, renameCategory, removeCategory } = useUndoableStore();
   const [expanded, setExpanded] = React.useState({ edu: true, 'edu.school': true, 'edu.school.supplies': true });
   const [adding, setAdding] = React.useState(null);
   const [renaming, setRenaming] = React.useState(null); // path id "a.b.c"
