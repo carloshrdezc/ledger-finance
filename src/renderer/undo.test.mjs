@@ -68,3 +68,70 @@ test('redo on empty stack is a no-op', () => {
   const stack = createUndoStack();
   expect(() => stack.redo()).not.toThrow();
 });
+
+test('two registers with same batchKey within window coalesce', () => {
+  let t = 0;
+  const stack = createUndoStack({ batchWindowMs: 1500, now: () => t });
+  const log = [];
+  stack.register({
+    label: '1 deleted',
+    batchKey: 'deleteTx',
+    pluralize: (n) => `${n} deleted`,
+    do: () => log.push('do1'),
+    undo: () => log.push('undo1'),
+  });
+  t = 1000; // within window
+  stack.register({
+    label: '1 deleted',
+    batchKey: 'deleteTx',
+    pluralize: (n) => `${n} deleted`,
+    do: () => log.push('do2'),
+    undo: () => log.push('undo2'),
+  });
+  // Both do() calls ran during register
+  expect(log).toEqual(['do1', 'do2']);
+  // Coalesced into one fresh entry with count 2 and pluralized label
+  expect(stack.current().entry.count).toBe(2);
+  expect(stack.current().entry.label).toBe('2 deleted');
+  // Single undo restores both, in reverse order
+  stack.undo();
+  expect(log).toEqual(['do1', 'do2', 'undo2', 'undo1']);
+});
+
+test('registers outside the batch window do not coalesce', () => {
+  let t = 0;
+  const stack = createUndoStack({ batchWindowMs: 1500, now: () => t });
+  const log = [];
+  stack.register({ label: 'A', batchKey: 'deleteTx', do: () => {}, undo: () => log.push('A') });
+  t = 2000; // outside window
+  stack.register({ label: 'B', batchKey: 'deleteTx', do: () => {}, undo: () => log.push('B') });
+  stack.undo();
+  expect(log).toEqual(['B']);
+  stack.undo();
+  expect(log).toEqual(['B', 'A']);
+});
+
+test('batchKey null never coalesces even within window', () => {
+  let t = 0;
+  const stack = createUndoStack({ batchWindowMs: 1500, now: () => t });
+  const log = [];
+  stack.register({ label: 'A', batchKey: null, do: () => {}, undo: () => log.push('A') });
+  t = 100;
+  stack.register({ label: 'B', batchKey: null, do: () => {}, undo: () => log.push('B') });
+  stack.undo(); // should pop B only
+  expect(log).toEqual(['B']);
+  stack.undo(); // pops A
+  expect(log).toEqual(['B', 'A']);
+});
+
+test('different batchKeys never coalesce', () => {
+  let t = 0;
+  const stack = createUndoStack({ batchWindowMs: 1500, now: () => t });
+  const log = [];
+  stack.register({ label: 'A', batchKey: 'deleteTx', do: () => {}, undo: () => log.push('A') });
+  t = 100;
+  stack.register({ label: 'B', batchKey: 'deleteAccount', do: () => {}, undo: () => log.push('B') });
+  stack.undo();
+  stack.undo();
+  expect(log).toEqual(['B', 'A']);
+});
