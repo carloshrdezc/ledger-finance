@@ -112,10 +112,15 @@ export default function WebAddModal({ t, onClose, editTx = null }) {
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           fontFamily: A.font,
         }}>
-          <div onClick={(e) => e.stopPropagation()} style={{
-            background: A.bg, color: A.ink, border: '2px solid ' + A.ink,
-            padding: '28px 24px', width: 'min(380px, 90vw)',
-          }}>
+          <div
+            role="dialog"
+            aria-modal="true"
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: A.bg, color: A.ink, border: '2px solid ' + A.ink,
+              padding: '28px 24px', width: 'min(380px, 90vw)',
+            }}
+          >
             <div style={{ fontSize: 9, color: A.muted, letterSpacing: 1.2 }}>ADD TRANSACTION</div>
             <div style={{ fontSize: 14, marginTop: 12, lineHeight: 1.5 }}>
               No accounts yet. Add an account to start tracking transactions.
@@ -149,10 +154,15 @@ export default function WebAddModal({ t, onClose, editTx = null }) {
       background: 'rgba(20,18,15,0.5)', zIndex: 2000,
       display: 'flex', alignItems: 'center', justifyContent: 'center',
     }}>
-      <div onClick={e => e.stopPropagation()} style={{
-        background: A.bg, border: '2px solid ' + A.ink,
-        width: 480, padding: 32, fontFamily: A.font,
-      }}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        onClick={e => e.stopPropagation()}
+        style={{
+          background: A.bg, border: '2px solid ' + A.ink,
+          width: 480, padding: 32, fontFamily: A.font,
+        }}
+      >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 20 }}>
           <ALabel>{editTx ? (editTx.cat === 'transfer' ? 'EDIT · TRANSFER' : 'EDIT · TRANSACTION') : 'NEW · TRANSACTION'}</ALabel>
           <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>

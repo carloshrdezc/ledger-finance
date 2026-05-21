@@ -55,13 +55,18 @@ export default function BudgetFormSheet({ t, onClose, editBudget = null }) {
       background: 'rgba(20,18,15,0.4)', zIndex: 30,
       animation: 'fadeIn .15s ease-out',
     }}>
-      <div onClick={e => e.stopPropagation()} style={{
-        position: 'absolute', left: 0, right: 0, bottom: 0,
-        background: A.bg, padding: 18,
-        borderTop: '2px solid ' + A.ink,
-        animation: 'slideUp .2s ease-out',
-        maxHeight: '85vh', overflowY: 'auto',
-      }}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        onClick={e => e.stopPropagation()}
+        style={{
+          position: 'absolute', left: 0, right: 0, bottom: 0,
+          background: A.bg, padding: 18,
+          borderTop: '2px solid ' + A.ink,
+          animation: 'slideUp .2s ease-out',
+          maxHeight: '85vh', overflowY: 'auto',
+        }}
+      >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
           <div style={{ fontSize: 12, letterSpacing: 2, fontWeight: 700 }}>
             {isEdit ? 'EDIT · BUDGET' : 'NEW · BUDGET'}

@@ -57,10 +57,15 @@ export default function BudgetFormModal({ t, onClose, editBudget = null }) {
       background: 'rgba(20,18,15,0.5)', zIndex: 2000,
       display: 'flex', alignItems: 'center', justifyContent: 'center',
     }}>
-      <div onClick={e => e.stopPropagation()} style={{
-        background: A.bg, border: '2px solid ' + A.ink,
-        width: 420, padding: 32, fontFamily: A.font,
-      }}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        onClick={e => e.stopPropagation()}
+        style={{
+          background: A.bg, border: '2px solid ' + A.ink,
+          width: 420, padding: 32, fontFamily: A.font,
+        }}
+      >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 20 }}>
           <ALabel>{isEdit ? 'EDIT · BUDGET' : 'NEW · BUDGET'}</ALabel>
           <button onClick={onClose} style={{ all: 'unset', cursor: 'pointer', fontSize: 10, color: A.muted, letterSpacing: 1 }}>ESC ×</button>

@@ -46,13 +46,17 @@ export default function Welcome({ onImport }) {
         fontFamily: A.font,
       }}
     >
-      <div style={{
-        background: A.bg, color: A.ink,
-        border: '2px solid ' + A.ink,
-        padding: '36px 32px 28px',
-        width: 'min(420px, 90vw)',
-        position: 'relative',
-      }}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        style={{
+          background: A.bg, color: A.ink,
+          border: '2px solid ' + A.ink,
+          padding: '36px 32px 28px',
+          width: 'min(420px, 90vw)',
+          position: 'relative',
+        }}
+      >
         <button onClick={dismissWelcome} title="Close"
           style={{
             all: 'unset', cursor: 'pointer',
