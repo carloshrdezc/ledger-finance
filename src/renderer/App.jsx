@@ -7,6 +7,8 @@ import EmptyApp from './screens/EmptyApp';
 import AccountFormSheet from './components/AccountFormSheet';
 import AccountFormModal from './components/AccountFormModal';
 import CommandPalette from './components/CommandPalette';
+import ShortcutsOverlay from './components/Shortcuts';
+import useKeyboardShortcuts from './hooks/useKeyboardShortcuts';
 import { buildCommands } from './commands.mjs';
 
 // Mobile screens
@@ -165,7 +167,11 @@ function DesktopApp({ t, setAccent, setDensity, setDecimals, setCurrency, setThe
   const [showIO, setShowIO] = React.useState(false);
   const [showAdd, setShowAdd] = React.useState(false);
   const [paletteOpen, setPaletteOpen] = React.useState(false);
-  const { exportBackup, recordBackupTaken } = useStore();
+  const [cheatsheetOpen, setCheatsheetOpen] = React.useState(false);
+  const {
+    exportBackup, recordBackupTaken,
+    goToPreviousPeriod, goToNextPeriod,
+  } = useStore();
 
   React.useEffect(() => {
     const onKey = (e) => {
@@ -181,6 +187,36 @@ function DesktopApp({ t, setAccent, setDensity, setDecimals, setCurrency, setThe
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, []);
+
+  const closeTopOverlay = React.useCallback(() => {
+    if (cheatsheetOpen) { setCheatsheetOpen(false); return; }
+    if (paletteOpen)    { setPaletteOpen(false);    return; }
+    if (showAdd)        { setShowAdd(false);        return; }
+    if (showIO)         { setShowIO(false);         return; }
+  }, [cheatsheetOpen, paletteOpen, showAdd, showIO]);
+
+  const anyOverlayOpen = cheatsheetOpen || paletteOpen || showAdd || showIO;
+
+  const escBindings = React.useMemo(() => [
+    { keys: 'Escape', handler: closeTopOverlay, allowInInput: true },
+  ], [closeTopOverlay]);
+
+  useKeyboardShortcuts({ bindings: escBindings });
+
+  const globalBindings = React.useMemo(() => [
+    { keys: '?',      handler: () => setCheatsheetOpen(v => !v) },
+    { keys: 'n',      handler: () => setShowAdd(true) },
+    { keys: '[',      handler: goToPreviousPeriod },
+    { keys: ']',      handler: goToNextPeriod },
+    { keys: 'g d',    handler: () => setPage('dashboard') },
+    { keys: 'g t',    handler: () => setPage('tx') },
+    { keys: 'g a',    handler: () => setPage('accounts') },
+    { keys: 'g b',    handler: () => setPage('budgets') },
+    { keys: 'g r',    handler: () => setPage('reports') },
+    { keys: 'g i',    handler: () => setPage('investments') },
+  ], [goToPreviousPeriod, goToNextPeriod]);
+
+  useKeyboardShortcuts({ enabled: !anyOverlayOpen, bindings: globalBindings });
 
   const commands = React.useMemo(
     () => buildCommands({
@@ -222,6 +258,9 @@ function DesktopApp({ t, setAccent, setDensity, setDecimals, setCurrency, setThe
       {showAdd && <WebAddModal t={t} onClose={() => setShowAdd(false)} />}
       {paletteOpen && (
         <CommandPalette commands={commands} onClose={() => setPaletteOpen(false)} />
+      )}
+      {cheatsheetOpen && (
+        <ShortcutsOverlay onClose={() => setCheatsheetOpen(false)} />
       )}
     </div>
   );
