@@ -6,6 +6,8 @@ import Welcome from './screens/Welcome';
 import EmptyApp from './screens/EmptyApp';
 import AccountFormSheet from './components/AccountFormSheet';
 import AccountFormModal from './components/AccountFormModal';
+import CommandPalette from './components/CommandPalette';
+import { buildCommands } from './commands.mjs';
 
 // Mobile screens
 import Home from './screens/mobile/Home';
@@ -162,6 +164,32 @@ function DesktopApp({ t, setAccent, setDensity, setDecimals, setCurrency, setThe
   const [page, setPage] = React.useState('dashboard');
   const [showIO, setShowIO] = React.useState(false);
   const [showAdd, setShowAdd] = React.useState(false);
+  const [paletteOpen, setPaletteOpen] = React.useState(false);
+  const { exportBackup, recordBackupTaken } = useStore();
+
+  React.useEffect(() => {
+    const onKey = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        const tgt = e.target;
+        const tag = tgt?.tagName;
+        const isEditable = tag === 'INPUT' || tag === 'TEXTAREA' || tgt?.isContentEditable;
+        if (isEditable) return;
+        e.preventDefault();
+        setPaletteOpen(v => !v);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  const commands = React.useMemo(
+    () => buildCommands({
+      store: { exportBackup, recordBackupTaken, theme: t.theme, setTheme },
+      navigate: setPage,
+      openAddTx: () => setShowAdd(true),
+    }),
+    [exportBackup, recordBackupTaken, t.theme, setTheme],
+  );
 
   const settingsProps = { setAccent, setDensity, setDecimals, setCurrency, setTheme };
   const props = { t, onNavigate: setPage, onAdd: () => setShowAdd(true) };
@@ -192,6 +220,9 @@ function DesktopApp({ t, setAccent, setDensity, setDecimals, setCurrency, setThe
 
       {showIO && <ImportExport onClose={() => setShowIO(false)} />}
       {showAdd && <WebAddModal t={t} onClose={() => setShowAdd(false)} />}
+      {paletteOpen && (
+        <CommandPalette commands={commands} onClose={() => setPaletteOpen(false)} />
+      )}
     </div>
   );
 }
