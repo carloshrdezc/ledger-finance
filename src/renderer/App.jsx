@@ -2,6 +2,7 @@ import React from 'react';
 import { A } from './theme';
 import { StoreProvider, useStore } from './store';
 import { UndoProvider } from './UndoContext';
+import UndoToast from './components/UndoToast';
 import ImportExport from './components/ImportExport';
 import Welcome from './screens/Welcome';
 import EmptyApp from './screens/EmptyApp';
@@ -324,6 +325,7 @@ function AppShell() {
           isMobile={isMobile}
         />
       )}
+      <UndoToast />
     </>
   );
 }
