@@ -33,7 +33,7 @@ Commands must work from any page, not just the page they originated from. Existi
 | 4 | Keyboard arbitration | Palette captures all keys when open. Future shortcuts (Vim from CAR-79, Undo from CAR-81) check a single `paletteOpen` boolean and bail if true. |
 | 5 | Behavior in input fields | `Cmd/Ctrl+K` suppressed when `document.activeElement` is `input`/`textarea`/`contenteditable`. The user's existing typing wins. |
 | 6 | Mobile | Palette doesn't mount when `isMobile` is true. No keyboard, no value. |
-| 7 | Mounting location | Palette mounts inside `<DesktopApp>`, not `<AppShell>`. `<DesktopApp>` already owns `setPage`, `setShowAdd`, and the modal-open flags. The palette needs them in scope; mounting at AppShell would require lifting state. |
+| 7 | Mounting + listener location | Both the keydown listener AND the palette mount live inside `<DesktopApp>`, not `<AppShell>`. `<DesktopApp>` already owns `setPage`, `setShowAdd`, and the modal-open flags. Putting the listener in `<AppShell>` causes two edge cases: (a) `Cmd+K` fires while `<EmptyApp>` is shown (`isAppEmpty=true`) or `<Welcome>` overlays everything (`!welcomeSeen`) — the listener toggles `paletteOpen`, but `<DesktopApp>` isn't mounted, so nothing renders; (b) state would have to be lifted just so the listener can find the setters. Mounting in `<DesktopApp>` solves both: the listener naturally only exists when desktop chrome exists. |
 | 8 | "Add transfer" command | Dropped from v1. Transfers are a mode inside `<WebAddModal>` (set via the EXP/INC/XFER tab inside the modal). Pre-opening in transfer mode would require a new prop on the modal. Not worth it for v1; user can Cmd-K → Add transaction → click XFER tab (one extra click). Revisit in a v2 once the action surface stabilizes. |
 
 ## Non-goals (separate issues)
@@ -79,29 +79,37 @@ Commands must work from any page, not just the page they originated from. Existi
 │  ──────────────────────────────────────                     │
 │  Renders the modal. Internal state: query, selectedIndex.   │
 │  Reads commands list and palette-open state from props.     │
+│  On every query change, selectedIndex resets to 0 (so the   │
+│  top-ranked match is always pre-selected as the user types).│
 │  On Enter, calls selected command's run() then onClose().   │
 │  On Esc / backdrop click, calls onClose().                  │
-│  Arrow keys move selection within filtered set.             │
+│  Arrow keys move selection within filtered set, clamped to  │
+│  [0, filtered.length-1]. ↑ at index 0 stays at 0; ↓ at the  │
+│  last index stays put (no wrap).                            │
 │                                                              │
 │  Accepts `commands: Command[]` and `onClose: () => void`.   │
 │  Pure presentational; doesn't know about the store.         │
 └──────────────────────┬───────────────────────────────────────┘
                        │ mounted by
 ┌──────────────────────▼───────────────────────────────────────┐
-│  src/renderer/App.jsx  (modified — DesktopApp + AppShell)   │
+│  src/renderer/App.jsx  (modified — DesktopApp only)         │
 │  ─────────────────────                                       │
-│  AppShell adds:                                             │
-│  - useEffect global keydown listener for Cmd/Ctrl+K with    │
-│    the input-field guard. Sets a paletteOpen state.         │
-│  - Passes `paletteOpen` + `onPaletteClose` down to          │
-│    DesktopApp (and not to MobileApp).                       │
-│  - Listener bails on isMobile=true (so no listener for     │
-│    mobile users).                                            │
-│                                                              │
 │  DesktopApp (the only place that owns setPage / setShowAdd) │
-│  uses buildCommands(...) with closure over its local        │
-│  setters and the store, then renders <CommandPalette        │
-│  commands={...} onClose={...} /> when paletteOpen is true.  │
+│  adds:                                                       │
+│  - paletteOpen useState.                                    │
+│  - useEffect global keydown listener for Cmd/Ctrl+K with    │
+│    the input-field guard. Toggles paletteOpen.              │
+│  - useStore() pull for exportBackup / recordBackupTaken /   │
+│    setTheme so buildCommands has real handles, not stubs.   │
+│  - buildCommands(...) closing over local setters + store    │
+│    actions.                                                  │
+│  - Renders <CommandPalette commands={...} onClose={...} />  │
+│    when paletteOpen is true.                                │
+│                                                              │
+│  AppShell is unchanged. No prop threading needed.           │
+│  Because <DesktopApp> only mounts when !isMobile, !isAppEmpty,│
+│  AND welcomeSeen, the listener naturally bails in those     │
+│  states — no extra guards required.                         │
 └──────────────────────────────────────────────────────────────┘
 ```
 
@@ -123,12 +131,23 @@ Commands must work from any page, not just the page they originated from. Existi
 
   // Actions (3)
   { id: 'add.tx',       label: 'Add transaction',        run: () => setShowAdd(true) },
-  { id: 'backup.now',   label: 'Backup now',             run: () => { exportBackup; download; recordBackupTaken; } },
-  { id: 'theme.toggle', label: 'Toggle theme (light/dark/auto)', run: () => cycleTheme() },
+  { id: 'backup.now',   label: 'Backup now',             run: () => {
+    const json = exportBackup();
+    downloadFile(`ledger-backup-${todayISO()}.ledger.json`, json);
+    recordBackupTaken();
+  }},
+  { id: 'theme.toggle', label: 'Toggle theme (light/dark/auto)', run: () => {
+    const next = theme === 'light' ? 'dark' : theme === 'dark' ? 'auto' : 'light';
+    setTheme(next);
+  }},
 ]
 ```
 
 `hint` is optional metadata for future visual treatment (e.g., showing the keyboard shortcut next to "Go to Transactions" once CAR-79 ships). v1 leaves it unset.
+
+**Backup-now wiring.** `buildCommands({ store, ... })` pulls `exportBackup`, `recordBackupTaken`, `theme`, and `setTheme` off the `useStore()` value; `DesktopApp` forwards them in. The `downloadFile(name, contents)` and `todayISO()` helpers already exist in `BackupSection.jsx` and `WebReports.jsx` (duplicated). For v1, factor them into a small `src/renderer/download.mjs` module and import from all three call sites; that beats adding a third copy. The shape `ledger-backup-${todayISO()}.ledger.json` matches `BackupSection.handleBackupNow` exactly so the two paths produce identical artifacts.
+
+**Theme cycle.** `useStore()` validates `setTheme` against `['light', 'dark', 'auto']` (see `store.jsx`). The cycle is light → dark → auto → light. The command reads the current `theme` from the store and writes the next value via `setTheme(...)`; no helper module needed.
 
 ### Visual / interaction
 
@@ -162,6 +181,17 @@ Commands must work from any page, not just the page they originated from. Existi
 - Result row: `padding: 10px 14px`. Selected row gets `background: A.ink, color: A.bg`. Hover row gets `background: A.rule2`.
 - Footer hint line: `↑↓ navigate · ↵ run · esc ×`. Small `9px` muted text.
 - All-caps labels are NOT used here (this is content, not metadata) — sentence case, matching how command palettes in other tools render. The `<ALabel>` IBM Plex pattern is reserved for section headers, not commands.
+
+### Accessibility
+
+The palette is a modal dialog and must behave like one for screen readers and keyboard-only users:
+
+- **Roles.** The outer container gets `role="dialog"` and `aria-modal="true"`. Add `aria-label="Command palette"` (no visible title text in the v1 design).
+- **Result list.** The result rows are wrapped in `role="listbox"`; each row is `role="option"` with `aria-selected={i === selectedIndex}`. The text input gets `aria-controls={listboxId}` and `aria-activedescendant={selectedRowId}` so screen readers announce the highlighted command as the user arrow-keys.
+- **Initial focus.** When the palette mounts, the input field autofocuses (existing behavior — formalize it: `useRef` + `inputRef.current?.focus()` in a mount effect).
+- **Focus trap.** Tab and Shift+Tab cycle focus only between elements inside the palette. In v1 the only focusable element is the input, so Tab is effectively a no-op — but the trap must be in place so that future additions (e.g., a close button) don't leak focus out into the page beneath. Implement by listening for Tab on the dialog and calling `preventDefault()` if there's only one focusable element.
+- **Focus return.** On open, capture `document.activeElement` into a ref. On close (Esc, backdrop click, command run), call `previousActiveElement?.focus?.()` so focus returns to whatever the user was on before. This matters for the "open mid-modal" case in the Error Handling table — focus must go back to the underlying modal, not to `<body>`.
+- **Esc precedence.** The palette's Esc handler calls `preventDefault()` so an underlying modal's Esc-to-close doesn't also fire and dismiss it.
 
 ### Match scoring
 
@@ -199,16 +229,16 @@ Properties verified by tests:
 - `score('zxq', 'Go to Transactions') === 0` (chars not in label)
 - `score('trxs', 'Go to Transactions') > 0` ("trxs" — all chars in order, just spread)
 - `score('gT', 'Go to Transactions') > 0` (case-insensitive)
+- `score('sg', 'Go to Transactions') === 0` ('g' only at index 0, before 's' — order violated)
 
 `matchAndRank(query, items, getLabel)` maps→filter→sort. Trivial wrapper.
 
 ### Keyboard arbitration
 
-`AppShell` registers ONE document-level keydown listener:
+`DesktopApp` registers ONE document-level keydown listener. `AppShell` only renders `DesktopApp` when `!isMobile && !isAppEmpty && welcomeSeen`, so we get the mobile/onboarding/welcome guards for free — the listener simply doesn't exist in those states.
 
 ```js
 React.useEffect(() => {
-  if (isMobile) return;
   const handler = (e) => {
     if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
       const t = e.target;
@@ -222,7 +252,7 @@ React.useEffect(() => {
   };
   window.addEventListener('keydown', handler);
   return () => window.removeEventListener('keydown', handler);
-}, [isMobile]);
+}, []);
 ```
 
 Rationale for `e.target` check (not `document.activeElement`):
@@ -236,15 +266,14 @@ For future shortcuts (CAR-79 Vim, CAR-81 Undo), the same `useEffect` pattern is 
 
 ### Mobile
 
-`isMobile` is already a piece of state in `<AppShell>` (it gates Mobile vs Desktop layout). The palette mounts inside the desktop branch only:
+The palette lives entirely inside `<DesktopApp>`. `<AppShell>` only mounts `<DesktopApp>` when `window.innerWidth >= 1024`, so on mobile: the listener is never registered, `paletteOpen` doesn't exist, and the palette code path is never exercised.
 
 ```jsx
-{!isMobile && paletteOpen && (
+// inside DesktopApp
+{paletteOpen && (
   <CommandPalette commands={commands} onClose={() => setPaletteOpen(false)} />
 )}
 ```
-
-The keydown listener also bails on mobile (`if (isMobile) return;`). So on mobile: zero bundle impact at runtime, no listener registered, no palette code path exercised.
 
 ## Files Touched
 
@@ -255,7 +284,10 @@ The keydown listener also bails on mobile (`if (isMobile) return;`). So on mobil
 | `src/renderer/commands.mjs` | NEW | Pure command-list builder |
 | `src/renderer/commands.test.mjs` | NEW | Vitest tests for the builder (no DOM, pass mocks for runs) |
 | `src/renderer/components/CommandPalette.jsx` | NEW | The modal component |
-| `src/renderer/App.jsx` | MODIFY | `paletteOpen` state, keydown listener, mount the palette in desktop branch, build commands list |
+| `src/renderer/download.mjs` | NEW | Shared `downloadFile(name, contents)` + `todayISO()` helpers (extracted from `BackupSection.jsx` and `WebReports.jsx`; both updated to import from here) |
+| `src/renderer/components/BackupSection.jsx` | MODIFY | Import `downloadFile`/`todayISO` from `download.mjs` instead of local copies |
+| `src/renderer/screens/web/WebReports.jsx` | MODIFY | Same |
+| `src/renderer/App.jsx` | MODIFY | Inside `DesktopApp` only: `paletteOpen` state, keydown listener, pull store actions (`exportBackup`/`recordBackupTaken`/`theme`/`setTheme`), build commands list, mount palette. `AppShell` is unchanged. |
 
 `commands.mjs` lives in `src/renderer/` (not `src/renderer/components/`) because it's a `.mjs` pure module — same convention as `backup.mjs`/`alerts.mjs`/`fuzzy.mjs`.
 
@@ -267,6 +299,8 @@ The keydown listener also bails on mobile (`if (isMobile) return;`). So on mobil
 | User presses Cmd-K while palette is open | `e.preventDefault()` and toggle off (close). |
 | User presses Cmd-K twice rapidly | Open then close. State toggles — no race; React batches. |
 | User types a query that matches nothing | Palette shows "No matches" placeholder row. Enter is a no-op. |
+| User has selectedIndex=5, then types more characters and the filtered list shrinks to 2 | selectedIndex resets to 0 on every query change. The top-ranked match for the new query is always pre-selected. Prevents an out-of-range index pointing at nothing. |
+| User presses ↑ at index 0 / ↓ at last index | Selection stays put. No wrap-around. |
 | User opens palette, doesn't type, presses Enter | The first command runs (selectedIndex defaults to 0; with empty query everything scores ≥1). |
 | User opens palette mid-modal (e.g. backup confirmation modal is up) | The other modal stays under the palette backdrop. When palette closes, focus returns to the other modal. We don't try to suppress Cmd-K when modals are open in v1; if it's annoying, file a follow-up. |
 | Backup-now command fails (very rare — Blob URL error) | The `run` callback catches and logs. Palette closes either way. User can re-open Settings → Backup Now to see the inline error there. |
