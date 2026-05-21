@@ -360,6 +360,24 @@ export function StoreProvider({ children }) {
     });
   }, [setCatTree]);
 
+  const restoreCategory = React.useCallback((pathParts, leaf) => {
+    if (!pathParts || pathParts.length === 0 || !leaf) return;
+    setCatTree(prev => {
+      const tree = JSON.parse(JSON.stringify(prev));
+      let parent = tree;
+      for (let i = 0; i < pathParts.length - 1; i++) {
+        const next = i === 0 ? parent[pathParts[i]] : (parent.children || {})[pathParts[i]];
+        if (!next) return prev; // path missing — abort
+        parent = next;
+      }
+      const leafKey = pathParts[pathParts.length - 1];
+      const container = pathParts.length === 1 ? parent : (parent.children = parent.children || {});
+      if (container[leafKey]) return prev; // already exists
+      container[leafKey] = leaf;
+      return tree;
+    });
+  }, [setCatTree]);
+
   const setRate = React.useCallback((ccy, rate) => {
     if (ccy === 'USD') return; // USD is always 1.0; not editable
     const numeric = Number(rate);
@@ -416,6 +434,19 @@ export function StoreProvider({ children }) {
     let i = 0;
     return next.map(a => a.archived ? a : { ...a, order: i++ });
   }), [setAccounts]);
+
+  const restoreAccount = React.useCallback((account, originalIndex) => {
+    if (!account) return;
+    setAccounts(prev => {
+      if (prev.some(a => a.id === account.id)) return prev;
+      const next = [...prev];
+      const insertAt = Math.max(0, Math.min(originalIndex ?? next.length, next.length));
+      next.splice(insertAt, 0, account);
+      // Re-derive `order` for non-archived accounts to keep contiguous numbering.
+      let i = 0;
+      return next.map(a => a.archived ? a : { ...a, order: i++ });
+    });
+  }, [setAccounts]);
 
   const reorderAccounts = React.useCallback(orderedIds => setAccounts(prev => {
     const byId = Object.fromEntries(prev.map(a => [a.id, a]));
@@ -482,6 +513,18 @@ export function StoreProvider({ children }) {
     setGoalContributions(prev => prev.filter(c => c.goalId !== id));
   }, [setGoals, setGoalContributions]);
 
+  const restoreGoal = React.useCallback((goal, contributions = []) => {
+    if (!goal) return;
+    setGoals(prev => prev.some(g => g.id === goal.id) ? prev : [...prev, goal]);
+    if (contributions.length > 0) {
+      setGoalContributions(prev => {
+        const seen = new Set(prev.map(c => c.id));
+        const additions = contributions.filter(c => !seen.has(c.id));
+        return additions.length === 0 ? prev : [...prev, ...additions];
+      });
+    }
+  }, [setGoals, setGoalContributions]);
+
   const addBudget = React.useCallback(({ cat, limit, rollover }) => {
     const entry = {
       cat,
@@ -541,6 +584,18 @@ export function StoreProvider({ children }) {
   const removeHolding = React.useCallback(ticker => {
     setInvestments(prev => prev.filter(h => h.ticker !== ticker));
     setTrades(prev => prev.filter(t => t.ticker !== ticker));
+  }, [setInvestments, setTrades]);
+
+  const restoreHolding = React.useCallback((holding, trades = []) => {
+    if (!holding) return;
+    setInvestments(prev => prev.some(h => h.ticker === holding.ticker) ? prev : [...prev, holding]);
+    if (trades.length > 0) {
+      setTrades(prev => {
+        const seen = new Set(prev.map(t => t.id));
+        const additions = trades.filter(t => !seen.has(t.id));
+        return additions.length === 0 ? prev : [...prev, ...additions];
+      });
+    }
   }, [setInvestments, setTrades]);
 
   const dismissAlert = React.useCallback(id => {
@@ -739,6 +794,7 @@ export function StoreProvider({ children }) {
       addCategory,
       renameCategory,
       removeCategory,
+      restoreCategory,
       budgets,
       setBudgets,
       addBudget,
@@ -772,6 +828,7 @@ export function StoreProvider({ children }) {
       addGoal,
       updateGoal,
       deleteGoal,
+      restoreGoal,
       selectedPeriod,
       setSelectedPeriod,
       txFilter,
@@ -789,6 +846,7 @@ export function StoreProvider({ children }) {
       updateAccount,
       archiveAccount,
       deleteAccount,
+      restoreAccount,
       reorderAccounts,
       reset,
       budgetStartDay,
@@ -799,6 +857,7 @@ export function StoreProvider({ children }) {
       addTrade,
       updateHolding,
       removeHolding,
+      restoreHolding,
       rates,
       ratesUpdated,
       setRate,
