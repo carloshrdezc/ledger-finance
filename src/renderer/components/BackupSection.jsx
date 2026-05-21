@@ -3,6 +3,7 @@ import { A } from '../theme';
 import { ALabel } from './Shared';
 import { useStore } from '../store';
 import { parseBackup } from '../backup.mjs';
+import { downloadFile, todayISO } from '../download.mjs';
 
 const INTERVAL_OPTIONS = [
   { val: 0,  label: 'OFF' },
@@ -10,18 +11,6 @@ const INTERVAL_OPTIONS = [
   { val: 30, label: '30d' },
   { val: 90, label: '90d' },
 ];
-
-function downloadFile(name, contents, mime = 'application/json') {
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([contents], { type: mime }));
-  a.download = name;
-  a.click();
-  URL.revokeObjectURL(a.href);
-}
-
-function todayISO() {
-  return new Date().toISOString().slice(0, 10);
-}
 
 // Shared between WebSettings and mobile Settings. No layout chrome of its
 // own beyond the section heading — the parent supplies surrounding
