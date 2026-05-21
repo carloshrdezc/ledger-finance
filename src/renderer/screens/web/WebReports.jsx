@@ -16,14 +16,7 @@ import {
   getRecentPeriods,
 } from '../../charts.mjs';
 import { exportReportCSV } from '../../importExport';
-
-function downloadFile(name, content, mime = 'text/csv') {
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([content], { type: mime }));
-  a.download = name;
-  a.click();
-  URL.revokeObjectURL(a.href);
-}
+import { downloadFile } from '../../download.mjs';
 
 export default function WebReports({ t, onNavigate, onAdd }) {
   const { transactions, periodTransactions, categoryTree, selectedPeriod, periodLabel, accounts, setTxFilter, rates } = useStore();
@@ -95,7 +88,7 @@ export default function WebReports({ t, onNavigate, onAdd }) {
       topMerchants: merchants,
     });
     const stamp = new Date().toISOString().slice(0, 10);
-    downloadFile(`ledger-report-${stamp}.csv`, csv);
+    downloadFile(`ledger-report-${stamp}.csv`, csv, 'text/csv');
   };
 
   return (
