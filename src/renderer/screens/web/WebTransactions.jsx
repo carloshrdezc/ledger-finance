@@ -8,6 +8,7 @@ import EmptySectionHint from '../../components/EmptySectionHint';
 import { fmtMoney, fmtSigned, dayLabel, catGlyph, catBreadcrumb } from '../../data';
 import { useStore } from '../../store';
 import { exportCSV } from '../../importExport';
+import useKeyboardShortcuts from '../../hooks/useKeyboardShortcuts';
 
 function download(name, content) {
   const a = document.createElement('a');
@@ -22,6 +23,9 @@ export default function WebTransactions({ t, onNavigate, onAdd }) {
   const [filter, setFilter] = React.useState('ALL');
   const [search, setSearch] = React.useState('');
   const [editTx, setEditTx] = React.useState(null);
+  const [selectedIdx, setSelectedIdx] = React.useState(0);
+  const searchRef = React.useRef(null);
+  const rowRefs = React.useRef({});
 
   const matchesTxFilter = React.useCallback((tx) => {
     if (!txFilter) return true;
@@ -61,6 +65,31 @@ export default function WebTransactions({ t, onNavigate, onAdd }) {
   });
   const total = visible.reduce((s, x) => s + Math.abs(x.amt), 0);
 
+  React.useEffect(() => {
+    setSelectedIdx(0);
+  }, [visible.length, visible[0]?.id]);
+
+  React.useEffect(() => {
+    const tx = visible[selectedIdx];
+    if (!tx) return;
+    const el = rowRefs.current[tx.id];
+    if (el && typeof el.scrollIntoView === 'function') {
+      el.scrollIntoView({ block: 'nearest' });
+    }
+  }, [selectedIdx, visible]);
+
+  const txBindings = React.useMemo(() => [
+    { keys: 'j', handler: () => setSelectedIdx(i => Math.min(i + 1, Math.max(0, visible.length - 1))) },
+    { keys: 'k', handler: () => setSelectedIdx(i => Math.max(0, i - 1)) },
+    { keys: 'e', handler: () => {
+        const tx = visible[selectedIdx];
+        if (tx) setEditTx(tx);
+      } },
+    { keys: '/', handler: () => searchRef.current?.focus() },
+  ], [visible, selectedIdx]);
+
+  useKeyboardShortcuts({ bindings: txBindings });
+
   // Build a human label for the active txFilter chip.
   const filterChipLabel = React.useMemo(() => {
     if (!txFilter) return null;
@@ -85,7 +114,7 @@ export default function WebTransactions({ t, onNavigate, onAdd }) {
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
           <PeriodSwitcher />
-          <input value={search} onChange={e => setSearch(e.target.value)}
+          <input ref={searchRef} value={search} onChange={e => setSearch(e.target.value)}
             placeholder="SEARCH…"
             style={{ fontFamily: A.font, fontSize: 11, padding: '6px 10px', border: '1px solid ' + A.rule2, background: A.bg, color: A.ink, letterSpacing: 1, width: 160, outline: 'none' }} />
           <button onClick={() => download(`ledger-${new Date().toISOString().slice(0,10)}.csv`, exportCSV(transactions))} style={{ all: 'unset', cursor: 'pointer', fontSize: 10, letterSpacing: 1.2, padding: '6px 12px', border: '1px solid ' + A.ink, background: A.ink, color: A.bg }}>
@@ -126,15 +155,18 @@ export default function WebTransactions({ t, onNavigate, onAdd }) {
             onCta={transactions.length === 0 ? onAdd : null}
           />
         ) : null}
-        {visible.map(tx => (
+        {visible.map((tx, i) => (
           <div
             key={tx.id}
+            ref={el => { if (el) rowRefs.current[tx.id] = el; else delete rowRefs.current[tx.id]; }}
+            aria-selected={i === selectedIdx ? 'true' : 'false'}
             onClick={() => setEditTx(tx)}
             style={{
               display: 'grid', gridTemplateColumns: '90px 24px 1fr 280px 90px 120px',
               padding: t.density === 'compact' ? '7px 0' : '10px 0',
               fontSize: 11, borderBottom: '1px solid ' + A.rule2, alignItems: 'center',
               cursor: 'pointer',
+              borderLeft: i === selectedIdx ? '2px solid ' + A.ink : '2px solid transparent',
             }}
             onMouseEnter={e => e.currentTarget.style.background = A.bg2}
             onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
