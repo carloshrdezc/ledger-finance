@@ -3,12 +3,12 @@ import { A } from '../../theme';
 import { ARule, ALabel } from '../../components/Shared';
 import PeriodSwitcher from '../../components/PeriodSwitcher';
 import { fmtMoney, fmtSigned, dayLabel, catGlyph, catBreadcrumb } from '../../data';
-import { useStore } from '../../store';
+import { useUndoableStore } from '../../useUndoableStore';
 import AddSheet from './AddSheet';
 import EmptySectionHint from '../../components/EmptySectionHint';
 
 export default function Transactions({ t }) {
-  const { transactions, periodTransactions, deleteTx, deleteTransfer, accountsWithBalance, periodLabel, txFilter, clearTxFilter } = useStore();
+  const { transactions, periodTransactions, deleteTx, deleteTransfer, accountsWithBalance, periodLabel, txFilter, clearTxFilter } = useUndoableStore();
   const [filter, setFilter] = React.useState('ALL');
   const [search, setSearch] = React.useState('');
   const [editTx, setEditTx] = React.useState(null);
