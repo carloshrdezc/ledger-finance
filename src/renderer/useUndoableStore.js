@@ -124,6 +124,46 @@ export function useUndoableStore() {
     });
   }, [store, stack]);
 
+  const removeCategory = React.useCallback((pathParts) => {
+    if (!pathParts || pathParts.length === 0) return;
+    // Capture the leaf node (which may be a whole subtree) before removal so we can restore it.
+    const tree = store.categoryTree;
+    let cursor = tree;
+    for (let i = 0; i < pathParts.length - 1; i++) {
+      const next = i === 0 ? cursor[pathParts[i]] : (cursor.children || {})[pathParts[i]];
+      if (!next) return; // path missing
+      cursor = next;
+    }
+    const leafKey = pathParts[pathParts.length - 1];
+    const container = pathParts.length === 1 ? cursor : (cursor.children || {});
+    const leaf = container[leafKey];
+    if (!leaf) return;
+
+    // Deep-clone the captured leaf so future tree mutations don't aliased-corrupt our undo data.
+    const leafSnapshot = JSON.parse(JSON.stringify(leaf));
+
+    stack.register({
+      label: 'Category removed',
+      batchKey: 'removeCategory',
+      pluralize: (n) => `${n} categories removed`,
+      do:   () => store.removeCategory(pathParts),
+      undo: () => store.restoreCategory(pathParts, leafSnapshot),
+    });
+  }, [store, stack]);
+
+  const removeHolding = React.useCallback((ticker) => {
+    const holding = store.investments.find(h => h.ticker === ticker);
+    if (!holding) return;
+    const tradesForTicker = store.trades.filter(t => t.ticker === ticker);
+    stack.register({
+      label: 'Holding removed',
+      batchKey: 'removeHolding',
+      pluralize: (n) => `${n} holdings removed`,
+      do:   () => store.removeHolding(ticker),
+      undo: () => store.restoreHolding(holding, tradesForTicker),
+    });
+  }, [store, stack]);
+
   return {
     ...store,
     deleteTx, hideTx, deleteTransfer,
@@ -131,5 +171,7 @@ export function useUndoableStore() {
     deleteRecurring,
     removeBudget,
     deleteGoal,
+    removeCategory,
+    removeHolding,
   };
 }
