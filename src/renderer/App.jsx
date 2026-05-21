@@ -301,6 +301,11 @@ function AppShell() {
     const onKey = (e) => {
       // Bail when an overlay is open — match the existing Ctrl+K policy.
       if (showImport || pendingAddAccount) return;
+      // Bail when any modal-style overlay is open (cheatsheet, command palette,
+      // any future component using aria-modal). Belt-and-suspenders alongside
+      // the input-target check below.
+      if (typeof document !== 'undefined' &&
+          document.querySelector('[aria-modal="true"]')) return;
 
       const tgt = e.target;
       const tag = tgt?.tagName;
