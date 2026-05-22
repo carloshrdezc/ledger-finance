@@ -4,6 +4,7 @@ import {
   hideIdsToArray,
   updateTxsInArray,
   convertToTransferInArray,
+  detectTransferPair,
 } from './bulkOps.mjs';
 
 test('deleteTxsFromArray removes only specified ids', () => {
@@ -153,4 +154,69 @@ test('convertToTransferInArray preserves untouched txs', () => {
   }, 'xfer_test_4');
   expect(next.find(t => t.id === 'x')).toEqual({ id: 'x', amt: -5, acct: 'chk' });
   expect(next.find(t => t.id === 'y')).toEqual({ id: 'y', amt: -7, acct: 'chk' });
+});
+
+test('detectTransferPair returns null when size != 2', () => {
+  const visible = [
+    { id: 'a', amt: -100, acct: 'chk' },
+    { id: 'b', amt: 100, acct: 'sav' },
+    { id: 'c', amt: -50, acct: 'chk' },
+  ];
+  expect(detectTransferPair(visible, new Set(['a']))).toBeNull();
+  expect(detectTransferPair(visible, new Set(['a', 'b', 'c']))).toBeNull();
+});
+
+test('detectTransferPair returns null when amounts differ', () => {
+  const visible = [
+    { id: 'a', amt: -100, acct: 'chk' },
+    { id: 'b', amt: 90, acct: 'sav' },
+  ];
+  expect(detectTransferPair(visible, new Set(['a', 'b']))).toBeNull();
+});
+
+test('detectTransferPair returns null when same sign', () => {
+  const visible = [
+    { id: 'a', amt: 100, acct: 'chk' },
+    { id: 'b', amt: 100, acct: 'sav' },
+  ];
+  expect(detectTransferPair(visible, new Set(['a', 'b']))).toBeNull();
+});
+
+test('detectTransferPair returns null when same account', () => {
+  const visible = [
+    { id: 'a', amt: -100, acct: 'chk' },
+    { id: 'b', amt: 100, acct: 'chk' },
+  ];
+  expect(detectTransferPair(visible, new Set(['a', 'b']))).toBeNull();
+});
+
+test('detectTransferPair returns null when either is already a transfer', () => {
+  const visible = [
+    { id: 'a', amt: -100, acct: 'chk', transferId: 'xfer_old' },
+    { id: 'b', amt: 100, acct: 'sav' },
+  ];
+  expect(detectTransferPair(visible, new Set(['a', 'b']))).toBeNull();
+});
+
+test('detectTransferPair returns ordered pair when valid', () => {
+  const visible = [
+    { id: 'a', amt: -100, acct: 'chk' },
+    { id: 'b', amt: 100, acct: 'sav' },
+  ];
+  const result = detectTransferPair(visible, new Set(['a', 'b']));
+  expect(result).not.toBeNull();
+  expect(result.out).toEqual({ id: 'a', amt: -100, acct: 'chk' });
+  expect(result.inn).toEqual({ id: 'b', amt: 100, acct: 'sav' });
+});
+
+test('detectTransferPair returns ordered pair regardless of input order', () => {
+  // Positive row first in visible, but `out` should still be the negative one.
+  const visible = [
+    { id: 'b', amt: 100, acct: 'sav' },
+    { id: 'a', amt: -100, acct: 'chk' },
+  ];
+  const result = detectTransferPair(visible, new Set(['a', 'b']));
+  expect(result).not.toBeNull();
+  expect(result.out.id).toBe('a');
+  expect(result.inn.id).toBe('b');
 });
