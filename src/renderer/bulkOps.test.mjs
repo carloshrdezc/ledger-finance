@@ -2,6 +2,7 @@ import { test, expect } from 'vitest';
 import {
   deleteTxsFromArray,
   hideIdsToArray,
+  updateTxsInArray,
 } from './bulkOps.mjs';
 
 test('deleteTxsFromArray removes only specified ids', () => {
@@ -46,4 +47,33 @@ test('hideIdsToArray dedupes duplicates within ids itself', () => {
   const prev = ['a'];
   const next = hideIdsToArray(prev, ['b', 'b', 'c']);
   expect(next).toEqual(['a', 'b', 'c']);
+});
+
+test('updateTxsInArray patches only specified ids; other fields untouched', () => {
+  const prev = [
+    { id: 'a', cat: 'food', name: 'COFFEE' },
+    { id: 'b', cat: 'shop', name: 'SHIRT' },
+    { id: 'c', cat: 'food', name: 'LUNCH' },
+  ];
+  const next = updateTxsInArray(prev, ['a', 'c'], { cat: 'dining' });
+  expect(next).toEqual([
+    { id: 'a', cat: 'dining', name: 'COFFEE' },
+    { id: 'b', cat: 'shop', name: 'SHIRT' },
+    { id: 'c', cat: 'dining', name: 'LUNCH' },
+  ]);
+});
+
+test('updateTxsInArray with empty ids returns prev unchanged', () => {
+  const prev = [{ id: 'a', cat: 'food' }];
+  expect(updateTxsInArray(prev, [], { cat: 'shop' })).toBe(prev);
+});
+
+test('updateTxsInArray with empty patch returns prev unchanged', () => {
+  const prev = [{ id: 'a', cat: 'food' }];
+  expect(updateTxsInArray(prev, ['a'], {})).toBe(prev);
+});
+
+test('updateTxsInArray returns prev unchanged when no ids match', () => {
+  const prev = [{ id: 'a', cat: 'food' }];
+  expect(updateTxsInArray(prev, ['x'], { cat: 'shop' })).toBe(prev);
 });

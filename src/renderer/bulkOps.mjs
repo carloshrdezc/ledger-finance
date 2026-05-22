@@ -25,3 +25,11 @@ export function hideIdsToArray(prevHidden, ids) {
   if (additions.length === 0) return prevHidden;
   return [...prevHidden, ...additions];
 }
+
+export function updateTxsInArray(prevTxs, ids, patch) {
+  if (!ids || ids.length === 0) return prevTxs;
+  if (!patch || Object.keys(patch).length === 0) return prevTxs;
+  const idSet = new Set(ids);
+  if (!prevTxs.some(tx => idSet.has(tx.id))) return prevTxs;
+  return prevTxs.map(tx => idSet.has(tx.id) ? { ...tx, ...patch } : tx);
+}
