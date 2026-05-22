@@ -47,6 +47,44 @@ export function ALabel({ children, style }) {
   );
 }
 
+export function Checkbox({ checked, indeterminate = false, onChange, ariaLabel, onMouseDown }) {
+  const filled = checked || indeterminate;
+  const glyph = indeterminate ? '−' : (checked ? '✓' : '');
+  return (
+    <span
+      role="checkbox"
+      aria-checked={indeterminate ? 'mixed' : checked}
+      aria-label={ariaLabel}
+      tabIndex={0}
+      onMouseDown={onMouseDown}
+      onClick={onChange}
+      onKeyDown={(e) => {
+        if (e.key === ' ' || e.key === 'Enter') {
+          e.preventDefault();
+          onChange?.(e);
+        }
+      }}
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        width: 14,
+        height: 14,
+        border: '1px solid ' + (filled ? A.ink : A.rule2),
+        background: filled ? A.ink : 'transparent',
+        color: A.bg,
+        fontSize: 10,
+        lineHeight: 1,
+        cursor: 'pointer',
+        userSelect: 'none',
+        flexShrink: 0,
+      }}
+    >
+      {glyph}
+    </span>
+  );
+}
+
 export function ADetailCell({ label, val, c = A.ink }) {
   return (
     <div style={{ background: A.bg, padding: '10px 10px', flex: 1 }}>
