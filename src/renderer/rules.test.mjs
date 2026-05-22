@@ -29,8 +29,19 @@ test('patternToRegExp escapes regex metachars (literal . dot)', () => {
   expect(re.test('ATXT')).toBe(false);
 });
 
-test('normalizeMerchant trims and uppercases', () => {
+test('patternToRegExp leading + trailing * = plain substring (no anchors)', () => {
+  const re = patternToRegExp('*STAR*');
+  // Should match anywhere — like the unanchored 'STAR' case.
+  expect(re.test('SQ STARBUCKS')).toBe(true);
+  expect(re.test('STAR')).toBe(true);
+  expect(re.test('PRESTAR FOO')).toBe(true);
+  expect(re.test('PEETS')).toBe(false);
+});
+
+test('normalizeMerchant trims and uppercases; null/undefined safe', () => {
   expect(normalizeMerchant('  starbucks  ')).toBe('STARBUCKS');
   expect(normalizeMerchant('Whole Foods')).toBe('WHOLE FOODS');
   expect(normalizeMerchant('')).toBe('');
+  expect(normalizeMerchant(null)).toBe('');
+  expect(normalizeMerchant(undefined)).toBe('');
 });

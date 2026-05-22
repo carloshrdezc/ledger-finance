@@ -13,13 +13,19 @@
  *   the literal '.', not "any char").
  */
 export function patternToRegExp(pattern) {
-  const startsWith = pattern.endsWith('*');
-  const endsWith = pattern.startsWith('*');
+  // Detect anchor intent. Bookend `*PATTERN*` is treated as plain substring
+  // (no anchors) — the natural "contains" sigil. Anchoring only applies when
+  // a wildcard is on exactly one side.
+  const trailingStar = pattern.endsWith('*');
+  const leadingStar = pattern.startsWith('*');
+  const anchorStart = trailingStar && !leadingStar;  // '...PAT*' -> need ^PAT
+  const anchorEnd   = leadingStar && !trailingStar;  // '*PAT...' -> need PAT$
+
   const core = pattern.replace(/^\*+|\*+$/g, '');
   const escaped = core.replace(/[.+?^${}()|[\]\\]/g, '\\$&');
   const withWildcards = escaped.replace(/\*/g, '.*');
   const anchored =
-    (startsWith ? '^' : '') + withWildcards + (endsWith ? '$' : '');
+    (anchorStart ? '^' : '') + withWildcards + (anchorEnd ? '$' : '');
   return new RegExp(anchored, 'i');
 }
 
