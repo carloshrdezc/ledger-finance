@@ -55,17 +55,21 @@ const TRIGGER_STYLE = {
   gap: 8,
 };
 
-function flattenTree(tree, path = []) {
+function flattenTree(tree, path = [], parentSegments = []) {
   const entries = [];
   for (const [key, node] of Object.entries(tree || {})) {
     const nextPath = [...path, key];
+    const label = node.label || key.toUpperCase();
+    const nextSegments = [...parentSegments, label];
     entries.push({
       path: nextPath,
-      label: node.label || key.toUpperCase(),
+      label,
       glyph: node.glyph || '',
+      // Pre-resolved labels for parent segments (everything except the leaf):
+      breadcrumb: parentSegments,
     });
     if (node.children) {
-      entries.push(...flattenTree(node.children, nextPath));
+      entries.push(...flattenTree(node.children, nextPath, nextSegments));
     }
   }
   return entries;
@@ -154,7 +158,7 @@ export default function CategoryPicker({
               No categories
             </div>
           )}
-          {entries.map(({ path, label, glyph }) => (
+          {entries.map(({ path, label, glyph, breadcrumb }) => (
             <button
               key={path.join('.')}
               type="button"
@@ -164,9 +168,9 @@ export default function CategoryPicker({
               onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
             >
               {glyph && <span style={{ marginRight: 6 }}>{glyph}</span>}
-              {path.length > 1 && (
+              {breadcrumb.length > 0 && (
                 <span style={{ color: A.muted, marginRight: 4 }}>
-                  {path.slice(0, -1).map(seg => seg.toUpperCase()).join(' › ')} ›
+                  {breadcrumb.join(' › ')} ›
                 </span>
               )}
               {label}
