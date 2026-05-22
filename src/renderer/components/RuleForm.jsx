@@ -1,6 +1,6 @@
 import React from 'react';
 import { A } from '../theme';
-import { Checkbox, ALabel } from './Shared';
+import { Checkbox } from './Shared';
 import CategoryPicker from './CategoryPicker';
 
 const FIELD_INPUT_STYLE = {
