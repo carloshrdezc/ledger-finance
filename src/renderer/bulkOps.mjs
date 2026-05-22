@@ -33,3 +33,38 @@ export function updateTxsInArray(prevTxs, ids, patch) {
   if (!prevTxs.some(tx => idSet.has(tx.id))) return prevTxs;
   return prevTxs.map(tx => idSet.has(tx.id) ? { ...tx, ...patch } : tx);
 }
+
+export function convertToTransferInArray(prevTxs, aId, bId, params, transferId) {
+  // Mirror the leg shape used by createTransfer in store.jsx for consistency.
+  const { fromAcct, toAcct, amtFrom, amtTo, date, fromCcy, toCcy, note } = params;
+  const outName = note || ('TRANSFER → ' + toAcct);
+  const inName  = note || ('TRANSFER ← ' + fromAcct);
+  const outLeg = {
+    id: transferId + '_out',
+    name: outName,
+    amt: -Math.abs(amtFrom),
+    date,
+    acct: fromAcct,
+    ccy: fromCcy || 'USD',
+    cat: 'transfer',
+    path: [],
+    transferId,
+    transferPeer: transferId + '_in',
+    ...(note ? { note } : {}),
+  };
+  const inLeg = {
+    id: transferId + '_in',
+    name: inName,
+    amt: Math.abs(amtTo),
+    date,
+    acct: toAcct,
+    ccy: toCcy || 'USD',
+    cat: 'transfer',
+    path: [],
+    transferId,
+    transferPeer: transferId + '_out',
+    ...(note ? { note } : {}),
+  };
+  const removedSet = new Set([aId, bId]);
+  return [...prevTxs.filter(tx => !removedSet.has(tx.id)), outLeg, inLeg];
+}
