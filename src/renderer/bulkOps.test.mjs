@@ -5,6 +5,7 @@ import {
   updateTxsInArray,
   convertToTransferInArray,
   detectTransferPair,
+  updateTxsIndividuallyInArray,
 } from './bulkOps.mjs';
 
 test('deleteTxsFromArray removes only specified ids', () => {
@@ -239,4 +240,32 @@ test('convertToTransferInArray uses fromAcctName/toAcctName for display when pro
   // acct fields keep the ids
   expect(out.acct).toBe('chk');
   expect(inn.acct).toBe('sav');
+});
+
+test('updateTxsIndividuallyInArray applies per-tx patches only to matching ids', () => {
+  const prev = [
+    { id: 'a', cat: 'other', name: 'STARBUCKS' },
+    { id: 'b', cat: 'shop',  name: 'WALMART' },
+    { id: 'c', cat: 'other', name: 'AMAZON' },
+  ];
+  const patches = [
+    { id: 'a', patch: { cat: 'dining', path: ['dining', 'cafe'] } },
+    { id: 'c', patch: { cat: 'shopping' } },
+  ];
+  const next = updateTxsIndividuallyInArray(prev, patches);
+  expect(next).not.toBe(prev);
+  expect(next[0]).toEqual({ id: 'a', cat: 'dining', path: ['dining', 'cafe'], name: 'STARBUCKS' });
+  expect(next[1]).toEqual({ id: 'b', cat: 'shop', name: 'WALMART' });
+  expect(next[2]).toEqual({ id: 'c', cat: 'shopping', name: 'AMAZON' });
+});
+
+test('updateTxsIndividuallyInArray returns prev unchanged when patches is empty', () => {
+  const prev = [{ id: 'a', cat: 'other' }];
+  expect(updateTxsIndividuallyInArray(prev, [])).toBe(prev);
+});
+
+test('updateTxsIndividuallyInArray returns prev unchanged when no ids match', () => {
+  const prev = [{ id: 'a', cat: 'other' }];
+  const patches = [{ id: 'x', patch: { cat: 'dining' } }];
+  expect(updateTxsIndividuallyInArray(prev, patches)).toBe(prev);
 });

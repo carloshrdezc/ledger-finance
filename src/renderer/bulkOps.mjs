@@ -87,3 +87,25 @@ export function detectTransferPair(visible, selectedIds) {
   const inn = a.amt < 0 ? b : a;
   return { out, inn };
 }
+
+/**
+ * Apply per-tx patches in a single pass.
+ * `perTxPatches` is an array of `{ id, patch }`. Each tx whose id is in
+ * the array gets its `patch` shallow-merged. Other txs pass through unchanged.
+ * Returns prev unchanged if no patches apply (identity preservation).
+ *
+ * Used by the rules-engine "re-apply to existing" flow where each tx may
+ * receive a different patch (different target path).
+ */
+export function updateTxsIndividuallyInArray(prevTxs, perTxPatches) {
+  if (!perTxPatches || perTxPatches.length === 0) return prevTxs;
+  const byId = Object.fromEntries(perTxPatches.map(p => [p.id, p.patch]));
+  if (Object.keys(byId).length === 0) return prevTxs;
+  let changed = false;
+  const next = prevTxs.map(tx => {
+    if (!byId[tx.id]) return tx;
+    changed = true;
+    return { ...tx, ...byId[tx.id] };
+  });
+  return changed ? next : prevTxs;
+}
