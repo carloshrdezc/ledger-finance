@@ -168,6 +168,103 @@ export function useUndoableStore() {
     });
   }, [store, stack]);
 
+  // ─── CAR-82 bulk wrappers ────────────────────────────────────────────────
+  // batchKey: null on each — these are already batches and must not coalesce.
+
+  const deleteTxs = React.useCallback((ids) => {
+    if (!ids || ids.length === 0) return;
+    const idSet = new Set(ids);
+    const removed = store.allTransactions.filter(t => idSet.has(t.id));
+    if (removed.length === 0) return;
+    // Extend capture to include orphan transfer legs. If the user deletes one
+    // leg of a transfer, both legs are deleted (matches single-row semantics).
+    const transferIds = new Set(removed.map(t => t.transferId).filter(Boolean));
+    const orphanLegs = transferIds.size === 0 ? [] :
+      store.allTransactions.filter(t =>
+        t.transferId && transferIds.has(t.transferId) && !idSet.has(t.id)
+      );
+    const fullCapture = [...removed, ...orphanLegs];
+    const fullIds = fullCapture.map(t => t.id);
+    stack.register({
+      label: fullCapture.length === 1
+        ? 'Transaction deleted'
+        : `${fullCapture.length} transactions deleted`,
+      batchKey: null,
+      do:   () => store.deleteTxs(fullIds),
+      undo: () => store.setTransactions(prev => {
+        const have = new Set(prev.map(t => t.id));
+        const additions = fullCapture.filter(t => !have.has(t.id));
+        return additions.length === 0 ? prev : [...prev, ...additions];
+      }),
+    });
+  }, [store, stack]);
+
+  const hideTxs = React.useCallback((ids) => {
+    if (!ids || ids.length === 0) return;
+    const beforeHidden = new Set(store.hidden || []);
+    const newlyHidden = ids.filter(id => !beforeHidden.has(id));
+    if (newlyHidden.length === 0) return;
+    stack.register({
+      label: newlyHidden.length === 1
+        ? 'Transaction hidden'
+        : `${newlyHidden.length} transactions hidden`,
+      batchKey: null,
+      do:   () => store.hideTxs(newlyHidden),
+      undo: () => {
+        const undoSet = new Set(newlyHidden);
+        store.setHidden(prev => prev.filter(id => !undoSet.has(id)));
+      },
+    });
+  }, [store, stack]);
+
+  const updateTxs = React.useCallback((ids, patch) => {
+    if (!ids || ids.length === 0) return;
+    if (!patch || Object.keys(patch).length === 0) return;
+    const idSet = new Set(ids);
+    const before = store.allTransactions
+      .filter(t => idSet.has(t.id))
+      .map(t => {
+        const snap = { id: t.id };
+        for (const k of Object.keys(patch)) snap[k] = t[k];
+        return snap;
+      });
+    if (before.length === 0) return;
+    stack.register({
+      label: before.length === 1
+        ? 'Transaction updated'
+        : `${before.length} transactions updated`,
+      batchKey: null,
+      do:   () => store.updateTxs(ids, patch),
+      undo: () => store.setTransactions(prev => {
+        const byId = Object.fromEntries(before.map(s => [s.id, s]));
+        return prev.map(tx => byId[tx.id] ? { ...tx, ...byId[tx.id] } : tx);
+      }),
+    });
+  }, [store, stack]);
+
+  const convertToTransfer = React.useCallback((aId, bId, params) => {
+    const a = store.allTransactions.find(t => t.id === aId);
+    const b = store.allTransactions.find(t => t.id === bId);
+    if (!a || !b) return;
+    // Pre-generate the transfer id so do() and undo() share it.
+    const transferId = 'xfer_' + Date.now();
+    stack.register({
+      label: 'Marked as transfer',
+      batchKey: null,
+      do:   () => store.convertToTransfer(aId, bId, params, transferId),
+      undo: () => store.setTransactions(prev => {
+        // Remove both new legs (matched by transferId) and re-add originals.
+        const without = prev.filter(t => t.transferId !== transferId);
+        const haveA = without.some(t => t.id === aId);
+        const haveB = without.some(t => t.id === bId);
+        const additions = [];
+        if (!haveA) additions.push(a);
+        if (!haveB) additions.push(b);
+        return additions.length === 0 ? without : [...without, ...additions];
+      }),
+    });
+  }, [store, stack]);
+
   return {
     ...store,
     deleteTx, hideTx, deleteTransfer,
@@ -177,5 +274,7 @@ export function useUndoableStore() {
     deleteGoal,
     removeCategory,
     removeHolding,
+    // CAR-82 bulk wrappers
+    deleteTxs, hideTxs, updateTxs, convertToTransfer,
   };
 }
