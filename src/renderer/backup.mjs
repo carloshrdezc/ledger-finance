@@ -2,7 +2,7 @@
 // All build/validate/parse logic lives here so it's testable without
 // mounting a renderer.
 
-export const BACKUP_FORMAT_VERSION = 1;
+export const BACKUP_FORMAT_VERSION = 2;
 export const BACKUP_TYPE = 'ledger-backup';
 
 // The 14 user-data slices (excluded: txFilter, dismissedAlerts, welcomeSeen,
@@ -22,6 +22,7 @@ const SLICES = [
   ['bills',              'bills',            [], 'array'],
   ['goals',              'goals',            [], 'array'],
   ['goalContributions',  'goalContributions', [], 'array'],
+  ['rules',              'rules',            [], 'array'],
   ['investments',        'investments',      [], 'array'],
   ['trades',             'trades',           [], 'array'],
   ['rates',              'fxRates',          {}, 'object'],
