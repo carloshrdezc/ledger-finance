@@ -13,6 +13,12 @@ import { buildAlertRows } from './alerts.mjs';
 import { DEFAULT_RATES } from './fx.mjs';
 import { buildBackup } from './backup.mjs';
 import { ACCENTS } from './theme';
+import {
+  deleteTxsFromArray,
+  hideIdsToArray,
+  updateTxsInArray,
+  convertToTransferInArray,
+} from './bulkOps.mjs';
 
 function useLS(key, def) {
   const [v, setV] = React.useState(() => {
@@ -544,6 +550,42 @@ export function StoreProvider({ children }) {
     setBudgets(prev => prev.filter(b => b.cat !== cat));
   }, [setBudgets]);
 
+  // ─── CAR-82 bulk transaction operations ──────────────────────────────────
+  // Single-render variants. Each is registered as ONE undo entry by the
+  // useUndoableStore wrappers (see useUndoableStore.js). Atomicity matters:
+  // 50 sequential setTxs calls would run the reducer 50 times even with
+  // React's render batching.
+
+  const deleteTxs = React.useCallback((ids) => {
+    if (!ids || ids.length === 0) return;
+    setTxs(prev => deleteTxsFromArray(prev, ids));
+  }, [setTxs]);
+
+  const hideTxs = React.useCallback((ids) => {
+    if (!ids || ids.length === 0) return;
+    setHidden(prev => hideIdsToArray(prev, ids));
+  }, [setHidden]);
+
+  const updateTxs = React.useCallback((ids, patch) => {
+    if (!ids || ids.length === 0 || !patch) return;
+    setTxs(prev => updateTxsInArray(prev, ids, patch));
+  }, [setTxs]);
+
+  const convertToTransfer = React.useCallback((aId, bId, params, transferId) => {
+    if (!aId || !bId || !transferId) return;
+    // Resolve account ids to display names so the auto-generated leg names
+    // read "TRANSFER → Checking" instead of "TRANSFER → chk".
+    const fromAcctObj = accounts.find(a => a.id === params.fromAcct);
+    const toAcctObj   = accounts.find(a => a.id === params.toAcct);
+    setTxs(prev => convertToTransferInArray(prev, aId, bId, {
+      ...params,
+      fromCcy: fromAcctObj?.ccy || 'USD',
+      toCcy:   toAcctObj?.ccy || 'USD',
+      fromAcctName: fromAcctObj?.name || params.fromAcct,
+      toAcctName:   toAcctObj?.name || params.toAcct,
+    }, transferId));
+  }, [accounts, setTxs]);
+
   // Transient filter applied on top of the current period in the Transactions
   // screens. Set by Reports drill-down clicks; cleared when the user closes
   // the filter chip or navigates away. Persisted to localStorage so a refresh
@@ -785,11 +827,17 @@ export function StoreProvider({ children }) {
       addTransactions,
       hideTx,
       setHidden,
+      hidden,
       deleteTx,
       createTransfer,
       updateTransfer,
       deleteTransfer,
       updateTx,
+      // CAR-82 bulk methods
+      deleteTxs,
+      hideTxs,
+      updateTxs,
+      convertToTransfer,
       categoryTree: catTree,
       setCategoryTree: setCatTree,
       addCategory,

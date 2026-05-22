@@ -6,8 +6,8 @@ import { useUndoableStore } from '../../useUndoableStore';
 import { getDaysInPeriod } from '../../period.mjs';
 import AccountFormModal from '../../components/AccountFormModal';
 
-export default function WebAddModal({ t, onClose, editTx = null }) {
-  const { addTransactions, updateTx, deleteTx, deleteTransfer, createTransfer, updateTransfer, transactions, accountsWithBalance, selectedPeriod } = useUndoableStore();
+export default function WebAddModal({ t, onClose, editTx = null, convertFromTxs = null }) {
+  const { addTransactions, updateTx, deleteTx, deleteTransfer, createTransfer, updateTransfer, convertToTransfer, transactions, accountsWithBalance, selectedPeriod } = useUndoableStore();
   const defaultDay = Math.min(new Date().getDate(), getDaysInPeriod(selectedPeriod));
   const defaultDate = `${selectedPeriod}-${String(defaultDay).padStart(2, '0')}`;
 
@@ -21,24 +21,55 @@ export default function WebAddModal({ t, onClose, editTx = null }) {
     return { out, in: inLeg };
   }, [editTx, transactions]);
 
+  const convertingPair = React.useMemo(() => {
+    if (!convertFromTxs || convertFromTxs.length !== 2) return null;
+    const [a, b] = convertFromTxs;
+    const out = a.amt < 0 ? a : b;
+    const inn = a.amt < 0 ? b : a;
+    return { out, inn };
+  }, [convertFromTxs]);
+
   const [amt, setAmt]           = React.useState(editTx ? String(Math.abs(editTx.amt)) : '');
   const [merchant, setMerchant] = React.useState(editTx ? editTx.name : '');
   const [isExpense, setIsExpense] = React.useState(editTx ? editTx.amt < 0 : true);
   const [cat, setCat]           = React.useState(editTx ? (editTx.cat || editTx.path?.[0] || 'dining') : 'dining');
   const [acct, setAcct]         = React.useState(editTx ? editTx.acct : (accountsWithBalance[0]?.id || 'chk'));
-  const [date, setDate]         = React.useState(editTx ? editTx.date : defaultDate);
+  const [date, setDate]         = React.useState(
+    editTx ? editTx.date
+      : convertingPair ? convertingPair.out.date
+      : defaultDate
+  );
 
   // Transfer state
-  const [isTransfer, setIsTransfer] = React.useState(editTx?.cat === 'transfer');
-  const [fromAcct, setFromAcct]     = React.useState(transferLegs?.out.acct || editTx?.acct || accountsWithBalance[0]?.id || 'chk');
-  const [toAcct, setToAcct]         = React.useState(() => {
+  const [isTransfer, setIsTransfer] = React.useState(
+    editTx?.cat === 'transfer' || convertingPair != null
+  );
+  const [fromAcct, setFromAcct] = React.useState(
+    transferLegs?.out.acct
+      || convertingPair?.out.acct
+      || editTx?.acct
+      || accountsWithBalance[0]?.id
+      || 'chk'
+  );
+  const [toAcct, setToAcct] = React.useState(() => {
     if (transferLegs) return transferLegs.in.acct;
+    if (convertingPair) return convertingPair.inn.acct;
     const others = accountsWithBalance.filter(a => a.id !== (editTx?.acct || accountsWithBalance[0]?.id));
     return others[0]?.id || '';
   });
-  const [amtFrom, setAmtFrom]       = React.useState(transferLegs ? String(Math.abs(transferLegs.out.amt)) : '');
-  const [amtTo, setAmtTo]           = React.useState(transferLegs ? String(Math.abs(transferLegs.in.amt)) : '');
-  const [transferNote, setTransferNote] = React.useState(transferLegs?.out.note || '');
+  const [amtFrom, setAmtFrom] = React.useState(
+    transferLegs ? String(Math.abs(transferLegs.out.amt))
+      : convertingPair ? String(Math.abs(convertingPair.out.amt))
+      : ''
+  );
+  const [amtTo, setAmtTo] = React.useState(
+    transferLegs ? String(Math.abs(transferLegs.in.amt))
+      : convertingPair ? String(Math.abs(convertingPair.inn.amt))
+      : ''
+  );
+  const [transferNote, setTransferNote] = React.useState(
+    transferLegs?.out.note || convertingPair?.out.note || convertingPair?.inn.note || ''
+  );
 
   const [showAddAccount, setShowAddAccount] = React.useState(false);
 
@@ -58,6 +89,14 @@ export default function WebAddModal({ t, onClose, editTx = null }) {
     if (isTransfer) {
       if (editTx?.transferId) {
         updateTransfer(editTx.transferId, {
+          fromAcct, toAcct,
+          amtFrom: parseFloat(amtFrom),
+          amtTo: parseFloat(isCrossCcy ? amtTo : amtFrom),
+          date,
+          note: transferNote.trim() || undefined,
+        });
+      } else if (convertingPair) {
+        convertToTransfer(convertingPair.out.id, convertingPair.inn.id, {
           fromAcct, toAcct,
           amtFrom: parseFloat(amtFrom),
           amtTo: parseFloat(isCrossCcy ? amtTo : amtFrom),

@@ -5,10 +5,14 @@ import PeriodSwitcher from '../../components/PeriodSwitcher';
 import WebShell from './WebShell';
 import WebAddModal from './WebAddModal';
 import EmptySectionHint from '../../components/EmptySectionHint';
-import { fmtMoney, fmtSigned, dayLabel, catGlyph, catBreadcrumb } from '../../data';
+import TransactionRow from '../../components/TransactionRow';
+import { fmtMoney } from '../../data';
 import { useUndoableStore } from '../../useUndoableStore';
 import { exportCSV } from '../../importExport';
 import useKeyboardShortcuts from '../../hooks/useKeyboardShortcuts';
+import useBulkSelection from '../../hooks/useBulkSelection';
+import BulkActionBar from '../../components/BulkActionBar';
+import { detectTransferPair } from '../../bulkOps.mjs';
 
 function download(name, content) {
   const a = document.createElement('a');
@@ -19,10 +23,16 @@ function download(name, content) {
 }
 
 export default function WebTransactions({ t, onNavigate, onAdd }) {
-  const { transactions, periodTransactions, deleteTx, deleteTransfer, accountsWithBalance, periodLabel, txFilter, clearTxFilter } = useUndoableStore();
+  const {
+    transactions, periodTransactions, deleteTx, deleteTransfer,
+    accountsWithBalance, periodLabel, txFilter, clearTxFilter,
+    // CAR-82
+    deleteTxs, hideTxs, updateTxs,
+  } = useUndoableStore();
   const [filter, setFilter] = React.useState('ALL');
   const [search, setSearch] = React.useState('');
   const [editTx, setEditTx] = React.useState(null);
+  const [convertFromTxs, setConvertFromTxs] = React.useState(null);
   const [selectedIdx, setSelectedIdx] = React.useState(0);
   const searchRef = React.useRef(null);
   const rowRefs = React.useRef({});
@@ -65,9 +75,23 @@ export default function WebTransactions({ t, onNavigate, onAdd }) {
   });
   const total = visible.reduce((s, x) => s + Math.abs(x.amt), 0);
 
+  const bulk = useBulkSelection(visible);
+  const transferPair = React.useMemo(
+    () => detectTransferPair(visible, bulk.selectedIds),
+    [visible, bulk.selectedIds]
+  );
+  const canMarkAsTransfer = transferPair !== null;
+
   React.useEffect(() => {
     setSelectedIdx(0);
   }, [visible.length, visible[0]?.id]);
+
+  // CAR-82: clear bulk selection on context change.
+  // `selectedPeriod` isn't directly destructured here, but `periodLabel`
+  // updates whenever it does (it's a derived display string from the store).
+  React.useEffect(() => {
+    bulk.clear();
+  }, [filter, search, txFilter, periodLabel, bulk.clear]);
 
   React.useEffect(() => {
     const tx = visible[selectedIdx];
@@ -79,14 +103,50 @@ export default function WebTransactions({ t, onNavigate, onAdd }) {
   }, [selectedIdx, visible]);
 
   const txBindings = React.useMemo(() => [
-    { keys: 'j', handler: () => setSelectedIdx(i => Math.min(i + 1, Math.max(0, visible.length - 1))) },
-    { keys: 'k', handler: () => setSelectedIdx(i => Math.max(0, i - 1)) },
+    { keys: 'j', handler: () => {
+        const next = Math.min(selectedIdx + 1, Math.max(0, visible.length - 1));
+        setSelectedIdx(next);
+        bulk.setAnchor(next);
+      } },
+    { keys: 'k', handler: () => {
+        const next = Math.max(0, selectedIdx - 1);
+        setSelectedIdx(next);
+        bulk.setAnchor(next);
+      } },
+    { keys: 'J', handler: () => {
+        const next = Math.min(selectedIdx + 1, Math.max(0, visible.length - 1));
+        if (visible[next]) bulk.toggle(visible[next].id);
+        setSelectedIdx(next);
+        bulk.setAnchor(next);
+      } },
+    { keys: 'K', handler: () => {
+        const next = Math.max(0, selectedIdx - 1);
+        if (visible[next]) bulk.toggle(visible[next].id);
+        setSelectedIdx(next);
+        bulk.setAnchor(next);
+      } },
     { keys: 'e', handler: () => {
+        if (bulk.selectedCount > 0) return;
         const tx = visible[selectedIdx];
         if (tx) setEditTx(tx);
       } },
     { keys: '/', handler: () => searchRef.current?.focus() },
-  ], [visible, selectedIdx]);
+    { keys: 'x', handler: () => {
+        const tx = visible[selectedIdx];
+        if (tx) {
+          bulk.toggle(tx.id);
+          bulk.setAnchor(selectedIdx);
+        }
+      } },
+    { keys: 'A', handler: () => {
+        bulk.selectAll();
+      } },
+    { keys: 'Escape', handler: () => {
+        if (bulk.selectedCount > 0) {
+          bulk.clear();
+        }
+      } },
+  ], [visible, selectedIdx, bulk]);
 
   useKeyboardShortcuts({ bindings: txBindings });
 
@@ -143,8 +203,8 @@ export default function WebTransactions({ t, onNavigate, onAdd }) {
       </div>
 
       <div style={{ marginTop: 18, borderTop: '2px solid ' + A.ink }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '90px 24px 1fr 280px 90px 120px', padding: '8px 0', fontSize: 9, color: A.muted, letterSpacing: 1.2, borderBottom: '1px solid ' + A.rule2 }}>
-          <div>DATE</div><div /><div>MERCHANT</div><div>CATEGORY</div><div>ACCT</div><div style={{ textAlign: 'right' }}>AMOUNT</div>
+        <div style={{ display: 'grid', gridTemplateColumns: '28px 90px 24px 1fr 280px 90px 120px', padding: '8px 0', fontSize: 9, color: A.muted, letterSpacing: 1.2, borderBottom: '1px solid ' + A.rule2 }}>
+          <div /><div>DATE</div><div /><div>MERCHANT</div><div>CATEGORY</div><div>ACCT</div><div style={{ textAlign: 'right' }}>AMOUNT</div>
         </div>
         {visible.length === 0 ? (
           <EmptySectionHint
@@ -156,37 +216,86 @@ export default function WebTransactions({ t, onNavigate, onAdd }) {
           />
         ) : null}
         {visible.map((tx, i) => (
-          <div
+          <TransactionRow
             key={tx.id}
-            ref={el => { if (el) rowRefs.current[tx.id] = el; else delete rowRefs.current[tx.id]; }}
-            aria-selected={i === selectedIdx ? 'true' : 'false'}
-            onClick={() => setEditTx(tx)}
-            style={{
-              display: 'grid', gridTemplateColumns: '90px 24px 1fr 280px 90px 120px',
-              padding: t.density === 'compact' ? '7px 0' : '10px 0',
-              fontSize: 11, borderBottom: '1px solid ' + A.rule2, alignItems: 'center',
-              cursor: 'pointer',
-              borderLeft: i === selectedIdx ? '2px solid ' + A.ink : '2px solid transparent',
+            tx={tx}
+            t={t}
+            isFocused={i === selectedIdx}
+            isSelected={bulk.isSelected(tx.id)}
+            accountsWithBalance={accountsWithBalance}
+            onRowClick={(e) => {
+              // Suppress edit-modal open while in bulk-select mode.
+              if (bulk.selectedCount > 0) return;
+              // Shift+click on row body extends selection (alternative to checkbox).
+              if (e.shiftKey) {
+                if (bulk.anchorIdx != null) bulk.range(bulk.anchorIdx, i);
+                else { bulk.toggle(tx.id); bulk.setAnchor(i); }
+                return;
+              }
+              // Cmd/Ctrl+click toggles a single row.
+              if (e.metaKey || e.ctrlKey) {
+                bulk.toggle(tx.id);
+                bulk.setAnchor(i);
+                return;
+              }
+              // Plain click: open edit modal (existing behaviour).
+              setEditTx(tx);
             }}
-            onMouseEnter={e => e.currentTarget.style.background = A.bg2}
-            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-          >
-            <div style={{ fontSize: 9, color: A.muted, letterSpacing: 1 }}>{dayLabel(tx.date)}</div>
-            <div>{tx.cat === 'transfer' ? '⇄' : catGlyph(tx.path || [tx.cat])}</div>
-            <div style={{ fontSize: 12 }}>{tx.name}</div>
-            <div style={{ color: A.ink2, fontSize: 10, letterSpacing: 0.6, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {tx.cat === 'transfer' ? 'TRANSFER' : catBreadcrumb(tx.path || [tx.cat])}
-            </div>
-            <div style={{ color: A.muted, fontSize: 10 }}>{accountsWithBalance.find(a => a.id === tx.acct)?.code}</div>
-            <div style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: tx.cat === 'transfer' ? A.ink2 : (tx.amt >= 0 ? t.accent : A.ink) }}>
-              {fmtSigned(tx.amt, tx.ccy, t.decimals)}
-            </div>
-          </div>
+            onCheckboxToggle={(e) => {
+              // Shift-click on checkbox extends selection.
+              if (e.shiftKey && bulk.anchorIdx != null) {
+                bulk.range(bulk.anchorIdx, i);
+              } else {
+                bulk.toggle(tx.id);
+                bulk.setAnchor(i);
+              }
+            }}
+            innerRef={el => { if (el) rowRefs.current[tx.id] = el; else delete rowRefs.current[tx.id]; }}
+          />
         ))}
       </div>
 
-      {editTx && (
+      {editTx && !convertFromTxs && (
         <WebAddModal t={t} editTx={editTx} onClose={() => setEditTx(null)} />
+      )}
+
+      {bulk.selectedCount > 0 && (
+        <BulkActionBar
+          count={bulk.selectedCount}
+          canMarkAsTransfer={canMarkAsTransfer}
+          accountsWithBalance={accountsWithBalance}
+          onCategorize={({ cat, path }) => {
+            updateTxs([...bulk.selectedIds], { cat, path });
+            bulk.clear();
+          }}
+          onSetAccount={(acctId) => {
+            updateTxs([...bulk.selectedIds], { acct: acctId });
+            bulk.clear();
+          }}
+          onMarkAsTransfer={() => {
+            if (transferPair) setConvertFromTxs([transferPair.out, transferPair.inn]);
+          }}
+          onHide={() => {
+            hideTxs([...bulk.selectedIds]);
+            bulk.clear();
+          }}
+          onDelete={() => {
+            deleteTxs([...bulk.selectedIds]);
+            bulk.clear();
+          }}
+          onClear={() => bulk.clear()}
+        />
+      )}
+
+      {convertFromTxs && (
+        <WebAddModal
+          t={t}
+          convertFromTxs={convertFromTxs}
+          onClose={() => {
+            setConvertFromTxs(null);
+            bulk.clear();
+          }}
+        />
       )}
     </WebShell>
   );
