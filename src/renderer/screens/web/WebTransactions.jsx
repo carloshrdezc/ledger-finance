@@ -5,6 +5,7 @@ import PeriodSwitcher from '../../components/PeriodSwitcher';
 import WebShell from './WebShell';
 import WebAddModal from './WebAddModal';
 import EmptySectionHint from '../../components/EmptySectionHint';
+import TransactionRow from '../../components/TransactionRow';
 import { fmtMoney, fmtSigned, dayLabel, catGlyph, catBreadcrumb } from '../../data';
 import { useUndoableStore } from '../../useUndoableStore';
 import { exportCSV } from '../../importExport';
@@ -143,8 +144,8 @@ export default function WebTransactions({ t, onNavigate, onAdd }) {
       </div>
 
       <div style={{ marginTop: 18, borderTop: '2px solid ' + A.ink }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '90px 24px 1fr 280px 90px 120px', padding: '8px 0', fontSize: 9, color: A.muted, letterSpacing: 1.2, borderBottom: '1px solid ' + A.rule2 }}>
-          <div>DATE</div><div /><div>MERCHANT</div><div>CATEGORY</div><div>ACCT</div><div style={{ textAlign: 'right' }}>AMOUNT</div>
+        <div style={{ display: 'grid', gridTemplateColumns: '28px 90px 24px 1fr 280px 90px 120px', padding: '8px 0', fontSize: 9, color: A.muted, letterSpacing: 1.2, borderBottom: '1px solid ' + A.rule2 }}>
+          <div /><div>DATE</div><div /><div>MERCHANT</div><div>CATEGORY</div><div>ACCT</div><div style={{ textAlign: 'right' }}>AMOUNT</div>
         </div>
         {visible.length === 0 ? (
           <EmptySectionHint
@@ -156,32 +157,17 @@ export default function WebTransactions({ t, onNavigate, onAdd }) {
           />
         ) : null}
         {visible.map((tx, i) => (
-          <div
+          <TransactionRow
             key={tx.id}
-            ref={el => { if (el) rowRefs.current[tx.id] = el; else delete rowRefs.current[tx.id]; }}
-            aria-selected={i === selectedIdx ? 'true' : 'false'}
-            onClick={() => setEditTx(tx)}
-            style={{
-              display: 'grid', gridTemplateColumns: '90px 24px 1fr 280px 90px 120px',
-              padding: t.density === 'compact' ? '7px 0' : '10px 0',
-              fontSize: 11, borderBottom: '1px solid ' + A.rule2, alignItems: 'center',
-              cursor: 'pointer',
-              borderLeft: i === selectedIdx ? '2px solid ' + A.ink : '2px solid transparent',
-            }}
-            onMouseEnter={e => e.currentTarget.style.background = A.bg2}
-            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-          >
-            <div style={{ fontSize: 9, color: A.muted, letterSpacing: 1 }}>{dayLabel(tx.date)}</div>
-            <div>{tx.cat === 'transfer' ? '⇄' : catGlyph(tx.path || [tx.cat])}</div>
-            <div style={{ fontSize: 12 }}>{tx.name}</div>
-            <div style={{ color: A.ink2, fontSize: 10, letterSpacing: 0.6, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {tx.cat === 'transfer' ? 'TRANSFER' : catBreadcrumb(tx.path || [tx.cat])}
-            </div>
-            <div style={{ color: A.muted, fontSize: 10 }}>{accountsWithBalance.find(a => a.id === tx.acct)?.code}</div>
-            <div style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: tx.cat === 'transfer' ? A.ink2 : (tx.amt >= 0 ? t.accent : A.ink) }}>
-              {fmtSigned(tx.amt, tx.ccy, t.decimals)}
-            </div>
-          </div>
+            tx={tx}
+            t={t}
+            isFocused={i === selectedIdx}
+            isSelected={false /* wired in Task 12 */}
+            accountsWithBalance={accountsWithBalance}
+            onRowClick={() => setEditTx(tx)}
+            onCheckboxToggle={undefined /* wired in Task 12 */}
+            innerRef={el => { if (el) rowRefs.current[tx.id] = el; else delete rowRefs.current[tx.id]; }}
+          />
         ))}
       </div>
 
