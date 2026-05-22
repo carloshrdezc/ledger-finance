@@ -87,7 +87,12 @@ export default function ImportExport({ onClose }) {
       style={{ position: 'fixed', inset: 0, background: 'rgba(21,19,15,0.55)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
       onClick={onClose}
     >
-      <div onClick={e => e.stopPropagation()} style={{ background: A.bg, border: '2px solid ' + A.ink, width: 460, padding: 32, fontFamily: A.font }}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        onClick={e => e.stopPropagation()}
+        style={{ background: A.bg, border: '2px solid ' + A.ink, width: 460, padding: 32, fontFamily: A.font }}
+      >
 
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 24 }}>
           <ALabel>IMPORT · EXPORT</ALabel>

@@ -2,7 +2,7 @@ import React from 'react';
 import { A } from '../theme';
 import { ALabel, ARule } from './Shared';
 import { CATEGORIES } from '../data';
-import { useStore } from '../store';
+import { useUndoableStore } from '../useUndoableStore';
 
 const FREQ_LABELS = ['MONTHLY', 'WEEKLY', 'BI-WEEKLY', 'ANNUAL', 'CUSTOM'];
 const FREQ_VALUES = ['monthly', 'weekly', 'biweekly', 'annual', 'custom'];
@@ -10,7 +10,7 @@ const DOW = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
 const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
 
 export default function RecurringFormSheet({ t, onClose, editRule = null }) {
-  const { addRecurring, updateRecurring, deleteRecurring, accountsWithBalance } = useStore();
+  const { addRecurring, updateRecurring, deleteRecurring, accountsWithBalance } = useUndoableStore();
 
   const [name, setName]           = React.useState(editRule?.name || '');
   const [type, setType]           = React.useState(editRule?.type || 'expense');
@@ -68,7 +68,11 @@ export default function RecurringFormSheet({ t, onClose, editRule = null }) {
   );
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: A.bg, zIndex: 1000, display: 'flex', flexDirection: 'column', fontFamily: A.font }}>
+    <div
+      role="dialog"
+      aria-modal="true"
+      style={{ position: 'fixed', inset: 0, background: A.bg, zIndex: 1000, display: 'flex', flexDirection: 'column', fontFamily: A.font }}
+    >
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 18px', borderBottom: '1px solid ' + A.rule2 }}>
         <ALabel>{editRule ? 'EDIT · RECURRING' : 'NEW · RECURRING'}</ALabel>

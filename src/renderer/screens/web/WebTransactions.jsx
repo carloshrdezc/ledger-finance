@@ -6,7 +6,7 @@ import WebShell from './WebShell';
 import WebAddModal from './WebAddModal';
 import EmptySectionHint from '../../components/EmptySectionHint';
 import { fmtMoney, fmtSigned, dayLabel, catGlyph, catBreadcrumb } from '../../data';
-import { useStore } from '../../store';
+import { useUndoableStore } from '../../useUndoableStore';
 import { exportCSV } from '../../importExport';
 import useKeyboardShortcuts from '../../hooks/useKeyboardShortcuts';
 
@@ -19,7 +19,7 @@ function download(name, content) {
 }
 
 export default function WebTransactions({ t, onNavigate, onAdd }) {
-  const { transactions, periodTransactions, deleteTx, deleteTransfer, accountsWithBalance, periodLabel, txFilter, clearTxFilter } = useStore();
+  const { transactions, periodTransactions, deleteTx, deleteTransfer, accountsWithBalance, periodLabel, txFilter, clearTxFilter } = useUndoableStore();
   const [filter, setFilter] = React.useState('ALL');
   const [search, setSearch] = React.useState('');
   const [editTx, setEditTx] = React.useState(null);
