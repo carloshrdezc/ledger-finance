@@ -18,6 +18,7 @@ import {
   hideIdsToArray,
   updateTxsInArray,
   convertToTransferInArray,
+  updateTxsIndividuallyInArray,
 } from './bulkOps.mjs';
 
 function useLS(key, def) {
@@ -108,6 +109,7 @@ export function StoreProvider({ children }) {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [goals, setGoals] = useLS('ledger:goals', []);
   const [goalContributions, setGoalContributions] = useLS('ledger:goalContributions', []);
+  const [rules, setRules] = useLS('ledger:rules', []);
   const [budgetStartDay, setBudgetStartDay] = useLS('ledger:budgetStartDay', 1);
   const [investments, setInvestments] = useLS('ledger:investments', []);
   const [trades, setTrades]           = useLS('ledger:trades', []);
@@ -586,6 +588,45 @@ export function StoreProvider({ children }) {
     }, transferId));
   }, [accounts, setTxs]);
 
+  // ─── CAR-80 rules CRUD ──────────────────────────────────────────────
+  // Array index in the rules slice IS the priority (first match wins).
+  // No `priority` field on rule objects.
+
+  const addRule = React.useCallback((rule) => {
+    if (!rule || !rule.match || !rule.match.merchantPattern) return;
+    const id = 'rule_' + Date.now();
+    const newRule = {
+      enabled: true,
+      createdAt: new Date().toISOString().slice(0, 10),
+      ...rule,
+      id,  // generated id wins over any caller-provided id
+    };
+    setRules(prev => [...prev, newRule]);
+    return newRule;
+  }, [setRules]);
+
+  const updateRule = React.useCallback((id, patch) => {
+    setRules(prev => prev.map(r => r.id === id ? { ...r, ...patch } : r));
+  }, [setRules]);
+
+  const deleteRule = React.useCallback((id) => {
+    setRules(prev => prev.filter(r => r.id !== id));
+  }, [setRules]);
+
+  const reorderRules = React.useCallback((orderedIds) => {
+    setRules(prev => {
+      const byId = Object.fromEntries(prev.map(r => [r.id, r]));
+      const reordered = orderedIds.filter(id => byId[id]).map(id => byId[id]);
+      const untouched = prev.filter(r => !orderedIds.includes(r.id));
+      return [...reordered, ...untouched];
+    });
+  }, [setRules]);
+
+  const updateTxsIndividually = React.useCallback((perTxPatches) => {
+    if (!perTxPatches || perTxPatches.length === 0) return;
+    setTxs(prev => updateTxsIndividuallyInArray(prev, perTxPatches));
+  }, [setTxs]);
+
   // Transient filter applied on top of the current period in the Transactions
   // screens. Set by Reports drill-down clicks; cleared when the user closes
   // the filter chip or navigates away. Persisted to localStorage so a refresh
@@ -755,6 +796,7 @@ export function StoreProvider({ children }) {
     setBills(Array.isArray(data.bills) ? data.bills : []);
     setGoals(Array.isArray(data.goals) ? data.goals : []);
     setGoalContributions(Array.isArray(data.goalContributions) ? data.goalContributions : []);
+    setRules(Array.isArray(data.rules) ? data.rules : []);
     setInvestments(Array.isArray(data.investments) ? data.investments : []);
     setTrades(Array.isArray(data.trades) ? data.trades : []);
     setRates(data.fxRates && typeof data.fxRates === 'object' ? data.fxRates : DEFAULT_RATES);
@@ -787,7 +829,7 @@ export function StoreProvider({ children }) {
     // Note: NOT touching lastBackupAt — restoring is not the same as backing up.
   }, [
     setTxs, setAccounts, setCatTree, setBudgets, setHidden, setBills, setGoals,
-    setGoalContributions, setInvestments, setTrades, setRates, setRatesUpdated,
+    setGoalContributions, setRules, setInvestments, setTrades, setRates, setRatesUpdated,
     setSelectedPeriod, setBudgetStartDay,
     setAccent, setDensity, setDecimals, setCurrency, setTheme,
     setTxFilterRaw, setDismissedAlertIds, setWelcomeSeen, setFxMigrationToastSeen,
@@ -802,6 +844,7 @@ export function StoreProvider({ children }) {
     setBills([]);
     setGoals([]);
     setGoalContributions([]);
+    setRules([]);
     setSelectedPeriod(monthKey(new Date()));
     setHidden([]);
     setBudgetStartDay(1);
@@ -816,7 +859,7 @@ export function StoreProvider({ children }) {
     setLastBackupAt(null);
     setBackupReminderSnoozedUntil(null);
     setBackupReminderIntervalRaw(30);
-  }, [setTxs, setCatTree, setBudgets, setAccounts, setBills, setGoals, setGoalContributions, setSelectedPeriod, setHidden, setBudgetStartDay, setInvestments, setTrades, setDismissedAlertIds, setTxFilterRaw, setRates, setRatesUpdated, setFxMigrationToastSeen, setWelcomeSeen, setLastBackupAt, setBackupReminderSnoozedUntil, setBackupReminderIntervalRaw]);
+  }, [setTxs, setCatTree, setBudgets, setAccounts, setBills, setGoals, setGoalContributions, setRules, setSelectedPeriod, setHidden, setBudgetStartDay, setInvestments, setTrades, setDismissedAlertIds, setTxFilterRaw, setRates, setRatesUpdated, setFxMigrationToastSeen, setWelcomeSeen, setLastBackupAt, setBackupReminderSnoozedUntil, setBackupReminderIntervalRaw]);
 
   return (
     <StoreCtx.Provider value={{
@@ -838,6 +881,14 @@ export function StoreProvider({ children }) {
       hideTxs,
       updateTxs,
       convertToTransfer,
+      // CAR-80 rules
+      rules,
+      addRule,
+      updateRule,
+      deleteRule,
+      reorderRules,
+      // CAR-80 per-tx bulk update (used by re-apply preview)
+      updateTxsIndividually,
       categoryTree: catTree,
       setCategoryTree: setCatTree,
       addCategory,
