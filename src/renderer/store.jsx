@@ -740,6 +740,7 @@ export function StoreProvider({ children }) {
     setBills([]);
     setGoals([]);
     setGoalContributions([]);
+    setRules([]);
     setSelectedPeriod(monthKey(new Date()));
     setHidden([]);
     setBudgetStartDay(1);
@@ -755,7 +756,7 @@ export function StoreProvider({ children }) {
     setBackupReminderSnoozedUntil(null);
     setBackupReminderIntervalRaw(30);
     _seedSampleData();
-  }, [_seedSampleData, setTxs, setCatTree, setBudgets, setAccounts, setBills, setGoals, setGoalContributions, setSelectedPeriod, setHidden, setBudgetStartDay, setInvestments, setTrades, setDismissedAlertIds, setTxFilterRaw, setRates, setRatesUpdated, setFxMigrationToastSeen, setWelcomeSeen, setLastBackupAt, setBackupReminderSnoozedUntil, setBackupReminderIntervalRaw]);
+  }, [_seedSampleData, setTxs, setCatTree, setBudgets, setAccounts, setBills, setGoals, setGoalContributions, setRules, setSelectedPeriod, setHidden, setBudgetStartDay, setInvestments, setTrades, setDismissedAlertIds, setTxFilterRaw, setRates, setRatesUpdated, setFxMigrationToastSeen, setWelcomeSeen, setLastBackupAt, setBackupReminderSnoozedUntil, setBackupReminderIntervalRaw]);
 
   // CAR-77: returns the JSON string the user will download. Reads the
   // current state synchronously via the captured useLS values; if React
