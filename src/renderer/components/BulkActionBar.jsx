@@ -61,12 +61,15 @@ export default function BulkActionBar({
 }) {
   const [openPicker, setOpenPicker] = React.useState(null); // 'category' | 'account' | null
 
-  // Close picker on Esc.
+  // Close picker on Esc. The app's global Esc handler is a separate
+  // window listener (it cannot be cancelled via stopPropagation since
+  // co-listeners on the same target all fire), but it only acts when
+  // a top-level overlay is open. The bar isn't an overlay, so the
+  // global handler is effectively a no-op when this fires.
   React.useEffect(() => {
     if (!openPicker) return undefined;
     const onKey = (e) => {
       if (e.key === 'Escape') {
-        e.stopPropagation();
         setOpenPicker(null);
       }
     };
