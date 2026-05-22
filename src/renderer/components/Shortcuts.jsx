@@ -29,9 +29,13 @@ const SECTIONS = [
   {
     title: 'TRANSACTIONS',
     items: [
-      ['j / k', 'Select previous / next row'],
-      ['e',     'Edit selected transaction'],
-      ['/',     'Focus search'],
+      ['j / k',     'Select previous / next row'],
+      ['e',         'Edit selected transaction'],
+      ['/',         'Focus search'],
+      ['x',         'Toggle selection of current row'],
+      ['Shift+j/k', 'Move and extend selection'],
+      ['a',         'Select all visible'],
+      ['Esc',       'Clear selection'],
     ],
   },
 ];
