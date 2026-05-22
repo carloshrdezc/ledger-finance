@@ -13,13 +13,17 @@ export default function UndoToast() {
   const [exiting, setExiting] = React.useState(false);
 
   // Reset exiting flag whenever a new fresh entry appears.
+  // `version` bumps on every register/undo (including coalesced re-registers
+  // that reuse the same entry id), so this catches a coalesced action that
+  // arrives mid-fade-out and needs the toast back to its visible state.
   React.useEffect(() => {
     if (fresh) setExiting(false);
-  }, [fresh?.entry.id, fresh?.mode]);
+  }, [fresh?.entry.id, fresh?.mode, fresh?.version]);
 
   // Auto-dismiss: schedule fade-out after FRESH_MS, then unmount after EXIT_MS.
-  // Both timers are cleaned up if `fresh` changes (new toast replaces this one)
-  // or the component unmounts.
+  // Both timers are cleaned up if `fresh` changes (new toast replaces this one,
+  // including coalesced re-registers — `version` bumps on those) or the
+  // component unmounts.
   React.useEffect(() => {
     if (!fresh) return undefined;
     let unmountTimer;
@@ -33,7 +37,7 @@ export default function UndoToast() {
       clearTimeout(dismissTimer);
       if (unmountTimer) clearTimeout(unmountTimer);
     };
-  }, [fresh?.entry.id, fresh?.mode, stack]);
+  }, [fresh?.entry.id, fresh?.mode, fresh?.version, stack]);
 
   if (!fresh) return null;
 

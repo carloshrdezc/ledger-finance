@@ -177,3 +177,33 @@ test('dismissCurrent clears fresh without disturbing stacks', () => {
   stack.undo();
   expect(log).toEqual(['A']);
 });
+
+test('fresh.version bumps on every register/undo, including coalesced re-registers', () => {
+  // Regression: if `version` did not change on coalesce, React effects keyed
+  // on the fresh wrapper would not see the second-of-batch action and the
+  // toast's 5s auto-dismiss timer would not restart.
+  let t = 0;
+  const stack = createUndoStack({ batchWindowMs: 1500, now: () => t });
+  stack.register({ label: 'A', batchKey: 'deleteTx', do: () => {}, undo: () => {} });
+  const v1 = stack.current().version;
+  expect(typeof v1).toBe('number');
+
+  // Coalesce: same id, but version must bump.
+  t = 1000;
+  stack.register({ label: 'A', batchKey: 'deleteTx', do: () => {}, undo: () => {} });
+  const v2 = stack.current().version;
+  expect(stack.current().entry.id).toBe(stack.current().entry.id); // same entry
+  expect(v2).toBeGreaterThan(v1);
+
+  // Non-coalesced register: version still bumps.
+  t = 5000;
+  stack.register({ label: 'B', batchKey: 'deleteAccount', do: () => {}, undo: () => {} });
+  const v3 = stack.current().version;
+  expect(v3).toBeGreaterThan(v2);
+
+  // Undo also bumps version (so a freshly-undone toast is distinct from the
+  // pre-undo "just registered" toast even if mode were somehow the same).
+  stack.undo();
+  const v4 = stack.current().version;
+  expect(v4).toBeGreaterThan(v3);
+});

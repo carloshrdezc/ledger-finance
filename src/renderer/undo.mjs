@@ -8,7 +8,12 @@ export function createUndoStack({
 } = {}) {
   const undoStack = [];
   const redoStack = [];
-  let fresh = null; // { entry, mode: 'undo' | 'redo' } | null
+  // `fresh` is the "currently displayable" toast entry. The `version` field
+  // bumps on every register()/undo() call so React effects (e.g. UndoToast's
+  // 5s auto-dismiss timer) can detect coalesced re-registrations even when
+  // the underlying entry's id and mode are unchanged.
+  let fresh = null; // { entry, mode: 'undo' | 'redo', version } | null
+  let freshVersion = 0;
   const listeners = new Set();
   let nextId = 1;
 
@@ -36,7 +41,7 @@ export function createUndoStack({
       top.count += 1;
       top.createdAt = now();
       if (pluralize) top.label = pluralize(top.count);
-      fresh = { entry: top, mode: 'undo' };
+      fresh = { entry: top, mode: 'undo', version: ++freshVersion };
     } else {
       const entry = {
         id: nextId++,
@@ -49,7 +54,7 @@ export function createUndoStack({
       };
       undoStack.push(entry);
       while (undoStack.length > maxSize) undoStack.shift();
-      fresh = { entry, mode: 'undo' };
+      fresh = { entry, mode: 'undo', version: ++freshVersion };
     }
     notify();
   }
@@ -59,7 +64,7 @@ export function createUndoStack({
     if (!entry) return;
     entry.undo();
     redoStack.push(entry);
-    fresh = { entry, mode: 'redo' };
+    fresh = { entry, mode: 'redo', version: ++freshVersion };
     notify();
   }
 
