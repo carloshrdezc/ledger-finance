@@ -56,3 +56,38 @@ export function compileRule(rule) {
     return true;
   };
 }
+
+/**
+ * Apply the first matching rule's `set` to the tx.
+ * Returns a new tx with shallow-merged patch, OR the original tx if no match.
+ * Identity preservation: callers can check `if (next === prev) skip` to
+ * avoid spurious React renders.
+ */
+export function applyRules(tx, rules) {
+  if (!rules || rules.length === 0) return tx;
+  for (const rule of rules) {
+    const matcher = compileRule(rule);
+    if (!matcher) continue;
+    if (matcher(tx)) {
+      const path = rule.set && rule.set.path;
+      if (!path || path.length === 0) continue;
+      return { ...tx, cat: path[0], path };
+    }
+  }
+  return tx;
+}
+
+/**
+ * Bulk apply for the import flow. Maps each tx through applyRules.
+ * Returns input array identity if no tx matched any rule.
+ */
+export function applyRulesToBatch(txs, rules) {
+  if (!rules || rules.length === 0) return txs;
+  let changed = false;
+  const next = txs.map(tx => {
+    const after = applyRules(tx, rules);
+    if (after !== tx) changed = true;
+    return after;
+  });
+  return changed ? next : txs;
+}
