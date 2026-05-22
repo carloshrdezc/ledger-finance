@@ -41,3 +41,9 @@ test('hideIdsToArray returns prev unchanged when nothing new', () => {
   const prev = ['a', 'b'];
   expect(hideIdsToArray(prev, ['a', 'b'])).toBe(prev);
 });
+
+test('hideIdsToArray dedupes duplicates within ids itself', () => {
+  const prev = ['a'];
+  const next = hideIdsToArray(prev, ['b', 'b', 'c']);
+  expect(next).toEqual(['a', 'b', 'c']);
+});

@@ -8,16 +8,20 @@
 export function deleteTxsFromArray(prevTxs, ids) {
   if (!ids || ids.length === 0) return prevTxs;
   const idSet = new Set(ids);
-  let removed = 0;
-  for (const tx of prevTxs) if (idSet.has(tx.id)) removed++;
-  if (removed === 0) return prevTxs;
+  if (!prevTxs.some(tx => idSet.has(tx.id))) return prevTxs;
   return prevTxs.filter(tx => !idSet.has(tx.id));
 }
 
 export function hideIdsToArray(prevHidden, ids) {
   if (!ids || ids.length === 0) return prevHidden;
   const have = new Set(prevHidden);
-  const additions = ids.filter(id => !have.has(id));
+  const additions = [];
+  for (const id of ids) {
+    if (!have.has(id)) {
+      have.add(id);
+      additions.push(id);
+    }
+  }
   if (additions.length === 0) return prevHidden;
   return [...prevHidden, ...additions];
 }
