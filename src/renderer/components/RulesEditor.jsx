@@ -3,6 +3,7 @@ import { A } from '../theme';
 import { ALabel, Checkbox } from './Shared';
 import RuleForm from './RuleForm';
 import { previewRulesAgainst } from '../rules.mjs';
+import { formatPath } from '../categories.mjs';
 
 const TOOLBAR_BUTTON_STYLE = {
   background: 'transparent',
@@ -29,22 +30,6 @@ const DRAG_HANDLE_STYLE = {
   userSelect: 'none',
   padding: '0 4px',
 };
-
-function formatPath(path, tree) {
-  if (!path || path.length === 0) return '';
-  const segments = [];
-  let cursor = tree || {};
-  for (const key of path) {
-    const node = cursor[key];
-    if (!node) {
-      segments.push(key.toUpperCase());
-      break;
-    }
-    segments.push(node.label || key.toUpperCase());
-    cursor = node.children || {};
-  }
-  return segments.join(' › ');
-}
 
 function formatAmountRange(range) {
   if (!range) return 'any';

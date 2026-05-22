@@ -1,5 +1,6 @@
 import React from 'react';
 import { A } from '../theme';
+import { formatPath } from '../categories.mjs';
 
 /**
  * Tree-walking category picker. Walks store.categoryTree depth-first and
@@ -73,23 +74,6 @@ function flattenTree(tree, path = [], parentSegments = []) {
     }
   }
   return entries;
-}
-
-function formatPath(path, tree) {
-  // Walk the tree to resolve labels for display.
-  if (!path || path.length === 0) return '';
-  const segments = [];
-  let cursor = tree || {};
-  for (const key of path) {
-    const node = cursor[key];
-    if (!node) {
-      segments.push(key.toUpperCase());
-      break;
-    }
-    segments.push(node.label || key.toUpperCase());
-    cursor = node.children || {};
-  }
-  return segments.join(' › ');
 }
 
 export default function CategoryPicker({
