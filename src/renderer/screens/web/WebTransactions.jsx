@@ -87,12 +87,13 @@ export default function WebTransactions({ t, onNavigate, onAdd }) {
   }, [visible.length, visible[0]?.id]);
 
   // CAR-82: clear bulk selection on context change.
-  React.useEffect(() => bulk.clear(), [filter]);
-  React.useEffect(() => bulk.clear(), [search]);
-  React.useEffect(() => bulk.clear(), [txFilter]);
-  // selectedPeriod isn't directly destructured here, but periodLabel updates
-  // whenever selectedPeriod does (it's a derived display string from the store).
-  React.useEffect(() => bulk.clear(), [periodLabel]);
+  // `selectedPeriod` isn't directly destructured here, but `periodLabel`
+  // updates whenever it does. `bulk.clear` is intentionally omitted from
+  // the deps array — it's a stable useCallback reference per the
+  // useBulkSelection contract, so listing it would just add noise.
+  React.useEffect(() => {
+    bulk.clear();
+  }, [filter, search, txFilter, periodLabel]);
 
   React.useEffect(() => {
     const tx = visible[selectedIdx];
@@ -247,7 +248,7 @@ export default function WebTransactions({ t, onNavigate, onAdd }) {
         ))}
       </div>
 
-      {editTx && (
+      {editTx && !convertFromTxs && (
         <WebAddModal t={t} editTx={editTx} onClose={() => setEditTx(null)} />
       )}
 
