@@ -220,3 +220,23 @@ test('detectTransferPair returns ordered pair regardless of input order', () => 
   expect(result.out.id).toBe('a');
   expect(result.inn.id).toBe('b');
 });
+
+test('convertToTransferInArray uses fromAcctName/toAcctName for display when provided', () => {
+  const prev = [
+    { id: 'a', amt: -100, acct: 'chk' },
+    { id: 'b', amt: 100, acct: 'sav' },
+  ];
+  const next = convertToTransferInArray(prev, 'a', 'b', {
+    fromAcct: 'chk', toAcct: 'sav',
+    fromAcctName: 'Checking', toAcctName: 'Savings',
+    amtFrom: 100, amtTo: 100, date: '2026-05-15',
+    fromCcy: 'USD', toCcy: 'USD',
+  }, 'xfer_test_named');
+  const out = next.find(t => t.id === 'xfer_test_named_out');
+  const inn = next.find(t => t.id === 'xfer_test_named_in');
+  expect(out.name).toBe('TRANSFER → Savings');
+  expect(inn.name).toBe('TRANSFER ← Checking');
+  // acct fields keep the ids
+  expect(out.acct).toBe('chk');
+  expect(inn.acct).toBe('sav');
+});

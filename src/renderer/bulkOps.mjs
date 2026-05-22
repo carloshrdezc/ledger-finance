@@ -36,9 +36,13 @@ export function updateTxsInArray(prevTxs, ids, patch) {
 
 export function convertToTransferInArray(prevTxs, aId, bId, params, transferId) {
   // Mirror the leg shape used by createTransfer in store.jsx for consistency.
-  const { fromAcct, toAcct, amtFrom, amtTo, date, fromCcy, toCcy, note } = params;
-  const outName = note || ('TRANSFER → ' + toAcct);
-  const inName  = note || ('TRANSFER ← ' + fromAcct);
+  const { fromAcct, toAcct, amtFrom, amtTo, date, fromCcy, toCcy, note,
+          fromAcctName, toAcctName } = params;
+  // Display name in the leg's `name` field uses the resolved account NAME
+  // (e.g. "Checking") rather than the id (e.g. "chk"). Falls back to id if
+  // the caller didn't resolve the name.
+  const outName = note || ('TRANSFER → ' + (toAcctName || toAcct));
+  const inName  = note || ('TRANSFER ← ' + (fromAcctName || fromAcct));
   const outLeg = {
     id: transferId + '_out',
     name: outName,
