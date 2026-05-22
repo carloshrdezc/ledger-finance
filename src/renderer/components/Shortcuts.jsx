@@ -34,7 +34,7 @@ const SECTIONS = [
       ['/',         'Focus search'],
       ['x',         'Toggle selection of current row'],
       ['Shift+j/k', 'Move and extend selection'],
-      ['a',         'Select all visible'],
+      ['Shift+a',   'Select all visible'],
       ['Esc',       'Clear selection'],
     ],
   },

@@ -88,12 +88,10 @@ export default function WebTransactions({ t, onNavigate, onAdd }) {
 
   // CAR-82: clear bulk selection on context change.
   // `selectedPeriod` isn't directly destructured here, but `periodLabel`
-  // updates whenever it does. `bulk.clear` is intentionally omitted from
-  // the deps array — it's a stable useCallback reference per the
-  // useBulkSelection contract, so listing it would just add noise.
+  // updates whenever it does (it's a derived display string from the store).
   React.useEffect(() => {
     bulk.clear();
-  }, [filter, search, txFilter, periodLabel]);
+  }, [filter, search, txFilter, periodLabel, bulk.clear]);
 
   React.useEffect(() => {
     const tx = visible[selectedIdx];
@@ -105,15 +103,25 @@ export default function WebTransactions({ t, onNavigate, onAdd }) {
   }, [selectedIdx, visible]);
 
   const txBindings = React.useMemo(() => [
-    { keys: 'j', handler: (e) => {
+    { keys: 'j', handler: () => {
         const next = Math.min(selectedIdx + 1, Math.max(0, visible.length - 1));
-        if (e.shiftKey && visible[next]) bulk.toggle(visible[next].id);
         setSelectedIdx(next);
         bulk.setAnchor(next);
       } },
-    { keys: 'k', handler: (e) => {
+    { keys: 'k', handler: () => {
         const next = Math.max(0, selectedIdx - 1);
-        if (e.shiftKey && visible[next]) bulk.toggle(visible[next].id);
+        setSelectedIdx(next);
+        bulk.setAnchor(next);
+      } },
+    { keys: 'J', handler: () => {
+        const next = Math.min(selectedIdx + 1, Math.max(0, visible.length - 1));
+        if (visible[next]) bulk.toggle(visible[next].id);
+        setSelectedIdx(next);
+        bulk.setAnchor(next);
+      } },
+    { keys: 'K', handler: () => {
+        const next = Math.max(0, selectedIdx - 1);
+        if (visible[next]) bulk.toggle(visible[next].id);
         setSelectedIdx(next);
         bulk.setAnchor(next);
       } },
@@ -130,8 +138,7 @@ export default function WebTransactions({ t, onNavigate, onAdd }) {
           bulk.setAnchor(selectedIdx);
         }
       } },
-    { keys: 'a', handler: (e) => {
-        if (e.altKey) return;
+    { keys: 'A', handler: () => {
         bulk.selectAll();
       } },
     { keys: 'Escape', handler: () => {
