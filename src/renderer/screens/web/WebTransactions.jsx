@@ -10,6 +10,9 @@ import { fmtMoney } from '../../data';
 import { useUndoableStore } from '../../useUndoableStore';
 import { exportCSV } from '../../importExport';
 import useKeyboardShortcuts from '../../hooks/useKeyboardShortcuts';
+import useBulkSelection from '../../hooks/useBulkSelection';
+import BulkActionBar from '../../components/BulkActionBar';
+import { detectTransferPair } from '../../bulkOps.mjs';
 
 function download(name, content) {
   const a = document.createElement('a');
@@ -20,10 +23,16 @@ function download(name, content) {
 }
 
 export default function WebTransactions({ t, onNavigate, onAdd }) {
-  const { transactions, periodTransactions, deleteTx, deleteTransfer, accountsWithBalance, periodLabel, txFilter, clearTxFilter } = useUndoableStore();
+  const {
+    transactions, periodTransactions, deleteTx, deleteTransfer,
+    accountsWithBalance, periodLabel, txFilter, clearTxFilter,
+    // CAR-82
+    deleteTxs, hideTxs, updateTxs,
+  } = useUndoableStore();
   const [filter, setFilter] = React.useState('ALL');
   const [search, setSearch] = React.useState('');
   const [editTx, setEditTx] = React.useState(null);
+  const [convertFromTxs, setConvertFromTxs] = React.useState(null);
   const [selectedIdx, setSelectedIdx] = React.useState(0);
   const searchRef = React.useRef(null);
   const rowRefs = React.useRef({});
@@ -66,9 +75,24 @@ export default function WebTransactions({ t, onNavigate, onAdd }) {
   });
   const total = visible.reduce((s, x) => s + Math.abs(x.amt), 0);
 
+  const bulk = useBulkSelection(visible);
+  const transferPair = React.useMemo(
+    () => detectTransferPair(visible, bulk.selectedIds),
+    [visible, bulk.selectedIds]
+  );
+  const canMarkAsTransfer = transferPair !== null;
+
   React.useEffect(() => {
     setSelectedIdx(0);
   }, [visible.length, visible[0]?.id]);
+
+  // CAR-82: clear bulk selection on context change.
+  React.useEffect(() => bulk.clear(), [filter]);
+  React.useEffect(() => bulk.clear(), [search]);
+  React.useEffect(() => bulk.clear(), [txFilter]);
+  // selectedPeriod isn't directly destructured here, but periodLabel updates
+  // whenever selectedPeriod does (it's a derived display string from the store).
+  React.useEffect(() => bulk.clear(), [periodLabel]);
 
   React.useEffect(() => {
     const tx = visible[selectedIdx];
@@ -80,14 +104,41 @@ export default function WebTransactions({ t, onNavigate, onAdd }) {
   }, [selectedIdx, visible]);
 
   const txBindings = React.useMemo(() => [
-    { keys: 'j', handler: () => setSelectedIdx(i => Math.min(i + 1, Math.max(0, visible.length - 1))) },
-    { keys: 'k', handler: () => setSelectedIdx(i => Math.max(0, i - 1)) },
+    { keys: 'j', handler: (e) => {
+        const next = Math.min(selectedIdx + 1, Math.max(0, visible.length - 1));
+        if (e.shiftKey && visible[next]) bulk.toggle(visible[next].id);
+        setSelectedIdx(next);
+        bulk.setAnchor(next);
+      } },
+    { keys: 'k', handler: (e) => {
+        const next = Math.max(0, selectedIdx - 1);
+        if (e.shiftKey && visible[next]) bulk.toggle(visible[next].id);
+        setSelectedIdx(next);
+        bulk.setAnchor(next);
+      } },
     { keys: 'e', handler: () => {
+        if (bulk.selectedCount > 0) return;
         const tx = visible[selectedIdx];
         if (tx) setEditTx(tx);
       } },
     { keys: '/', handler: () => searchRef.current?.focus() },
-  ], [visible, selectedIdx]);
+    { keys: 'x', handler: () => {
+        const tx = visible[selectedIdx];
+        if (tx) {
+          bulk.toggle(tx.id);
+          bulk.setAnchor(selectedIdx);
+        }
+      } },
+    { keys: 'a', handler: (e) => {
+        if (e.altKey) return;
+        bulk.selectAll();
+      } },
+    { keys: 'Escape', handler: () => {
+        if (bulk.selectedCount > 0) {
+          bulk.clear();
+        }
+      } },
+  ], [visible, selectedIdx, bulk]);
 
   useKeyboardShortcuts({ bindings: txBindings });
 
@@ -162,10 +213,35 @@ export default function WebTransactions({ t, onNavigate, onAdd }) {
             tx={tx}
             t={t}
             isFocused={i === selectedIdx}
-            isSelected={false /* wired in Task 12 */}
+            isSelected={bulk.isSelected(tx.id)}
             accountsWithBalance={accountsWithBalance}
-            onRowClick={() => setEditTx(tx)}
-            onCheckboxToggle={undefined /* wired in Task 12 */}
+            onRowClick={(e) => {
+              // Suppress edit-modal open while in bulk-select mode.
+              if (bulk.selectedCount > 0) return;
+              // Shift+click on row body extends selection (alternative to checkbox).
+              if (e.shiftKey) {
+                if (bulk.anchorIdx != null) bulk.range(bulk.anchorIdx, i);
+                else { bulk.toggle(tx.id); bulk.setAnchor(i); }
+                return;
+              }
+              // Cmd/Ctrl+click toggles a single row.
+              if (e.metaKey || e.ctrlKey) {
+                bulk.toggle(tx.id);
+                bulk.setAnchor(i);
+                return;
+              }
+              // Plain click: open edit modal (existing behaviour).
+              setEditTx(tx);
+            }}
+            onCheckboxToggle={(e) => {
+              // Shift-click on checkbox extends selection.
+              if (e.shiftKey && bulk.anchorIdx != null) {
+                bulk.range(bulk.anchorIdx, i);
+              } else {
+                bulk.toggle(tx.id);
+                bulk.setAnchor(i);
+              }
+            }}
             innerRef={el => { if (el) rowRefs.current[tx.id] = el; else delete rowRefs.current[tx.id]; }}
           />
         ))}
@@ -173,6 +249,45 @@ export default function WebTransactions({ t, onNavigate, onAdd }) {
 
       {editTx && (
         <WebAddModal t={t} editTx={editTx} onClose={() => setEditTx(null)} />
+      )}
+
+      {bulk.selectedCount > 0 && (
+        <BulkActionBar
+          count={bulk.selectedCount}
+          canMarkAsTransfer={canMarkAsTransfer}
+          accountsWithBalance={accountsWithBalance}
+          onCategorize={({ cat, path }) => {
+            updateTxs([...bulk.selectedIds], { cat, path });
+            bulk.clear();
+          }}
+          onSetAccount={(acctId) => {
+            updateTxs([...bulk.selectedIds], { acct: acctId });
+            bulk.clear();
+          }}
+          onMarkAsTransfer={() => {
+            if (transferPair) setConvertFromTxs([transferPair.out, transferPair.inn]);
+          }}
+          onHide={() => {
+            hideTxs([...bulk.selectedIds]);
+            bulk.clear();
+          }}
+          onDelete={() => {
+            deleteTxs([...bulk.selectedIds]);
+            bulk.clear();
+          }}
+          onClear={() => bulk.clear()}
+        />
+      )}
+
+      {convertFromTxs && (
+        <WebAddModal
+          t={t}
+          convertFromTxs={convertFromTxs}
+          onClose={() => {
+            setConvertFromTxs(null);
+            bulk.clear();
+          }}
+        />
       )}
     </WebShell>
   );
