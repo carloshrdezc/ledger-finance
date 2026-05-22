@@ -91,3 +91,34 @@ export function applyRulesToBatch(txs, rules) {
   });
   return changed ? next : txs;
 }
+
+/**
+ * Generate a "what would change" preview without mutating anything.
+ * Returns an array of { txId, before: {cat, path}, after: {cat, path} } for
+ * each tx that would be modified by applying the rules.
+ */
+export function previewRulesAgainst(txs, rules) {
+  if (!rules || rules.length === 0) return [];
+  const changes = [];
+  for (const tx of txs) {
+    const after = applyRules(tx, rules);
+    if (after === tx) continue;
+    const beforePath = tx.path || [tx.cat];
+    const afterPath = after.path;
+    if (after.cat === tx.cat && pathsEqual(afterPath, beforePath)) continue;
+    changes.push({
+      txId: tx.id,
+      before: { cat: tx.cat, path: beforePath },
+      after:  { cat: after.cat, path: afterPath },
+    });
+  }
+  return changes;
+}
+
+function pathsEqual(a, b) {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+  return true;
+}

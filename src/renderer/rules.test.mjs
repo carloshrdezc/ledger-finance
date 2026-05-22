@@ -5,6 +5,7 @@ import {
   compileRule,
   applyRules,
   applyRulesToBatch,
+  previewRulesAgainst,
 } from './rules.mjs';
 
 test('patternToRegExp plain string matches as substring (case-insensitive)', () => {
@@ -178,4 +179,36 @@ test('applyRulesToBatch maps each tx through applyRules', () => {
   expect(after[0].cat).toBe('dining');
   expect(after[1].cat).toBe('other');
   expect(after[2].cat).toBe('dining');
+});
+
+test('previewRulesAgainst returns empty array when no changes', () => {
+  const txs = [{ id: 't1', name: 'STARBUCKS', amt: -5, cat: 'dining', path: ['dining'] }];
+  const rules = [{ id: 'r1', enabled: true, match: { merchantPattern: 'STARBUCKS' }, set: { path: ['dining'] } }];
+  // Tx already has cat='dining' and path=['dining']; no diff.
+  expect(previewRulesAgainst(txs, rules)).toEqual([]);
+});
+
+test('previewRulesAgainst returns one entry per changed tx', () => {
+  const txs = [
+    { id: 't1', name: 'STARBUCKS', amt: -5, cat: 'other', path: ['other'] },
+    { id: 't2', name: 'WALMART',   amt: -10, cat: 'shopping', path: ['shopping'] },
+    { id: 't3', name: 'AMAZON',    amt: -20, cat: 'other', path: ['other'] },
+  ];
+  const rules = [
+    { id: 'r1', enabled: true, match: { merchantPattern: 'STARBUCKS' }, set: { path: ['dining', 'cafe'] } },
+    { id: 'r2', enabled: true, match: { merchantPattern: 'AMAZON' },    set: { path: ['shopping'] } },
+  ];
+  const changes = previewRulesAgainst(txs, rules);
+  expect(changes).toHaveLength(2);
+  // STARBUCKS: cat changes from 'other' to 'dining', path differs
+  expect(changes[0]).toEqual({
+    txId: 't1',
+    before: { cat: 'other', path: ['other'] },
+    after:  { cat: 'dining', path: ['dining', 'cafe'] },
+  });
+  // AMAZON: cat changes from 'other' to 'shopping'
+  expect(changes[1].txId).toBe('t3');
+  expect(changes[1].before).toEqual({ cat: 'other', path: ['other'] });
+  expect(changes[1].after).toEqual({ cat: 'shopping', path: ['shopping'] });
+  // WALMART (t2) is unchanged because no rule matches WALMART.
 });
