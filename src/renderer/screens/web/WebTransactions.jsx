@@ -6,7 +6,7 @@ import WebShell from './WebShell';
 import WebAddModal from './WebAddModal';
 import EmptySectionHint from '../../components/EmptySectionHint';
 import TransactionRow from '../../components/TransactionRow';
-import { fmtMoney, fmtSigned, dayLabel, catGlyph, catBreadcrumb } from '../../data';
+import { fmtMoney } from '../../data';
 import { useUndoableStore } from '../../useUndoableStore';
 import { exportCSV } from '../../importExport';
 import useKeyboardShortcuts from '../../hooks/useKeyboardShortcuts';
