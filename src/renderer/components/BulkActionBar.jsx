@@ -1,7 +1,7 @@
 import React from 'react';
 import { A } from '../theme';
 import { ALabel } from './Shared';
-import { CATEGORIES } from '../data';
+import CategoryPicker from './CategoryPicker';
 
 const BAR_BUTTON_STYLE = {
   background: 'transparent',
@@ -51,6 +51,7 @@ const VRULE = (
 export default function BulkActionBar({
   count,
   canMarkAsTransfer,
+  categoryTree,           // CAR-80 / CAR-181
   accountsWithBalance,
   onCategorize,
   onSetAccount,
@@ -59,7 +60,7 @@ export default function BulkActionBar({
   onDelete,
   onClear,
 }) {
-  const [openPicker, setOpenPicker] = React.useState(null); // 'category' | 'account' | null
+  const [openPicker, setOpenPicker] = React.useState(null); // 'account' | null
 
   // Close picker on Esc. The app's global Esc handler is a separate
   // window listener (it cannot be cancelled via stopPropagation since
@@ -90,17 +91,10 @@ export default function BulkActionBar({
     return () => window.removeEventListener('mousedown', onClick);
   }, [openPicker]);
 
-  const handleCategorize = (key, path) => {
-    onCategorize?.({ cat: key, path });
-    setOpenPicker(null);
-  };
-
   const handleSetAccount = (acctId) => {
     onSetAccount?.(acctId);
     setOpenPicker(null);
   };
-
-  const categoryEntries = Object.entries(CATEGORIES);
 
   return (
     <div
@@ -127,32 +121,13 @@ export default function BulkActionBar({
 
       {VRULE}
 
-      {/* CATEGORIZE */}
-      <div style={{ position: 'relative' }}>
-        <button
-          type="button"
-          onClick={() => setOpenPicker(p => p === 'category' ? null : 'category')}
-          style={BAR_BUTTON_STYLE}
-        >
-          CATEGORIZE
-        </button>
-        {openPicker === 'category' && (
-          <div style={POPOVER_STYLE}>
-            {categoryEntries.map(([key, info]) => (
-              <button
-                key={key}
-                type="button"
-                onClick={() => handleCategorize(key, [key])}
-                style={POPOVER_ITEM_STYLE}
-                onMouseEnter={(e) => { e.currentTarget.style.background = A.bg2; }}
-                onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
-              >
-                {info.glyph} {info.label}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
+      {/* CATEGORIZE — uses CategoryPicker (CAR-80 / CAR-181) */}
+      <CategoryPicker
+        tree={categoryTree}
+        value={null}
+        onChange={(path) => onCategorize?.(path)}
+        placeholder="CATEGORIZE"
+      />
 
       {/* SET ACCOUNT */}
       <div style={{ position: 'relative' }}>

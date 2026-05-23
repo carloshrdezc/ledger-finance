@@ -2,6 +2,7 @@ import React from 'react';
 import { A } from '../theme';
 import { ALabel } from './Shared';
 import { useStore } from '../store';
+import { applyRulesToBatch } from '../rules.mjs';
 import { parseQIF, parseCSV, parseXLSX, parseMMBAK, exportQIF, exportCSV, exportXLSX, exportMMBAK } from '../importExport';
 
 function download(name, content, mime = 'text/plain') {
@@ -16,8 +17,14 @@ const ts = () => new Date().toISOString().slice(0, 10);
 
 export default function ImportExport({ onClose }) {
   const store = useStore();
+  const { rules } = store;
   const [status, setStatus] = React.useState(null);
   const inputRef = React.useRef();
+
+  const importTxs = React.useCallback((txs) => {
+    const withRules = applyRulesToBatch(txs, rules);
+    store.addTransactions(withRules);
+  }, [store, rules]);
 
   const handleFile = async file => {
     if (!file) return;
@@ -30,18 +37,18 @@ export default function ImportExport({ onClose }) {
 
       if (ext === 'qif') {
         const txs = parseQIF(text);
-        store.addTransactions(txs);
+        importTxs(txs);
         setStatus({ ok: true, msg: `Imported ${txs.length} transactions from QIF` });
       } else if (ext === 'csv') {
         const txs = parseCSV(text);
-        store.addTransactions(txs);
+        importTxs(txs);
         setStatus({ ok: true, msg: `Imported ${txs.length} transactions from CSV` });
       } else if (ext === 'xlsx') {
         const data = parseXLSX(buffer);
         if (data.accounts?.length) store.setAccounts(data.accounts);
         if (data.categoryTree && Object.keys(data.categoryTree).length) store.setCategoryTree(data.categoryTree);
         if (data.bills?.length) store.setBills(data.bills);
-        store.addTransactions(data.transactions);
+        importTxs(data.transactions);
         const acctNote = data.accounts?.length ? ` · ${data.accounts.length} accounts` : '';
         const catNote = data.categoryTree && Object.keys(data.categoryTree).length ? ' · categories' : '';
         const billNote = data.bills?.length ? ` · ${data.bills.length} recurring rules` : '';
@@ -61,7 +68,7 @@ export default function ImportExport({ onClose }) {
           if (data.accounts?.length) store.setAccounts(data.accounts);
           if (data.categoryTree && Object.keys(data.categoryTree).length) store.setCategoryTree(data.categoryTree);
           if (data.bills?.length) store.setBills(data.bills);
-          store.addTransactions(data.transactions);
+          importTxs(data.transactions);
           const acctNote = data.accounts?.length ? ` · ${data.accounts.length} accounts` : '';
           const catNote = data.categoryTree && Object.keys(data.categoryTree).length ? ` · categories` : '';
           const billNote = data.bills?.length ? ` · ${data.bills.length} recurring rules` : '';

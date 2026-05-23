@@ -265,6 +265,34 @@ export function useUndoableStore() {
     });
   }, [store, stack]);
 
+  // ─── CAR-80 per-tx bulk update (re-apply rules to existing) ──────────
+
+  const updateTxsIndividually = React.useCallback((perTxPatches) => {
+    if (!perTxPatches || perTxPatches.length === 0) return;
+    // Capture pre-patch values for each id, only for keys touched by its patch.
+    const idMap = new Map(perTxPatches.map(p => [p.id, p.patch]));
+    const before = store.allTransactions
+      .filter(t => idMap.has(t.id))
+      .map(t => {
+        const patch = idMap.get(t.id);
+        const snap = { id: t.id };
+        for (const k of Object.keys(patch)) snap[k] = t[k];
+        return snap;
+      });
+    if (before.length === 0) return;
+    stack.register({
+      label: before.length === 1
+        ? 'Transaction updated by rule'
+        : `${before.length} transactions updated by rules`,
+      batchKey: null,
+      do:   () => store.updateTxsIndividually(perTxPatches),
+      undo: () => store.setTransactions(prev => {
+        const byId = Object.fromEntries(before.map(s => [s.id, s]));
+        return prev.map(tx => byId[tx.id] ? { ...tx, ...byId[tx.id] } : tx);
+      }),
+    });
+  }, [store, stack]);
+
   return {
     ...store,
     deleteTx, hideTx, deleteTransfer,
@@ -276,5 +304,7 @@ export function useUndoableStore() {
     removeHolding,
     // CAR-82 bulk wrappers
     deleteTxs, hideTxs, updateTxs, convertToTransfer,
+    // CAR-80 per-tx bulk update
+    updateTxsIndividually,
   };
 }

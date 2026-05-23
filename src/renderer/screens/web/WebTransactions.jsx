@@ -28,6 +28,8 @@ export default function WebTransactions({ t, onNavigate, onAdd }) {
     accountsWithBalance, periodLabel, txFilter, clearTxFilter,
     // CAR-82
     deleteTxs, hideTxs, updateTxs,
+    // CAR-80 — for CategoryPicker in BulkActionBar
+    categoryTree,
   } = useUndoableStore();
   const [filter, setFilter] = React.useState('ALL');
   const [search, setSearch] = React.useState('');
@@ -263,9 +265,11 @@ export default function WebTransactions({ t, onNavigate, onAdd }) {
         <BulkActionBar
           count={bulk.selectedCount}
           canMarkAsTransfer={canMarkAsTransfer}
+          categoryTree={categoryTree}
           accountsWithBalance={accountsWithBalance}
-          onCategorize={({ cat, path }) => {
-            updateTxs([...bulk.selectedIds], { cat, path });
+          onCategorize={(path) => {
+            if (!path || path.length === 0) return;
+            updateTxs([...bulk.selectedIds], { cat: path[0], path });
             bulk.clear();
           }}
           onSetAccount={(acctId) => {

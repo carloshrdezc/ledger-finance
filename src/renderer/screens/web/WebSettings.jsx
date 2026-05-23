@@ -6,11 +6,12 @@ import { useUndoableStore } from '../../useUndoableStore';
 import ImportExport from '../../components/ImportExport';
 import FxRatesSection from '../../components/FxRatesSection';
 import BackupSection from '../../components/BackupSection';
+import RulesEditor from '../../components/RulesEditor';
 
 const CURRENCIES = ['USD', 'EUR', 'GBP', 'JPY', 'CAD', 'AUD', 'CHF', 'MXN'];
 
 export default function WebSettings({ t, onNavigate, onAdd, setAccent, setDensity, setDecimals, setCurrency, setTheme }) {
-  const { categoryTree, addCategory, renameCategory, removeCategory, budgetStartDay, setBudgetStartDay, reset, loadSampleData, resetAndLoadSampleData } = useUndoableStore();
+  const { categoryTree, addCategory, renameCategory, removeCategory, budgetStartDay, setBudgetStartDay, reset, loadSampleData, resetAndLoadSampleData, rules, addRule, updateRule, deleteRule, reorderRules, updateTxsIndividually, transactions, accountsWithBalance } = useUndoableStore();
   const [expanded, setExpanded] = React.useState({ edu: true, 'edu.school': true, 'edu.school.supplies': true, food: true });
   const [adding, setAdding] = React.useState(null);
   const [renaming, setRenaming] = React.useState(null);
@@ -328,6 +329,22 @@ export default function WebSettings({ t, onNavigate, onAdd, setAccent, setDensit
               </div>
             </div>
           </div>
+        </div>
+      </div>
+      <div style={{ marginTop: 32, borderTop: '2px solid ' + A.ink, paddingTop: 18 }}>
+        <ALabel>[04] RULES</ALabel>
+        <div style={{ marginTop: 12 }}>
+          <RulesEditor
+            rules={rules}
+            categoryTree={categoryTree}
+            accountsWithBalance={accountsWithBalance}
+            transactions={transactions}
+            onAddRule={addRule}
+            onUpdateRule={updateRule}
+            onDeleteRule={deleteRule}
+            onReorderRules={reorderRules}
+            onApplyToExisting={updateTxsIndividually}
+          />
         </div>
       </div>
       {showResetAndLoad && (
