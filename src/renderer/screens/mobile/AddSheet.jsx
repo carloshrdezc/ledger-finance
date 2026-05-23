@@ -4,10 +4,11 @@ import { ARule, ALabel } from '../../components/Shared';
 import { CATEGORIES, CCY_SYM } from '../../data';
 import { useUndoableStore } from '../../useUndoableStore';
 import { getDaysInPeriod } from '../../period.mjs';
+import { applyRules } from '../../rules.mjs';
 import AccountFormSheet from '../../components/AccountFormSheet';
 
 export default function AddSheet({ t, onClose, editTx = null }) {
-  const { addTransactions, updateTx, deleteTx, deleteTransfer, createTransfer, updateTransfer, transactions, accountsWithBalance, selectedPeriod } = useUndoableStore();
+  const { addTransactions, updateTx, deleteTx, deleteTransfer, createTransfer, updateTransfer, transactions, accountsWithBalance, selectedPeriod, rules } = useUndoableStore();
   const defaultDay = Math.min(new Date().getDate(), getDaysInPeriod(selectedPeriod));
   const defaultDate = `${selectedPeriod}-${String(defaultDay).padStart(2, '0')}`;
 
@@ -27,8 +28,35 @@ export default function AddSheet({ t, onClose, editTx = null }) {
   const [merchant, setMerchant] = React.useState(editTx ? editTx.name : '');
   const [isExpense, setIsExpense] = React.useState(editTx ? editTx.amt < 0 : true);
   const [cat, setCat]           = React.useState(editTx ? (editTx.cat || editTx.path?.[0] || 'dining') : 'dining');
+  const [path, setPath] = React.useState(
+    editTx?.path
+      ? editTx.path
+      : editTx?.cat
+        ? [editTx.cat]
+        : ['dining']
+  );
+  const [catManuallySet, setCatManuallySet] = React.useState(!!editTx);
   const [acct, setAcct]         = React.useState(editTx ? editTx.acct : (accountsWithBalance[0]?.id || 'chk'));
   const [date, setDate]         = React.useState(editTx ? editTx.date : defaultDate);
+
+  // CAR-80: pre-fill the picker when the user types a merchant.
+  React.useEffect(() => {
+    if (catManuallySet) return;
+    if (!merchant.trim()) return;
+    if (!rules || rules.length === 0) return;
+    const candidate = {
+      name: merchant.trim(),
+      amt: isExpense ? -Math.abs(parseFloat(amt) || 0) : Math.abs(parseFloat(amt) || 0),
+      acct,
+      cat: 'other',
+      path: ['other'],
+    };
+    const after = applyRules(candidate, rules);
+    if (after !== candidate && after.path && after.path.length > 0) {
+      setCat(after.cat);
+      setPath(after.path);
+    }
+  }, [merchant, isExpense, amt, acct, rules, catManuallySet]);
 
   const [isTransfer, setIsTransfer] = React.useState(editTx?.cat === 'transfer');
   const [fromAcct, setFromAcct]     = React.useState(transferLegs?.out.acct || editTx?.acct || accountsWithBalance[0]?.id || 'chk');
@@ -78,7 +106,7 @@ export default function AddSheet({ t, onClose, editTx = null }) {
       const changes = {
         name: merchant.trim(),
         amt: isExpense ? -Math.abs(parseFloat(amt)) : Math.abs(parseFloat(amt)),
-        date, cat, ccy: editTx?.ccy || 'USD', acct,
+        date, cat, path, ccy: editTx?.ccy || 'USD', acct,
       };
       if (editTx) {
         updateTx(editTx.id, changes);
@@ -303,7 +331,11 @@ export default function AddSheet({ t, onClose, editTx = null }) {
           <ALabel>CATEGORY</ALabel>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
             {Object.entries(CATEGORIES).slice(0, 8).map(([k, c]) => (
-              <button key={k} onClick={() => setCat(k)} style={{
+              <button key={k} onClick={() => {
+                setCat(k);
+                setPath([k]);
+                setCatManuallySet(true);
+              }} style={{
                 all: 'unset', cursor: 'pointer', padding: '5px 9px',
                 border: '1px solid ' + (cat === k ? A.ink : A.rule2),
                 background: cat === k ? A.ink : 'transparent',
