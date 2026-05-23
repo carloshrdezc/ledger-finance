@@ -2,6 +2,7 @@ import { test, expect } from 'vitest';
 import {
   patternToRegExp,
   normalizeMerchant,
+  patternLiteral,
   compileRule,
   applyRules,
   applyRulesToBatch,
@@ -70,6 +71,47 @@ test('compileRule returns null when merchantPattern is empty or whitespace', () 
     match: { merchantPattern: '   ' },
     set: { path: ['dining'] },
   })).toBeNull();
+});
+
+test('patternLiteral strips wildcards and trims whitespace', () => {
+  expect(patternLiteral('STARBUCKS')).toBe('STARBUCKS');
+  expect(patternLiteral('*COFFEE')).toBe('COFFEE');
+  expect(patternLiteral('STARBUCKS*')).toBe('STARBUCKS');
+  expect(patternLiteral('*STAR*')).toBe('STAR');
+  expect(patternLiteral('  *STAR*  ')).toBe('STAR');
+  expect(patternLiteral('*')).toBe('');
+  expect(patternLiteral('**')).toBe('');
+  expect(patternLiteral('   *  ')).toBe('');
+  expect(patternLiteral('')).toBe('');
+  expect(patternLiteral(null)).toBe('');
+  expect(patternLiteral(undefined)).toBe('');
+});
+
+test('compileRule returns null for wildcard-only patterns (CAR-205)', () => {
+  // Without this guard, '*' compiles to an empty regex that matches every
+  // transaction including blanks — silently re-categorizing the entire ledger.
+  for (const pattern of ['*', '**', '***', '   *  ', ' ** ']) {
+    expect(compileRule({
+      enabled: true,
+      match: { merchantPattern: pattern },
+      set: { path: ['dining'] },
+    })).toBeNull();
+  }
+});
+
+test('applyRulesToBatch ignores wildcard-only rules (does not match every tx)', () => {
+  const txs = [
+    { id: 't1', name: 'STARBUCKS', amt: -5, cat: 'other', path: ['other'] },
+    { id: 't2', name: '',          amt: -10, cat: 'other', path: ['other'] },
+    { id: 't3', name: 'WALMART',   amt: -7, cat: 'other', path: ['other'] },
+  ];
+  const rules = [{
+    id: 'r1', enabled: true,
+    match: { merchantPattern: '*' },
+    set: { path: ['nuked'] },
+  }];
+  // Identity preserved — none of the txs should match.
+  expect(applyRulesToBatch(txs, rules)).toBe(txs);
 });
 
 test('compileRule matches all conditions (merchant + amount range + account)', () => {
