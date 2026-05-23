@@ -2,6 +2,7 @@ import React from 'react';
 import { A } from '../theme';
 import { Checkbox } from './Shared';
 import CategoryPicker from './CategoryPicker';
+import { patternLiteral } from '../rules.mjs';
 
 const FIELD_INPUT_STYLE = {
   background: 'transparent',
@@ -72,7 +73,7 @@ export default function RuleForm({
   const [accountId, setAccountId] = React.useState(rule?.match?.accountId ?? '');
   const [path, setPath] = React.useState(rule?.set?.path ?? null);
 
-  const canSave = merchantPattern.trim().length > 0 && path && path.length > 0;
+  const canSave = patternLiteral(merchantPattern).length > 0 && path && path.length > 0;
 
   const handleSave = () => {
     if (!canSave) return;

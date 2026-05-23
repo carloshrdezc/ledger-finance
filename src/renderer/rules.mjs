@@ -35,6 +35,18 @@ export function normalizeMerchant(name) {
 }
 
 /**
+ * Strip leading/trailing wildcards and whitespace; returns the remaining
+ * "literal" portion of a pattern. Used by `compileRule` and `RuleForm` to
+ * reject patterns that would compile to an everything-matcher (e.g. `'*'`,
+ * `'**'`, `'   *  '`).
+ */
+export function patternLiteral(pattern) {
+  if (!pattern) return '';
+  // Trim first so `'  *  '` becomes `'*'` before stripping wildcards.
+  return pattern.trim().replace(/^\*+|\*+$/g, '').trim();
+}
+
+/**
  * Compile a rule's match config into a fast matcher function.
  * Returns null if the rule is disabled or has no usable conditions.
  * The returned function takes a tx and returns true if it matches.
@@ -43,6 +55,10 @@ export function compileRule(rule) {
   if (!rule || !rule.enabled) return null;
   const m = rule.match;
   if (!m || !m.merchantPattern || !m.merchantPattern.trim()) return null;
+  // Reject patterns that are only wildcards/whitespace (e.g. '*', '**').
+  // Without this guard `patternToRegExp('*')` becomes the everything-matcher
+  // and the rule would silently re-categorize every transaction.
+  if (!patternLiteral(m.merchantPattern)) return null;
   const re = patternToRegExp(m.merchantPattern);
 
   return (tx) => {
