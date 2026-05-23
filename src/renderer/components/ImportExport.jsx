@@ -3,6 +3,7 @@ import { A } from '../theme';
 import { ALabel } from './Shared';
 import { useStore } from '../store';
 import { applyRulesToBatch } from '../rules.mjs';
+import { parseBackup } from '../backup.mjs';
 import { parseQIF, parseCSV, parseXLSX, parseMMBAK, exportQIF, exportCSV, exportXLSX, exportMMBAK } from '../importExport';
 
 function download(name, content, mime = 'text/plain') {
@@ -56,15 +57,26 @@ export default function ImportExport({ onClose }) {
       } else if (ext === 'mmbak') {
         const data = await parseMMBAK(text, buffer);
         if (data.isLedgerBackup) {
-          if (data.accounts?.length) store.setAccounts(data.accounts);
-          if (data.transactions) store.setTransactions(data.transactions);
-          if (data.categoryTree) store.setCategoryTree(data.categoryTree);
-          if (data.budgets) store.setBudgets(data.budgets);
-          if (data.bills) store.setBills(data.bills);
-          if (data.goals) store.setGoals(data.goals);
-          if (data.goalContributions) store.setGoalContributions(data.goalContributions);
-          setStatus({ ok: true, msg: `Backup restored · ${data.transactions?.length ?? 0} transactions` });
+          // CAR-188: full-restore must cover every v2 slice — rules,
+          // investments, trades, FX rates, hidden, settings, etc. Delegate
+          // to the canonical pipeline (parseBackup → store.restoreBackup)
+          // so this path stays in sync with the JSON restore in
+          // BackupSection.jsx. parseBackup re-validates `_type`/`version`
+          // and skips malformed slices safely.
+          const result = parseBackup(text);
+          if (!result.ok) {
+            setStatus({ ok: false, msg: result.error });
+            return;
+          }
+          store.restoreBackup(result.data);
+          setStatus({ ok: true, msg: `Backup restored · ${result.summary?.transactions ?? 0} transactions` });
         } else {
+          // NOTE: This branch handles MoneyMoney mmbak SQLite IMPORT (not
+          // a Ledger restore). It intentionally only touches accounts /
+          // categoryTree / bills / transactions because that's all the
+          // foreign format carries. Do NOT "fix" this to cover all v2
+          // slices like the Ledger branch above — there's nothing to
+          // restore for rules / investments / trades / fxRates / settings.
           if (data.accounts?.length) store.setAccounts(data.accounts);
           if (data.categoryTree && Object.keys(data.categoryTree).length) store.setCategoryTree(data.categoryTree);
           if (data.bills?.length) store.setBills(data.bills);
