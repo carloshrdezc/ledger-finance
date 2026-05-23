@@ -9,6 +9,12 @@ import {
   monthKey,
 } from './period.mjs';
 import { buildBillRows, markRecurringPaid as createRecurringPayment, getBillDueDate, slug, createGoalContribution } from './planning.mjs';
+import {
+  applyRecategorizeEvent,
+  applyDismiss,
+  applyEvict,
+  findEvictionForNewRule,
+} from './recategorizeStats.mjs';
 import { buildAlertRows } from './alerts.mjs';
 import { DEFAULT_RATES } from './fx.mjs';
 import { buildBackup } from './backup.mjs';
@@ -110,6 +116,13 @@ export function StoreProvider({ children }) {
   const [goals, setGoals] = useLS('ledger:goals', []);
   const [goalContributions, setGoalContributions] = useLS('ledger:goalContributions', []);
   const [rules, setRules] = useLS('ledger:rules', []);
+  // CAR-182: per-(merchant,target) re-categorization counter. Used to
+  // surface a "Suggest rule" toast after the 3rd identical re-cat.
+  // Shape: { '<merchantKeyUC>|<path.joined>': { count, lastAt, lastTxIds[], dismissed } }
+  // Persisted across sessions but excluded from backups (ephemeral coaching state).
+  const [recategorizeStats, setRecategorizeStats] = useLS('ledger:recategorizeStats', {});
+  // Transient signal from the interceptor → toast → modal. Not persisted.
+  const [pendingRuleSuggestion, setPendingRuleSuggestion] = React.useState(null);
   const [budgetStartDay, setBudgetStartDay] = useLS('ledger:budgetStartDay', 1);
   const [investments, setInvestments] = useLS('ledger:investments', []);
   const [trades, setTrades]           = useLS('ledger:trades', []);
@@ -602,8 +615,14 @@ export function StoreProvider({ children }) {
       id,  // generated id wins over any caller-provided id
     };
     setRules(prev => [...prev, newRule]);
+    // CAR-182: if this rule covers a tracked (merchant, target) pair, drop
+    // the stat so we don't suggest the same rule again.
+    const eviction = findEvictionForNewRule(rule);
+    if (eviction) {
+      setRecategorizeStats(prev => applyEvict(prev, eviction.merchantKey, eviction.targetPath));
+    }
     return newRule;
-  }, [setRules]);
+  }, [setRules, setRecategorizeStats]);
 
   const updateRule = React.useCallback((id, patch) => {
     setRules(prev => prev.map(r => r.id === id ? { ...r, ...patch } : r));
@@ -621,6 +640,43 @@ export function StoreProvider({ children }) {
       return [...reordered, ...untouched];
     });
   }, [setRules]);
+
+  // ─── CAR-182: re-categorization stats & rule suggestions ─────────────
+  // Pure logic lives in recategorizeStats.mjs; this section wires it to React
+  // state and exposes the actions on the store context.
+
+  const recordRecategorize = React.useCallback((merchantKey, targetPath, txId) => {
+    let firedSuggestion = null;
+    setRecategorizeStats(prev => {
+      const { next, fired } = applyRecategorizeEvent(prev, merchantKey, targetPath, txId);
+      firedSuggestion = fired;
+      return next;
+    });
+    if (firedSuggestion) {
+      setPendingRuleSuggestion(firedSuggestion);
+    }
+    return firedSuggestion;
+  }, [setRecategorizeStats]);
+
+  const dismissRuleSuggestion = React.useCallback((merchantKey) => {
+    setPendingRuleSuggestion(null);
+    if (!merchantKey) return;
+    setRecategorizeStats(prev => applyDismiss(prev, merchantKey));
+  }, [setRecategorizeStats]);
+
+  const evictRecategorizeStat = React.useCallback((merchantKey, targetPath) => {
+    setRecategorizeStats(prev => applyEvict(prev, merchantKey, targetPath));
+  }, [setRecategorizeStats]);
+
+  const acceptRuleSuggestion = React.useCallback(() => {
+    // Caller (toast) handles opening the modal; this just clears the pending
+    // signal so the toast hides while the modal is open. Note: if the user
+    // then cancels the modal without saving, count stays at threshold and
+    // the suggestion won't re-fire for this exact (merchant, target) pair —
+    // by design ("user considered + declined, don't keep nagging"). They'll
+    // still get suggestions for the same merchant on different targets.
+    setPendingRuleSuggestion(null);
+  }, []);
 
   const updateTxsIndividually = React.useCallback((perTxPatches) => {
     if (!perTxPatches || perTxPatches.length === 0) return;
@@ -741,6 +797,7 @@ export function StoreProvider({ children }) {
     setGoals([]);
     setGoalContributions([]);
     setRules([]);
+    setRecategorizeStats({});
     setSelectedPeriod(monthKey(new Date()));
     setHidden([]);
     setBudgetStartDay(1);
@@ -798,6 +855,9 @@ export function StoreProvider({ children }) {
     setGoals(Array.isArray(data.goals) ? data.goals : []);
     setGoalContributions(Array.isArray(data.goalContributions) ? data.goalContributions : []);
     setRules(Array.isArray(data.rules) ? data.rules : []);
+    // CAR-182: backups don't carry recategorize stats — clear them on restore
+    // so the new dataset starts fresh (counters keyed on old tx ids would be stale).
+    setRecategorizeStats({});
     setInvestments(Array.isArray(data.investments) ? data.investments : []);
     setTrades(Array.isArray(data.trades) ? data.trades : []);
     setRates(data.fxRates && typeof data.fxRates === 'object' ? data.fxRates : DEFAULT_RATES);
@@ -846,6 +906,7 @@ export function StoreProvider({ children }) {
     setGoals([]);
     setGoalContributions([]);
     setRules([]);
+    setRecategorizeStats({});
     setSelectedPeriod(monthKey(new Date()));
     setHidden([]);
     setBudgetStartDay(1);
@@ -888,6 +949,13 @@ export function StoreProvider({ children }) {
       updateRule,
       deleteRule,
       reorderRules,
+      // CAR-182 rule-suggestion stats
+      recategorizeStats,
+      pendingRuleSuggestion,
+      recordRecategorize,
+      dismissRuleSuggestion,
+      acceptRuleSuggestion,
+      evictRecategorizeStat,
       // CAR-80 per-tx bulk update (used by re-apply preview)
       updateTxsIndividually,
       categoryTree: catTree,

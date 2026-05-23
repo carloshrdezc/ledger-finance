@@ -3,6 +3,7 @@ import { A } from './theme';
 import { StoreProvider, useStore } from './store';
 import { UndoProvider, useUndo } from './UndoContext';
 import UndoToast from './components/UndoToast';
+import SuggestRuleToast from './components/SuggestRuleToast';
 import ImportExport from './components/ImportExport';
 import Welcome from './screens/Welcome';
 import EmptyApp from './screens/EmptyApp';
@@ -360,6 +361,7 @@ function AppShell() {
         />
       )}
       <UndoToast />
+      <SuggestRuleToast />
     </>
   );
 }
