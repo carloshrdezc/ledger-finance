@@ -1,14 +1,15 @@
 import React from 'react';
 import { A } from '../../theme';
 import { ARule, ALabel } from '../../components/Shared';
-import { CATEGORIES, CCY_SYM } from '../../data';
+import { CCY_SYM } from '../../data';
 import { useUndoableStore } from '../../useUndoableStore';
 import { getDaysInPeriod } from '../../period.mjs';
 import { applyRules } from '../../rules.mjs';
 import AccountFormSheet from '../../components/AccountFormSheet';
+import CategoryPicker from '../../components/CategoryPicker';
 
 export default function AddSheet({ t, onClose, editTx = null }) {
-  const { addTransactions, updateTx, deleteTx, deleteTransfer, createTransfer, updateTransfer, transactions, accountsWithBalance, selectedPeriod, rules } = useUndoableStore();
+  const { addTransactions, updateTx, deleteTx, deleteTransfer, createTransfer, updateTransfer, transactions, accountsWithBalance, selectedPeriod, rules, categoryTree } = useUndoableStore();
   const defaultDay = Math.min(new Date().getDate(), getDaysInPeriod(selectedPeriod));
   const defaultDate = `${selectedPeriod}-${String(defaultDay).padStart(2, '0')}`;
 
@@ -329,20 +330,23 @@ export default function AddSheet({ t, onClose, editTx = null }) {
 
         <div style={{ padding: '10px 0' }}>
           <ALabel>CATEGORY</ALabel>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
-            {Object.entries(CATEGORIES).slice(0, 8).map(([k, c]) => (
-              <button key={k} onClick={() => {
-                setCat(k);
-                setPath([k]);
+          <div style={{ marginTop: 8 }}>
+            {/* CAR-189: full-tree picker replaces the 8-chip top-level row.
+                A rule pre-fill (CAR-80) can target a leaf path like
+                ['food', 'produce'] — the picker now surfaces the full
+                breadcrumb so the user can see and edit the subcategory
+                before saving. Manual selection still writes the chosen
+                path (top-level OR nested) to the saved tx. */}
+            <CategoryPicker
+              tree={categoryTree}
+              value={path}
+              onChange={(p) => {
+                setPath(p);
+                setCat(p[0]);
                 setCatManuallySet(true);
-              }} style={{
-                all: 'unset', cursor: 'pointer', padding: '5px 9px',
-                border: '1px solid ' + (cat === k ? A.ink : A.rule2),
-                background: cat === k ? A.ink : 'transparent',
-                color: cat === k ? A.bg : A.ink,
-                fontSize: 10, letterSpacing: 1.2,
-              }}>{c.glyph} {c.label}</button>
-            ))}
+              }}
+              placeholder="DINING"
+            />
           </div>
         </div>
         <ARule />
