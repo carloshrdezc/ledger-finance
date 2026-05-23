@@ -10,17 +10,21 @@ import { formatPath } from '../categories.mjs';
  * Used by:
  *   - <RuleForm> — rule's target category
  *   - <BulkActionBar> — bulk-categorize popover (replaces static CATEGORIES)
+ *   - <WebAddModal> / <AddSheet> — add-transaction category selection (CAR-189)
+ *
+ * Behavior:
+ *   - Default opens UPWARD (`bottom: 100%`) — fits when host sits low in form.
+ *   - Auto-flips to DOWNWARD when there isn't enough space above (e.g. picker
+ *     near top of viewport, narrow vertical viewports). CAR-189 follow-up.
+ *   - Arrow keys + Enter for keyboard nav when open. CAR-189 follow-up.
  */
 
-const POPOVER_STYLE = {
+const POPOVER_BASE_STYLE = {
   position: 'absolute',
-  bottom: '100%',
-  marginBottom: 8,
   background: A.bg,
   border: '1px solid ' + A.ink,
   fontFamily: A.font,
   minWidth: 220,
-  maxHeight: 300,
   overflow: 'auto',
   boxSizing: 'border-box',
   zIndex: 10,
@@ -85,10 +89,38 @@ export default function CategoryPicker({
   maxHeight = 300,
 }) {
   const [open, setOpen] = React.useState(false);
+  const [direction, setDirection] = React.useState('up'); // 'up' | 'down'
+  const [highlight, setHighlight] = React.useState(0);
   const wrapperRef = React.useRef(null);
+  const triggerRef = React.useRef(null);
+  const itemRefs = React.useRef([]);
 
   const entries = React.useMemo(() => flattenTree(tree), [tree]);
   const display = value ? formatPath(value, tree) : placeholder;
+
+  // CAR-189: auto-flip up/down based on available space. Measured at open
+  // time using the trigger's viewport rect. Default = up (matches RuleForm
+  // / BulkActionBar host expectations); flip to down only if insufficient
+  // space above.
+  React.useLayoutEffect(() => {
+    if (!open || !triggerRef.current) return;
+    const r = triggerRef.current.getBoundingClientRect();
+    const spaceAbove = r.top;
+    const spaceBelow = window.innerHeight - r.bottom;
+    const needed = Math.min(maxHeight, entries.length * 36 + 16);
+    if (spaceAbove >= needed) setDirection('up');
+    else if (spaceBelow >= needed) setDirection('down');
+    else setDirection(spaceAbove >= spaceBelow ? 'up' : 'down');
+  }, [open, entries.length, maxHeight]);
+
+  // Reset highlight to selected entry (or 0) every time the picker opens.
+  React.useEffect(() => {
+    if (!open) return;
+    const idx = value
+      ? entries.findIndex((e) => e.path.length === value.length && e.path.every((p, i) => p === value[i]))
+      : 0;
+    setHighlight(idx >= 0 ? idx : 0);
+  }, [open, value, entries]);
 
   // Close on outside click.
   React.useEffect(() => {
@@ -102,26 +134,61 @@ export default function CategoryPicker({
     return () => window.removeEventListener('mousedown', onClick);
   }, [open]);
 
-  // Close on Esc. Note: cannot prevent the global Esc handler from also firing,
-  // but the global handler is benign when no overlays are open. Same pattern
-  // as <BulkActionBar> from CAR-82.
+  // CAR-189: keyboard nav — Esc to close, ArrowUp/Down to move highlight,
+  // Enter to select, Home/End to jump. Stop propagation on handled keys so
+  // the global Esc handler doesn't fire on top of ours when the picker is
+  // open inside a modal.
   React.useEffect(() => {
     if (!open) return undefined;
     const onKey = (e) => {
-      if (e.key === 'Escape') setOpen(false);
+      if (e.key === 'Escape') {
+        setOpen(false);
+        e.stopPropagation();
+      } else if (e.key === 'ArrowDown') {
+        setHighlight((h) => Math.min(entries.length - 1, h + 1));
+        e.preventDefault();
+      } else if (e.key === 'ArrowUp') {
+        setHighlight((h) => Math.max(0, h - 1));
+        e.preventDefault();
+      } else if (e.key === 'Home') {
+        setHighlight(0);
+        e.preventDefault();
+      } else if (e.key === 'End') {
+        setHighlight(entries.length - 1);
+        e.preventDefault();
+      } else if (e.key === 'Enter') {
+        const entry = entries[highlight];
+        if (entry) {
+          onChange?.(entry.path);
+          setOpen(false);
+        }
+        e.preventDefault();
+      }
     };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [open]);
+    window.addEventListener('keydown', onKey, true); // capture: beat global Esc
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [open, entries, highlight, onChange]);
+
+  // Scroll highlighted item into view as user navigates.
+  React.useEffect(() => {
+    if (!open) return;
+    const el = itemRefs.current[highlight];
+    if (el && el.scrollIntoView) el.scrollIntoView({ block: 'nearest' });
+  }, [open, highlight]);
 
   const select = (path) => {
     onChange?.(path);
     setOpen(false);
   };
 
+  const popoverPositionStyle = direction === 'up'
+    ? { bottom: '100%', marginBottom: 8 }
+    : { top: '100%', marginTop: 8 };
+
   return (
     <div ref={wrapperRef} style={{ position: 'relative', display: 'inline-block' }}>
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => setOpen(o => !o)}
         style={TRIGGER_STYLE}
@@ -131,8 +198,10 @@ export default function CategoryPicker({
       </button>
       {open && (
         <div
+          role="listbox"
           style={{
-            ...POPOVER_STYLE,
+            ...POPOVER_BASE_STYLE,
+            ...popoverPositionStyle,
             maxHeight,
             ...(align === 'right' ? { right: 0 } : { left: 0 }),
           }}
@@ -142,24 +211,32 @@ export default function CategoryPicker({
               No categories
             </div>
           )}
-          {entries.map(({ path, label, glyph, breadcrumb }) => (
-            <button
-              key={path.join('.')}
-              type="button"
-              onClick={() => select(path)}
-              style={POPOVER_ITEM_STYLE}
-              onMouseEnter={(e) => { e.currentTarget.style.background = A.bg2; }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
-            >
-              {glyph && <span style={{ marginRight: 6 }}>{glyph}</span>}
-              {breadcrumb.length > 0 && (
-                <span style={{ color: A.muted, marginRight: 4 }}>
-                  {breadcrumb.join(' › ')} ›
-                </span>
-              )}
-              {label}
-            </button>
-          ))}
+          {entries.map(({ path, label, glyph, breadcrumb }, i) => {
+            const isHighlighted = i === highlight;
+            return (
+              <button
+                ref={(el) => { itemRefs.current[i] = el; }}
+                key={path.join('.')}
+                type="button"
+                role="option"
+                aria-selected={isHighlighted}
+                onClick={() => select(path)}
+                onMouseEnter={() => setHighlight(i)}
+                style={{
+                  ...POPOVER_ITEM_STYLE,
+                  background: isHighlighted ? A.bg2 : 'transparent',
+                }}
+              >
+                {glyph && <span style={{ marginRight: 6 }}>{glyph}</span>}
+                {breadcrumb.length > 0 && (
+                  <span style={{ color: A.muted, marginRight: 4 }}>
+                    {breadcrumb.join(' › ')} ›
+                  </span>
+                )}
+                {label}
+              </button>
+            );
+          })}
         </div>
       )}
     </div>
