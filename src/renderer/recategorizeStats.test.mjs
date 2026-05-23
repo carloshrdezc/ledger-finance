@@ -5,6 +5,7 @@ import {
   applyDismiss,
   applyEvict,
   findEvictionForNewRule,
+  merchantStem,
   statKey,
   SUGGEST_THRESHOLD,
   DISMISS_LIMIT,
@@ -32,7 +33,7 @@ describe('extractRecategorizationEvents', () => {
     expect(events).toHaveLength(1);
     expect(events[0].txId).toBe('t1');
     expect(events[0].newPath).toEqual(['food', 'coffee']);
-    expect(events[0].merchantKey.startsWith('STARBUCKS')).toBe(true);
+    expect(events[0].merchantKey).toBe('STARBUCKS');
   });
 
   test('uses cat as single-element path when path absent', () => {
@@ -202,5 +203,99 @@ describe('findEvictionForNewRule', () => {
     expect(findEvictionForNewRule(null)).toBe(null);
     expect(findEvictionForNewRule({ match: {}, set: { path: ['x'] } })).toBe(null);
     expect(findEvictionForNewRule({ match: { merchantPattern: 'x' }, set: { path: [] } })).toBe(null);
+  });
+});
+
+describe('merchantStem', () => {
+  test('strips trailing transaction IDs from realistic bank names', () => {
+    expect(merchantStem('STARBUCKS COFFEE #1234')).toBe('STARBUCKS');
+    expect(merchantStem('STARBUCKS COFFEE #5678')).toBe('STARBUCKS');
+    expect(merchantStem('Starbucks #999')).toBe('STARBUCKS');
+    // Realistic case: same merchant variants all collapse to the same stem.
+    expect(merchantStem('STARBUCKS COFFEE #1234'))
+      .toBe(merchantStem('STARBUCKS COFFEE #5678'));
+  });
+
+  test('preserves dotted domains (Amazon.com style)', () => {
+    expect(merchantStem('Amazon.com')).toBe('AMAZON.COM');
+    expect(merchantStem('AMAZON.COM*M91X23GH3')).toBe('AMAZON.COM');
+    expect(merchantStem('AMAZON.COM*A1B2C3')).toBe('AMAZON.COM');
+  });
+
+  test('handles edge cases', () => {
+    expect(merchantStem('')).toBe('');
+    expect(merchantStem(null)).toBe('');
+    expect(merchantStem(undefined)).toBe('');
+    expect(merchantStem('   ')).toBe('');
+    expect(merchantStem('#1234')).toBe('');
+    expect(merchantStem('  TARGET  ')).toBe('TARGET');
+  });
+
+  test('preserves accented Latin characters', () => {
+    expect(merchantStem('CAFÉ DELUXE #99')).toBe('CAFÉ');
+    expect(merchantStem('Niños Market')).toBe('NIÑOS');
+  });
+
+  test('lowercase input is uppercased', () => {
+    expect(merchantStem('starbucks')).toBe('STARBUCKS');
+    expect(merchantStem('starbucks #777')).toBe('STARBUCKS');
+  });
+});
+
+describe('integration: realistic re-categorization flow', () => {
+  // The bug that motivated CAR-182 round 2: three real-world Starbucks charges
+  // each have a unique transaction ID suffix. Before the fix, three different
+  // merchantKeys → threshold never trips → toast never appears.
+  // After the fix, all three collapse to merchantStem='STARBUCKS' → 3rd hit
+  // fires the suggestion.
+  test('three same-merchant-different-suffix txs trip the threshold', () => {
+    const txs = [
+      { id: 't1', name: 'STARBUCKS COFFEE #1234', cat: 'misc', path: ['misc'] },
+      { id: 't2', name: 'STARBUCKS COFFEE #5678', cat: 'misc', path: ['misc'] },
+      { id: 't3', name: 'STARBUCKS LAUNDRY #999', cat: 'misc', path: ['misc'] },
+    ];
+    const idToTx = new Map(txs.map(t => [t.id, t]));
+    let stats = {};
+    let lastFired = null;
+
+    for (const tx of txs) {
+      const before = [{ id: tx.id, cat: tx.cat, path: tx.path }];
+      const events = extractRecategorizationEvents(before, idToTx, { path: ['food', 'coffee'] });
+      expect(events).toHaveLength(1);
+      // All three txs produce the SAME merchantKey now.
+      expect(events[0].merchantKey).toBe('STARBUCKS');
+      const result = applyRecategorizeEvent(stats, events[0].merchantKey, events[0].newPath, events[0].txId);
+      stats = result.next;
+      if (result.fired) lastFired = result.fired;
+    }
+
+    expect(lastFired).toEqual({
+      merchantKey: 'STARBUCKS',
+      targetPath: ['food', 'coffee'],
+    });
+    expect(stats[statKey('STARBUCKS', ['food', 'coffee'])].count).toBe(3);
+  });
+
+  test('rule with STEM* pattern auto-evicts the matching stat', () => {
+    // Simulates: user accepts the suggestion, RuleForm saves a rule with
+    // pattern "STARBUCKS*" (the new prefilled shape). store.addRule calls
+    // findEvictionForNewRule which should return the matching stat key.
+    const eviction = findEvictionForNewRule({
+      match: { merchantPattern: 'STARBUCKS*' },
+      set: { path: ['food', 'coffee'] },
+    });
+    expect(eviction).toEqual({
+      merchantKey: 'STARBUCKS',
+      targetPath: ['food', 'coffee'],
+    });
+
+    // And it actually evicts the stat keyed under 'STARBUCKS'.
+    const stats = {
+      [statKey('STARBUCKS', ['food', 'coffee'])]: {
+        count: 3, lastAt: '2026-01-01T00:00:00Z', lastTxIds: ['t1','t2','t3'], dismissed: 0,
+      },
+    };
+    const evicted = applyEvict(stats, eviction.merchantKey, eviction.targetPath);
+    expect(evicted).toEqual({});
   });
 });

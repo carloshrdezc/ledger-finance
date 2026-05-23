@@ -181,9 +181,12 @@ function EditModal({ suggestion, categoryTree, accountsWithBalance, onSave, onCa
   // and rule?.set. Setting `rule` to a non-null object here also flips
   // RuleForm's "edit mode" UI, which is fine — it just means the form has
   // pre-filled values when it opens.
+  // The pattern is `STEM*` (trailing wildcard) so the rule actually matches
+  // future variants like "STARBUCKS COFFEE #5678" — not just the exact name
+  // of the one tx that tripped the threshold.
   const prefilled = React.useMemo(() => ({
     enabled: true,
-    match: { merchantPattern: suggestion.merchantKey },
+    match: { merchantPattern: suggestion.merchantKey + '*' },
     set: { path: suggestion.targetPath },
   }), [suggestion.merchantKey, suggestion.targetPath?.join('.')]);
 

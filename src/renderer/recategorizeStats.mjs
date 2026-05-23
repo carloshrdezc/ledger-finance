@@ -3,10 +3,47 @@
 // pendingRuleSuggestion signal) live in store.jsx; this module is pure
 // data transforms that are trivial to unit test.
 
-import { normalizeMerchant } from './rules.mjs';
+import { patternLiteral } from './rules.mjs';
 
 export const SUGGEST_THRESHOLD = 3;
 export const DISMISS_LIMIT = 3;
+
+/**
+ * Extract a stable "merchant stem" from a raw bank-transaction name.
+ *
+ * Real-world bank names almost always carry per-charge suffixes (store IDs,
+ * dates, transaction codes), e.g.
+ *   "STARBUCKS COFFEE #1234"
+ *   "STARBUCKS COFFEE #5678"
+ *   "Amazon.com*M91X23GH3"
+ * Keying recategorize stats on the raw name would never aggregate them.
+ *
+ * Strategy: uppercase + trim, take the leading whitespace-delimited token,
+ * then strip any trailing non-alpha characters. This produces a stem like
+ * "STARBUCKS" or "AMAZON.COM" that's stable across charges from the same
+ * merchant. The toast then suggests a rule of the form `STEM*` which the
+ * existing rules engine (patternToRegExp) matches against all variants.
+ *
+ * Edge cases:
+ *  - Empty/whitespace name → empty stem (caller should skip).
+ *  - Pure punctuation/digits → empty stem (caller skips).
+ *  - Non-ASCII letters preserved (e.g. "CAFÉ" → "CAFÉ"); we only strip
+ *    trailing non-alpha bytes that look like ID padding.
+ */
+export function merchantStem(name) {
+  const norm = (name || '').trim().toUpperCase();
+  if (!norm) return '';
+  const first = norm.split(/\s+/)[0] || '';
+  // Strip trailing punctuation, digits, and other non-letter chars.
+  // Keep ASCII letters, accented Latin letters, and dots in the middle
+  // (so "AMAZON.COM" survives but "AMAZON.COM*M91X23" → "AMAZON.COM").
+  // We split on '*' first because '*' is the most common separator
+  // before transaction-id padding.
+  const beforeStar = first.split('*')[0];
+  // Strip trailing non-letter bytes (digits, punct) but preserve dots
+  // mid-token. Use Unicode-aware letter class.
+  return beforeStar.replace(/[^\p{L}.]+$/u, '').replace(/\.+$/, '');
+}
 
 /** Internal: build the stats key. Exposed for tests. */
 export function statKey(merchantKey, targetPath) {
@@ -52,7 +89,7 @@ export function extractRecategorizationEvents(before, idToTx, patchOrPatches) {
     const newPath = getNewPath(snap.id);
     if (!newPath) continue;
     if (oldPath.length === newPath.length && oldPath.every((p, i) => p === newPath[i])) continue;
-    const merchantKey = normalizeMerchant(tx.name);
+    const merchantKey = merchantStem(tx.name);
     if (!merchantKey) continue;
     events.push({ merchantKey, newPath, txId: snap.id });
   }
@@ -124,16 +161,21 @@ export function applyEvict(prev, merchantKey, targetPath) {
 }
 
 /**
- * Detect when an addRule call should auto-evict a stat. Only auto-evicts
- * when the rule's pattern is a clean literal (no wildcards) — fuzzy patterns
- * could cover keys we can't know without scanning every entry.
+ * Detect when an addRule call should auto-evict a stat.
+ *
+ * Uses `patternLiteral` to strip leading/trailing wildcards, so a pattern
+ * like `STARBUCKS*` matches stat keys keyed under `merchantStem('Starbucks #4521') === 'STARBUCKS'`.
+ * Patterns with mid-string wildcards (e.g. `S*BUCKS`) still bail out — we
+ * can't cheaply know which stat keys they cover.
  *
  * Returns { merchantKey, targetPath } | null.
  */
 export function findEvictionForNewRule(rule) {
   if (!rule?.match?.merchantPattern || !rule?.set?.path?.length) return null;
-  const literal = rule.match.merchantPattern.trim().replace(/^\*+|\*+$/g, '').trim();
-  if (!literal || /[*]/.test(literal)) return null;
+  const literal = patternLiteral(rule.match.merchantPattern);
+  if (!literal) return null;
+  // Reject mid-string wildcards: only edge wildcards are supported.
+  if (/\*/.test(literal)) return null;
   return {
     merchantKey: literal.toUpperCase(),
     targetPath: [...rule.set.path],
