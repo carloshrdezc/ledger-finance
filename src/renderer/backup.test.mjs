@@ -184,3 +184,82 @@ describe('round-trip', () => {
     expect(result.data.fxRates).toEqual(original.fxRates);
   });
 });
+
+// CAR-188: the .mmbak full-restore path in ImportExport.jsx now delegates
+// to parseBackup → store.restoreBackup, ensuring it stays in sync with the
+// JSON BackupSection restore. These tests pin the contract that a fully-
+// populated v2 backup round-trips every slice — especially the ones the
+// old hand-written setter list silently dropped (rules, investments,
+// trades, fxRates/fxRatesUpdated, hidden, scalars, settings).
+describe('CAR-188: mmbak full-restore parity', () => {
+  const fullV2State = {
+    txs: [{ id: 't1', name: 'COFFEE', amt: -3.5, date: '2026-05-01', acct: 'chk', ccy: 'USD' }],
+    accounts: [{ id: 'chk', name: 'CHECKING', openingBal: 100, ccy: 'USD' }],
+    catTree: { food: { label: 'FOOD' } },
+    budgets: [{ cat: 'food', limit: 200, spent: 3.5 }],
+    hidden: ['t-hidden-1', 't-hidden-2'],
+    bills: [{ id: 'b1', merchant: 'NETFLIX', amt: -15, schedule: 'monthly' }],
+    goals: [{ id: 'g1', name: 'EMERGENCY FUND', target: 10000 }],
+    goalContributions: [{ goalId: 'g1', amt: 500, date: '2026-04-01' }],
+    rules: [{
+      id: 'r1', enabled: true,
+      match: { merchantPattern: 'STARBUCKS' },
+      set: { path: ['food', 'cafe'] },
+    }],
+    investments: [{ id: 'i1', symbol: 'AAPL', name: 'Apple Inc.' }],
+    trades: [{ id: 'tr1', symbol: 'AAPL', qty: 5, price: 180, date: '2026-04-15' }],
+    rates: { USD: 1, EUR: 1.08, MXN: 17.5 },
+    ratesUpdated: { EUR: '2026-05-10', MXN: '2026-05-10' },
+    selectedPeriod: '2026-05',
+    budgetStartDay: 5,
+    settings: {
+      accent: '#fb6c2e',
+      density: 'compact',
+      decimals: false,
+      currency: 'MXN',
+      theme: 'dark',
+    },
+  };
+
+  it('parseBackup restores every v2 slice from a fully-populated mmbak JSON', () => {
+    const json = JSON.stringify(buildBackup(fullV2State));
+    const result = parseBackup(json);
+    expect(result.ok).toBe(true);
+
+    // Slices the OLD hand-written mmbak path correctly restored:
+    expect(result.data.transactions).toEqual(fullV2State.txs);
+    expect(result.data.accounts).toEqual(fullV2State.accounts);
+    expect(result.data.categoryTree).toEqual(fullV2State.catTree);
+    expect(result.data.budgets).toEqual(fullV2State.budgets);
+    expect(result.data.bills).toEqual(fullV2State.bills);
+    expect(result.data.goals).toEqual(fullV2State.goals);
+    expect(result.data.goalContributions).toEqual(fullV2State.goalContributions);
+
+    // Slices the OLD hand-written mmbak path SILENTLY DROPPED — the bug:
+    expect(result.data.rules).toEqual(fullV2State.rules);
+    expect(result.data.investments).toEqual(fullV2State.investments);
+    expect(result.data.trades).toEqual(fullV2State.trades);
+    expect(result.data.fxRates).toEqual(fullV2State.rates);
+    expect(result.data.fxRatesUpdated).toEqual(fullV2State.ratesUpdated);
+    expect(result.data.hidden).toEqual(fullV2State.hidden);
+    expect(result.data.selectedPeriod).toBe(fullV2State.selectedPeriod);
+    expect(result.data.budgetStartDay).toBe(fullV2State.budgetStartDay);
+    expect(result.data.settings).toEqual(fullV2State.settings);
+  });
+
+  it('summary counts match for every list-shaped slice', () => {
+    const json = JSON.stringify(buildBackup(fullV2State));
+    const result = parseBackup(json);
+    expect(result.ok).toBe(true);
+    expect(result.summary.transactions).toBe(1);
+    expect(result.summary.accounts).toBe(1);
+    expect(result.summary.budgets).toBe(1);
+    expect(result.summary.bills).toBe(1);
+    expect(result.summary.goals).toBe(1);
+    expect(result.summary.goalContributions).toBe(1);
+    expect(result.summary.rules).toBe(1);
+    expect(result.summary.investments).toBe(1);
+    expect(result.summary.trades).toBe(1);
+    expect(result.summary.hidden).toBe(2);
+  });
+});
