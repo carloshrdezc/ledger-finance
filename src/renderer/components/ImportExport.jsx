@@ -71,6 +71,12 @@ export default function ImportExport({ onClose }) {
           store.restoreBackup(result.data);
           setStatus({ ok: true, msg: `Backup restored · ${result.summary?.transactions ?? 0} transactions` });
         } else {
+          // NOTE: This branch handles MoneyMoney mmbak SQLite IMPORT (not
+          // a Ledger restore). It intentionally only touches accounts /
+          // categoryTree / bills / transactions because that's all the
+          // foreign format carries. Do NOT "fix" this to cover all v2
+          // slices like the Ledger branch above — there's nothing to
+          // restore for rules / investments / trades / fxRates / settings.
           if (data.accounts?.length) store.setAccounts(data.accounts);
           if (data.categoryTree && Object.keys(data.categoryTree).length) store.setCategoryTree(data.categoryTree);
           if (data.bills?.length) store.setBills(data.bills);
