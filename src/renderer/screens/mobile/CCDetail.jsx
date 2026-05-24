@@ -48,6 +48,9 @@ export default function CCDetail({ t, acct, onBack }) {
     <div style={{ padding: '0 18px 20px' }}>
       <div style={{ padding: '10px 0 6px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <button onClick={onBack} style={{ all: 'unset', cursor: 'pointer', fontSize: 10, letterSpacing: 1.2 }}>◂ BACK</button>
+        {/* FIXME(CAR-206): handleExport/heroLabel are not defined in this scope — they live inside Reports.
+            This is a pre-existing crash that reproduces on dev-master; CAR-199 deliberately preserved it
+            to keep the split purely structural. Do NOT silently stub these out — fix in CAR-206 with tests. */}
         <div style={{ display: 'flex', gap: 14, alignItems: 'baseline' }}>
           <button onClick={handleExport} style={{ all: 'unset', cursor: 'pointer', fontSize: 10, letterSpacing: 1.2, color: t.accent }}>EXPORT</button>
           <div style={{ fontSize: 10, letterSpacing: 1.2, color: A.muted }}>{heroLabel}</div>
