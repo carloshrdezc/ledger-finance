@@ -22,10 +22,14 @@ import Budgets from './screens/mobile/Budgets';
 import More from './screens/mobile/More';
 import Investments from './screens/mobile/Investments';
 import AddSheet from './screens/mobile/AddSheet';
-import {
-  Reports, ReportsCalendar, CCDetail, GoalDetail,
-  BillsHub, AlertsHub, Settings, CategoriesEditor,
-} from './screens/mobile/DetailScreens';
+import Reports from './screens/mobile/Reports';
+import ReportsCalendar from './screens/mobile/ReportsCalendar';
+import CCDetail from './screens/mobile/CCDetail';
+import GoalDetail from './screens/mobile/GoalDetail';
+import BillsHub from './screens/mobile/BillsHub';
+import AlertsHub from './screens/mobile/AlertsHub';
+import Settings from './screens/mobile/Settings';
+import CategoriesEditor from './screens/mobile/CategoriesEditor';
 
 // Web screens
 import Dashboard from './screens/web/Dashboard';
