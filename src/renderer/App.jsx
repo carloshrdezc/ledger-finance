@@ -114,6 +114,25 @@ function MobileApp({ t, setAccent, setDensity, setDecimals, setCurrency, setThem
     push(route, params);
   }, []);
 
+  // CAR-217: insight drill-down. setTxFilter + jump to TX tab when the route
+  // is `transactions`; otherwise defer to goToRoute. Lives here because Home
+  // + AlertsHub both need it.
+  const { setTxFilter } = useStore();
+  const goToInsight = React.useCallback((insight) => {
+    if (!insight) return;
+    if (insight.route === 'transactions') {
+      const params = insight.routeParams || {};
+      const filter = { type: 'expense' };
+      if (params.cat) filter.category = params.cat;
+      if (params.merchant) filter.merchant = params.merchant;
+      setTxFilter(filter);
+      setNavStack([]);
+      setTab('tx');
+      return;
+    }
+    goToRoute(insight.route, insight.routeParams);
+  }, [setTxFilter, goToRoute]);
+
   const current = navStack.length > 0 ? navStack[navStack.length - 1] : null;
 
   const renderOverlay = () => {
@@ -127,7 +146,7 @@ function MobileApp({ t, setAccent, setDensity, setDecimals, setCurrency, setThem
       case 'goal':       return <GoalDetail {...props} goal={params.goalId} />;
       case 'cc':         return <CCDetail {...props} acct={params.acct} />;
       case 'bills':      return <BillsHub {...props} />;
-      case 'alerts':     return <AlertsHub {...props} onNavigate={goToRoute} />;
+      case 'alerts':     return <AlertsHub {...props} onNavigate={goToRoute} onInsight={goToInsight} />;
       case 'investments':return <Investments {...props} />;
       case 'settings':   return <Settings {...props} setAccent={setAccent} setDensity={setDensity} setDecimals={setDecimals} setCurrency={setCurrency} setTheme={setTheme} />;
       case 'categories': return <CategoriesEditor {...props} />;
@@ -140,7 +159,7 @@ function MobileApp({ t, setAccent, setDensity, setDecimals, setCurrency, setThem
   const renderTab = () => {
     const props = { t, onNavigate: push };
     switch (tab) {
-      case 'home':     return <Home {...props} onAcct={acct => push('acct', { acct })} onAdd={() => setShowAdd(true)} onViewAll={() => setTab('accounts')} />;
+      case 'home':     return <Home {...props} onAcct={acct => push('acct', { acct })} onAdd={() => setShowAdd(true)} onViewAll={() => setTab('accounts')} onInsight={goToInsight} />;
       case 'accounts': return <Accounts {...props} onAcct={acct => push('acct', { acct })} />;
       case 'tx':       return <Transactions {...props} />;
       case 'budgets':  return <Budgets {...props} />;

@@ -16,6 +16,7 @@ import {
   findEvictionForNewRule,
 } from './recategorizeStats.mjs';
 import { buildAlertRows } from './alerts.mjs';
+import { buildInsightRows } from './insights.mjs';
 import { DEFAULT_RATES } from './fx.mjs';
 import { buildBackup } from './backup.mjs';
 import { ACCENTS } from './theme';
@@ -127,6 +128,9 @@ export function StoreProvider({ children }) {
   const [investments, setInvestments] = useLS('ledger:investments', []);
   const [trades, setTrades]           = useLS('ledger:trades', []);
   const [dismissedAlertIds, setDismissedAlertIds] = useLS('ledger:dismissedAlerts', []);
+  // CAR-217: weekly insight dismissal. Same pattern as alerts — store the
+  // insight ids the user has dismissed; insightRows filters them out.
+  const [dismissedInsightIds, setDismissedInsightIds] = useLS('ledger:dismissedInsights', []);
   const [welcomeSeen, setWelcomeSeen] = useLS('ledger:welcomeSeen', false);
   const [rates, setRates] = useLS('ledger:fxRates', DEFAULT_RATES);
   const [ratesUpdated, setRatesUpdated] = useLS('ledger:fxRatesUpdated', {});
@@ -240,6 +244,20 @@ export function StoreProvider({ children }) {
       backupReminderSnoozedUntil,
     }),
     [billRows, budgetRows, goals, accountsWithBalance, investments, dismissedAlertIds, rates, ratesUpdated, transactions, fxMigrationToastSeen, isAppEmpty, lastBackupAt, backupReminderInterval, backupReminderSnoozedUntil],
+  );
+
+  // CAR-217: weekly insights — purely derived. `bills` is the recurring-rules
+  // surface (see addRecurring/updateRecurring above), so it feeds
+  // detectInactiveSubscriptions. Suppressed entirely on an empty store so a
+  // brand-new user isn't shown stale-looking detectors.
+  const insightRows = React.useMemo(
+    () => isAppEmpty ? [] : buildInsightRows({
+      transactions,
+      recurringRules: bills,
+      budgetRows,
+      dismissedInsightIds,
+    }),
+    [isAppEmpty, transactions, bills, budgetRows, dismissedInsightIds],
   );
 
   const addTransactions = React.useCallback(incoming => setTxs(prev => {
@@ -757,6 +775,16 @@ export function StoreProvider({ children }) {
     setDismissedAlertIds([]);
   }, [setDismissedAlertIds]);
 
+  // CAR-217: insights dismissal mirrors alerts. Insights have no special-case
+  // ids (no FX migration / backup reminder), so the body is straightforward.
+  const dismissInsight = React.useCallback(id => {
+    setDismissedInsightIds(prev => prev.includes(id) ? prev : [...prev, id]);
+  }, [setDismissedInsightIds]);
+
+  const restoreInsights = React.useCallback(() => {
+    setDismissedInsightIds([]);
+  }, [setDismissedInsightIds]);
+
   const dismissWelcome = React.useCallback(() => {
     setWelcomeSeen(true);
   }, [setWelcomeSeen]);
@@ -804,6 +832,7 @@ export function StoreProvider({ children }) {
     setInvestments([]);
     setTrades([]);
     setDismissedAlertIds([]);
+    setDismissedInsightIds([]);
     setTxFilterRaw(null);
     setRates(DEFAULT_RATES);
     setRatesUpdated({});
@@ -813,7 +842,7 @@ export function StoreProvider({ children }) {
     setBackupReminderSnoozedUntil(null);
     setBackupReminderIntervalRaw(30);
     _seedSampleData();
-  }, [_seedSampleData, setTxs, setCatTree, setBudgets, setAccounts, setBills, setGoals, setGoalContributions, setRules, setSelectedPeriod, setHidden, setBudgetStartDay, setInvestments, setTrades, setDismissedAlertIds, setTxFilterRaw, setRates, setRatesUpdated, setFxMigrationToastSeen, setWelcomeSeen, setLastBackupAt, setBackupReminderSnoozedUntil, setBackupReminderIntervalRaw]);
+  }, [_seedSampleData, setTxs, setCatTree, setBudgets, setAccounts, setBills, setGoals, setGoalContributions, setRules, setSelectedPeriod, setHidden, setBudgetStartDay, setInvestments, setTrades, setDismissedAlertIds, setDismissedInsightIds, setTxFilterRaw, setRates, setRatesUpdated, setFxMigrationToastSeen, setWelcomeSeen, setLastBackupAt, setBackupReminderSnoozedUntil, setBackupReminderIntervalRaw]);
 
   // CAR-77: returns the JSON string the user will download. Reads the
   // current state synchronously via the captured useLS values; if React
@@ -884,6 +913,7 @@ export function StoreProvider({ children }) {
     // Session ephemera reset.
     setTxFilterRaw(null);
     setDismissedAlertIds([]);
+    setDismissedInsightIds([]);
     setWelcomeSeen(true);          // user is past the welcome by definition.
     setFxMigrationToastSeen(true); // restored data already has whatever rates it has.
     setBackupReminderSnoozedUntil(null);
@@ -893,7 +923,7 @@ export function StoreProvider({ children }) {
     setGoalContributions, setRules, setInvestments, setTrades, setRates, setRatesUpdated,
     setSelectedPeriod, setBudgetStartDay,
     setAccent, setDensity, setDecimals, setCurrency, setTheme,
-    setTxFilterRaw, setDismissedAlertIds, setWelcomeSeen, setFxMigrationToastSeen,
+    setTxFilterRaw, setDismissedAlertIds, setDismissedInsightIds, setWelcomeSeen, setFxMigrationToastSeen,
     setBackupReminderSnoozedUntil,
   ]);
 
@@ -913,6 +943,7 @@ export function StoreProvider({ children }) {
     setInvestments([]);
     setTrades([]);
     setDismissedAlertIds([]);
+    setDismissedInsightIds([]);
     setTxFilterRaw(null);
     setRates(DEFAULT_RATES);
     setRatesUpdated({});
@@ -921,7 +952,7 @@ export function StoreProvider({ children }) {
     setLastBackupAt(null);
     setBackupReminderSnoozedUntil(null);
     setBackupReminderIntervalRaw(30);
-  }, [setTxs, setCatTree, setBudgets, setAccounts, setBills, setGoals, setGoalContributions, setRules, setSelectedPeriod, setHidden, setBudgetStartDay, setInvestments, setTrades, setDismissedAlertIds, setTxFilterRaw, setRates, setRatesUpdated, setFxMigrationToastSeen, setWelcomeSeen, setLastBackupAt, setBackupReminderSnoozedUntil, setBackupReminderIntervalRaw]);
+  }, [setTxs, setCatTree, setBudgets, setAccounts, setBills, setGoals, setGoalContributions, setRules, setSelectedPeriod, setHidden, setBudgetStartDay, setInvestments, setTrades, setDismissedAlertIds, setDismissedInsightIds, setTxFilterRaw, setRates, setRatesUpdated, setFxMigrationToastSeen, setWelcomeSeen, setLastBackupAt, setBackupReminderSnoozedUntil, setBackupReminderIntervalRaw]);
 
   return (
     <StoreCtx.Provider value={{
@@ -977,6 +1008,11 @@ export function StoreProvider({ children }) {
       dismissedAlertIds,
       dismissAlert,
       restoreAlerts,
+      // CAR-217
+      insightRows,
+      dismissedInsightIds,
+      dismissInsight,
+      restoreInsights,
       lastBackupAt,
       backupReminderInterval,
       setBackupReminderInterval,

@@ -22,10 +22,28 @@ function windowStart(period) {
 }
 
 export default function Dashboard({ t, onNavigate, onAdd }) {
-  const { transactions, budgetRows, accounts, accountsWithBalance, accountsIncludedInTotals, periodLabel, billRows, goals, alertRows, rates } = useStore();
+  const { transactions, budgetRows, accounts, accountsWithBalance, accountsIncludedInTotals, periodLabel, billRows, goals, alertRows, insightRows, dismissInsight, setTxFilter, rates } = useStore();
   const { toReporting } = useFx(t.currency || 'USD');
   const [scrub, setScrub] = React.useState(null);
   const [period, setPeriod] = React.useState('1M');
+
+  // CAR-217: navigate to the right surface for an insight, applying the
+  // tx-filter drill-down when the route is `transactions`. Mirrors the
+  // pattern WebReports uses (setTxFilter + onNavigate('tx')).
+  const goToInsight = React.useCallback((insight) => {
+    if (!insight) return;
+    if (insight.route === 'transactions') {
+      const params = insight.routeParams || {};
+      const filter = {};
+      if (params.cat) filter.category = params.cat;
+      if (params.merchant) filter.merchant = params.merchant;
+      filter.type = 'expense';
+      setTxFilter(filter);
+      onNavigate('tx');
+      return;
+    }
+    onNavigate(insight.route);
+  }, [setTxFilter, onNavigate]);
 
   const now = new Date();
   const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -136,6 +154,30 @@ export default function Dashboard({ t, onNavigate, onAdd }) {
           )}
         </div>
       </div>
+
+      {/* CAR-217: Weekly insights — surface the top 3 detector rows. Each row
+          drills via goToInsight (tx-filter for category/merchant routes). */}
+      {insightRows.length > 0 && (
+        <div style={{ marginTop: 20, marginBottom: 8 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+            <ALabel>[03B] WEEKLY INSIGHTS</ALabel>
+            <span style={{ fontSize: 9, color: A.muted, letterSpacing: 1.2 }}>{insightRows.length} TOTAL</span>
+          </div>
+          <div style={{ marginTop: 8, borderTop: '2px solid ' + A.ink }}>
+            {insightRows.slice(0, 3).map(insight => (
+              <div key={insight.id} style={{ display: 'grid', gridTemplateColumns: '86px 1fr 80px 64px', gap: 16, width: '100%', padding: '9px 0', borderBottom: '1px solid ' + A.rule2, alignItems: 'center' }}>
+                <div style={{ fontSize: 9, letterSpacing: 1, color: insight.severity === 'high' ? A.neg : insight.severity === 'medium' ? t.accent : A.muted }}>{insight.severity.toUpperCase()}</div>
+                <button onClick={() => goToInsight(insight)} style={{ all: 'unset', cursor: 'pointer', minWidth: 0 }}>
+                  <div style={{ fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{insight.title}</div>
+                  <div style={{ fontSize: 10, color: A.muted, letterSpacing: 0.8, marginTop: 2 }}>{insight.detail}</div>
+                </button>
+                <div style={{ textAlign: 'right', fontSize: 11, color: t.accent, letterSpacing: 1, fontVariantNumeric: 'tabular-nums' }}>{insight.metric}</div>
+                <button onClick={() => dismissInsight(insight.id)} style={{ all: 'unset', cursor: 'pointer', textAlign: 'right', fontSize: 9, letterSpacing: 1.2, color: A.muted }}>DISMISS</button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Cash flow */}
       <div style={{ marginTop: 20, marginBottom: 8 }}>

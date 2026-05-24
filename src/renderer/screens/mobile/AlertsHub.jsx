@@ -17,8 +17,8 @@ function alertSeverityColor(severity, accent) {
   return A.muted;
 }
 
-export default function AlertsHub({ t, onBack, onNavigate }) {
-  const { alertRows, dismissAlert, restoreAlerts } = useStore();
+export default function AlertsHub({ t, onBack, onNavigate, onInsight }) {
+  const { alertRows, dismissAlert, restoreAlerts, insightRows, dismissInsight, restoreInsights } = useStore();
 
   return (
     <div style={{ padding: '0 18px 20px' }}>
@@ -59,6 +59,39 @@ export default function AlertsHub({ t, onBack, onNavigate }) {
               </div>
             </button>
             <button onClick={() => dismissAlert(alert.id)} style={{ all: 'unset', cursor: 'pointer', marginTop: 8, fontSize: 10, letterSpacing: 1, color: A.muted }}>
+              DISMISS
+            </button>
+          </div>
+        ))}
+      </div>
+
+      {/* CAR-217: Insights — same shape, separate dismiss state. */}
+      <div style={{ padding: '24px 0 8px', display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+        <ALabel>[02] INSIGHTS · {insightRows.length}</ALabel>
+        <button onClick={restoreInsights} style={{ all: 'unset', cursor: 'pointer', fontSize: 10, letterSpacing: 1.2, color: t.accent }}>RESTORE</button>
+      </div>
+      <ARule />
+      <div style={{ padding: '10px 0 0' }}>
+        {insightRows.length === 0 ? (
+          <div style={{ padding: '18px 0', fontSize: 11, color: A.muted, letterSpacing: 1 }}>NO ACTIVE INSIGHTS</div>
+        ) : insightRows.map(insight => (
+          <div key={insight.id} style={{ padding: '12px 0', borderBottom: '1px solid ' + A.rule2 }}>
+            <button onClick={() => onInsight && onInsight(insight)} style={{ all: 'unset', cursor: 'pointer', display: 'block', width: '100%' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 9, color: insight.severity === 'high' ? A.neg : insight.severity === 'medium' ? t.accent : A.muted, letterSpacing: 1.2 }}>
+                    {insight.severity.toUpperCase()} · {insight.type.toUpperCase()}
+                  </div>
+                  <div style={{ fontSize: 13, marginTop: 5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{insight.title}</div>
+                  <div style={{ fontSize: 10, color: A.muted, letterSpacing: 0.6, marginTop: 3 }}>{insight.detail}</div>
+                </div>
+                <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                  <div style={{ fontSize: 12, fontVariantNumeric: 'tabular-nums' }}>{insight.metric}</div>
+                  <div style={{ fontSize: 9, color: t.accent, letterSpacing: 1, marginTop: 5 }}>{insight.action}</div>
+                </div>
+              </div>
+            </button>
+            <button onClick={() => dismissInsight(insight.id)} style={{ all: 'unset', cursor: 'pointer', marginTop: 8, fontSize: 10, letterSpacing: 1, color: A.muted }}>
               DISMISS
             </button>
           </div>
