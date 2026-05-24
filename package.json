@@ -5,7 +5,12 @@
   "main": "src/main/index.js",
   "scripts": {
     "dev": "concurrently \"vite\" \"wait-on tcp:5173 && electron .\"",
-    "build": "vite build && electron-builder",
+    "build": "vite build",
+    "build:full": "vite build && electron-builder",
+    "package": "vite build && electron-builder",
+    "package:win": "vite build && electron-builder --win",
+    "package:mac": "vite build && electron-builder --mac",
+    "package:linux": "vite build && electron-builder --linux",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest"
@@ -17,17 +22,38 @@
     "appId": "com.ledger.finance",
     "productName": "LEDGER",
     "directories": {
-      "output": "dist-app"
+      "output": "dist-app",
+      "buildResources": "build"
     },
     "files": [
       "dist/**/*",
-      "src/main/**/*"
+      "src/main/**/*",
+      "package.json"
     ],
     "win": {
-      "target": "nsis"
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
+      "artifactName": "${productName}-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "perMachine": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "LEDGER"
     },
     "mac": {
-      "target": "dmg"
+      "target": "dmg",
+      "category": "public.app-category.finance"
+    },
+    "linux": {
+      "target": ["AppImage"],
+      "category": "Office"
     }
   },
   "devDependencies": {
