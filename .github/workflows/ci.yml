@@ -15,15 +15,6 @@ jobs:
         with:
           node-version: '22'
           cache: 'npm'
-      # NOTE: `npm install` rather than `npm ci`. The lockfile is generated
-      # on Windows and historically lacked Linux-specific optional-dep
-      # entries that `npm ci`'s strict consistency check requires. The
-      # current lockfile WAS regenerated with `--include=optional` to add
-      # the cross-platform entries, so `npm ci` may also work — but
-      # `npm install` is permissive and survives future cross-platform
-      # drift. Switch back to `npm ci` after vitest is bumped to ^4
-      # (which collapses the dual-vite/dual-esbuild situation) — tracked
-      # as a separate issue.
-      - run: npm install
+      - run: npm ci
       - run: npm test
       - run: npx vite build
