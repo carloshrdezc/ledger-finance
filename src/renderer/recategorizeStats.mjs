@@ -9,6 +9,34 @@ export const SUGGEST_THRESHOLD = 3;
 export const DISMISS_LIMIT = 3;
 
 /**
+ * Known payment-processor prefixes. When a transaction name starts with one
+ * of these followed by `*`, the actual merchant name comes after — using the
+ * processor as the stem would collide unrelated merchants under one key
+ * (e.g. SQ *COFFEE SHOP and SQ *WINE BAR both as "SQ"), generating overly
+ * broad rules that miscategorize future charges.
+ *
+ * The list is conservative: only well-known processors with a stable
+ * `PROCESSOR *MERCHANT` shape. Add cautiously — false positives here
+ * mean a real merchant whose name is a known prefix gets mis-stripped.
+ */
+const PROCESSOR_PREFIXES = new Set([
+  'SQ',       // Square
+  'TST',      // Toast (TST*MERCHANT)
+  'PAYPAL',   // PayPal
+  'PP',       // PayPal short form (PP*MERCHANT)
+  'IZ',       // Toast iZettle / older Toast format
+  'STRIPE',   // Stripe
+]);
+
+/**
+ * Strip trailing non-letter chars from a token. Preserves dots mid-token
+ * (so "AMAZON.COM" survives) but trims trailing dot runs.
+ */
+function trimToken(token) {
+  return token.replace(/[^\p{L}.]+$/u, '').replace(/\.+$/, '');
+}
+
+/**
  * Extract a stable "merchant stem" from a raw bank-transaction name.
  *
  * Real-world bank names almost always carry per-charge suffixes (store IDs,
@@ -18,31 +46,68 @@ export const DISMISS_LIMIT = 3;
  *   "Amazon.com*M91X23GH3"
  * Keying recategorize stats on the raw name would never aggregate them.
  *
- * Strategy: uppercase + trim, take the leading whitespace-delimited token,
- * then strip any trailing non-alpha characters. This produces a stem like
- * "STARBUCKS" or "AMAZON.COM" that's stable across charges from the same
- * merchant. The toast then suggests a rule of the form `STEM*` which the
- * existing rules engine (patternToRegExp) matches against all variants.
+ * Algorithm:
+ *  1. Uppercase + trim.
+ *  2. Special-case AMZN MKTP (Amazon Marketplace) → stable "AMAZON.COM_MKTP" stem.
+ *  3. If name starts with a known payment-processor prefix + `*`, strip that
+ *     prefix so the real merchant becomes the stem (avoids `SQ *X` / `SQ *Y`
+ *     false collisions).
+ *  4. Take the leading whitespace token, split on `*` (drops trailing
+ *     transaction IDs after `Amazon.com*ABC`), and trim trailing non-letter chars.
+ *  5. If that leaves an empty stem (purely numeric first token like `5 GUYS`),
+ *     fall back to the first 1-2 tokens with trailing `#N` stripped — preserves
+ *     legitimate numeric-prefixed merchants.
+ *  6. Normalize hyphenated number-letter variants ("7-ELEVEN" ≡ "7 ELEVEN")
+ *     by collapsing internal hyphens to spaces in the multi-word fallback.
  *
  * Edge cases:
  *  - Empty/whitespace name → empty stem (caller should skip).
- *  - Pure punctuation/digits → empty stem (caller skips).
- *  - Non-ASCII letters preserved (e.g. "CAFÉ" → "CAFÉ"); we only strip
- *    trailing non-alpha bytes that look like ID padding.
+ *  - Pure punctuation/digits → empty stem (caller skips, no false suggestion).
+ *  - Non-ASCII letters preserved (e.g. "CAFÉ").
  */
 export function merchantStem(name) {
-  const norm = (name || '').trim().toUpperCase();
+  let norm = (name || '').trim().toUpperCase();
   if (!norm) return '';
-  const first = norm.split(/\s+/)[0] || '';
-  // Strip trailing punctuation, digits, and other non-letter chars.
-  // Keep ASCII letters, accented Latin letters, and dots in the middle
-  // (so "AMAZON.COM" survives but "AMAZON.COM*M91X23" → "AMAZON.COM").
-  // We split on '*' first because '*' is the most common separator
-  // before transaction-id padding.
+
+  // Special-case Amazon Marketplace: "AMZN MKTP US*M91X23" → stable
+  // AMAZON.COM_MKTP (distinct from regular Amazon.com so users can route
+  // marketplace charges to a different category).
+  if (/^AMZN\s+MKTP\b/.test(norm)) {
+    return 'AMAZON.COM_MKTP';
+  }
+
+  // Strip known payment-processor prefix: "SQ *COFFEE SHOP" → "COFFEE SHOP".
+  // Match: PREFIX (letters, optional whitespace) `*` (optional whitespace) BODY.
+  const procMatch = norm.match(/^([A-Z]+)\s*\*\s*(.+)$/);
+  if (procMatch && PROCESSOR_PREFIXES.has(procMatch[1])) {
+    norm = procMatch[2].trim();
+    if (!norm) return '';
+  }
+
+  // Normalize internal hyphens between digit and letter so "7-ELEVEN" and
+  // "7 ELEVEN" produce the same stem.
+  const normSpaced = norm.replace(/(\d)-(?=\p{L})/gu, '$1 ');
+
+  const tokens = normSpaced.split(/\s+/);
+  const first = tokens[0] || '';
+  // Drop any trailing-after-`*` payload from the first token (Amazon.com*ID).
   const beforeStar = first.split('*')[0];
-  // Strip trailing non-letter bytes (digits, punct) but preserve dots
-  // mid-token. Use Unicode-aware letter class.
-  return beforeStar.replace(/[^\p{L}.]+$/u, '').replace(/\.+$/, '');
+  const trimmed = trimToken(beforeStar);
+
+  if (trimmed) {
+    // Common case: clean leading word.
+    return trimmed;
+  }
+
+  // Fallback for purely-numeric first tokens: take first 2 tokens, strip
+  // trailing #N or pure-digit token.
+  if (tokens.length >= 2) {
+    // Build first-2-token stem, then drop trailing "#N" / digits.
+    const head = tokens.slice(0, 2).join(' ').replace(/\s*#?\d+\s*$/, '').trim();
+    return head;
+  }
+
+  return '';
 }
 
 /** Internal: build the stats key. Exposed for tests. */

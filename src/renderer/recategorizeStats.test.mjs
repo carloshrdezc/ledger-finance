@@ -299,3 +299,73 @@ describe('integration: realistic re-categorization flow', () => {
     expect(evicted).toEqual({});
   });
 });
+
+describe('merchantStem — payment-processor prefixes (round 4)', () => {
+  // The round-3 review caught that "SQ *COFFEE SHOP" and "SQ *WINE BAR"
+  // both collapsed to "SQ", which would surface a rule that miscategorizes
+  // every future Square-processed charge. The fix must look past the
+  // processor prefix when one is present.
+  test('SQ * prefix is stripped, real merchant is used', () => {
+    expect(merchantStem('SQ *COFFEE SHOP')).toBe('COFFEE');
+    expect(merchantStem('SQ *WINE BAR')).toBe('WINE');
+    expect(merchantStem('SQ *COFFEE SHOP')).not.toBe(merchantStem('SQ *WINE BAR'));
+  });
+
+  test('TST* (Toast) prefix is stripped', () => {
+    expect(merchantStem('TST* CHIPOTLE 1234')).toBe('CHIPOTLE');
+    expect(merchantStem('TST* OLIVE GARDEN')).toBe('OLIVE');
+    expect(merchantStem('TST* CHIPOTLE 1234')).not.toBe(merchantStem('TST* OLIVE GARDEN'));
+  });
+
+  test('PAYPAL * prefix is stripped', () => {
+    expect(merchantStem('PAYPAL *NETFLIX')).toBe('NETFLIX');
+    expect(merchantStem('PAYPAL *SPOTIFY')).toBe('SPOTIFY');
+    expect(merchantStem('PP*UBER')).toBe('UBER');
+  });
+
+  test('IZ* (Toast variant) and STRIPE* prefixes are stripped', () => {
+    expect(merchantStem('IZ *LITTLE BAR')).toBe('LITTLE');
+    expect(merchantStem('STRIPE *SUBSTACK')).toBe('SUBSTACK');
+  });
+
+  test('AMZN* prefix is stripped (Amazon marketplace)', () => {
+    expect(merchantStem('AMZN MKTP US*M91X23')).toBe('AMAZON.COM_MKTP');
+    // Special-cased: AMZN MKTP collapses to a stable AMAZON-family stem
+    // because the merchant is always "Amazon Marketplace", not the seller.
+  });
+
+  test('non-processor leading words are preserved (no false stripping)', () => {
+    // Real merchants whose first word happens to be short shouldn't be stripped.
+    // Note: single-token stems are intentional — `STARBUCKS COFFEE #1234`
+    // also returns just `STARBUCKS`. The toast pattern `STEM*` then matches
+    // the full bank name. The point here is: TJ alone doesn't match a
+    // processor prefix, so the algorithm doesn't try to look past it.
+    expect(merchantStem('TJ MAXX #999')).toBe('TJ');
+    expect(merchantStem('AT&T MOBILITY')).toBe('AT&T');
+    // These should NOT be empty (would happen if processor stripping kicked in).
+    expect(merchantStem('TJ MAXX #999')).not.toBe('');
+    expect(merchantStem('AT&T MOBILITY')).not.toBe('');
+  });
+});
+
+describe('merchantStem — numeric-prefixed merchants (round 4)', () => {
+  // Round 3 caught that "5 GUYS" returned empty because the first token
+  // is purely digits and stripped to nothing. Real merchants legitimately
+  // start with numbers and must produce stable stems.
+  test('numeric first token falls back to multi-word stem', () => {
+    expect(merchantStem('5 GUYS')).toBe('5 GUYS');
+    expect(merchantStem('5 GUYS #123')).toBe('5 GUYS');
+    expect(merchantStem('100 MONTADITOS')).toBe('100 MONTADITOS');
+    expect(merchantStem('7 ELEVEN #4521')).toBe('7 ELEVEN');
+  });
+
+  test('hyphenated and spaced 7-eleven variants collapse', () => {
+    expect(merchantStem('7-ELEVEN #1234')).toBe(merchantStem('7 ELEVEN #5678'));
+  });
+
+  test('purely numeric input still returns empty (no false signal)', () => {
+    expect(merchantStem('1234')).toBe('');
+    expect(merchantStem('#9999')).toBe('');
+    expect(merchantStem('   42   ')).toBe('');
+  });
+});
