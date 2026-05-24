@@ -100,11 +100,25 @@ export function merchantStem(name) {
   }
 
   // Fallback for purely-numeric first tokens: take first 2 tokens, strip
-  // trailing #N or pure-digit token.
+  // trailing "#N" / digit-only suffix AND trailing "-WORD" suffix so
+  // store-id variants collapse:
+  //   "7 ELEVEN-DOWNTOWN" → "7 ELEVEN"
+  //   "7 ELEVEN #4521"    → "7 ELEVEN"
+  // Same key, same recategorize-stats bucket. The trade-off: a brand
+  // whose second token genuinely contains a hyphen (e.g. "99 RANCH-MARKET")
+  // would get truncated to "99 RANCH" — but bank statements rarely use
+  // hyphens that way, and the alternative (no collapse) silently
+  // fragments stats which is worse.
   if (tokens.length >= 2) {
-    // Build first-2-token stem, then drop trailing "#N" / digits.
-    const head = tokens.slice(0, 2).join(' ').replace(/\s*#?\d+\s*$/, '').trim();
-    return head;
+    let head = tokens.slice(0, 2).join(' ');
+    // Strip trailing "#N" / pure-digit tail.
+    head = head.replace(/\s*#?\d+\s*$/, '');
+    // Strip trailing "-WORD" suffix on the second token (store id / city marker).
+    head = head.replace(/-[\p{L}\d]+\s*$/u, '');
+    // Final cleanup: strip dangling trailing hyphen (left over from
+    // "-#N" patterns or empty-trailer inputs like "7 ELEVEN-").
+    head = head.replace(/-+\s*$/, '');
+    return head.trim();
   }
 
   return '';

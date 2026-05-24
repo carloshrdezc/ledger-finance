@@ -369,3 +369,62 @@ describe('merchantStem — numeric-prefixed merchants (round 4)', () => {
     expect(merchantStem('   42   ')).toBe('');
   });
 });
+
+describe('merchantStem — round 5: tighten remaining edges', () => {
+  // Round 4 left two minor gaps. This round closes the second (hyphenated
+  // store-id collapse) and explicitly documents the first (space-form
+  // processor prefix) as out of scope for safety reasons.
+
+  test('hyphenated store-id collapses with #N store-id variant', () => {
+    // Both forms appear on real bank statements for the same store.
+    // They MUST produce the same key or recategorize stats fragments.
+    expect(merchantStem('7 ELEVEN-DOWNTOWN')).toBe(merchantStem('7 ELEVEN #4521'));
+    expect(merchantStem('5 GUYS-AIRPORT')).toBe(merchantStem('5 GUYS #99'));
+    expect(merchantStem('100 MONTADITOS-MADRID')).toBe(merchantStem('100 MONTADITOS'));
+  });
+
+  test('hyphenated store-id collapse preserves the brand stem', () => {
+    expect(merchantStem('7 ELEVEN-DOWNTOWN')).toBe('7 ELEVEN');
+    expect(merchantStem('5 GUYS-AIRPORT')).toBe('5 GUYS');
+    expect(merchantStem('100 MONTADITOS-MADRID')).toBe('100 MONTADITOS');
+  });
+
+  test('three-word numeric-prefix names use first 2 tokens (consistency)', () => {
+    // 24 HOUR FITNESS is a real merchant. The 2-token fallback gives
+    // "24 HOUR" which is broad but stable — every variant at the same
+    // chain collapses together. Locking this behavior so future edits
+    // don't accidentally narrow it.
+    expect(merchantStem('24 HOUR FITNESS')).toBe('24 HOUR');
+    expect(merchantStem('24 HOUR FITNESS #99')).toBe('24 HOUR');
+  });
+
+  test('space-form processor prefixes are intentionally NOT stripped', () => {
+    // Documentation-as-test. "SQ MERCHANT" (no asterisk) cannot be
+    // distinguished from a real merchant whose first word happens to be
+    // "SQ" (e.g. "SQ FOOTAGE STORAGE"). Stripping aggressively would
+    // re-introduce the round-3 collision class in reverse.
+    // Asterisk form ("SQ *MERCHANT") IS stripped — covered by other tests.
+    expect(merchantStem('SQ MERCHANT')).toBe('SQ');
+    expect(merchantStem('PAYPAL SOMETHING')).toBe('PAYPAL');
+    // But asterisk form still works:
+    expect(merchantStem('SQ *MERCHANT')).toBe('MERCHANT');
+    expect(merchantStem('PAYPAL *SOMETHING')).toBe('SOMETHING');
+  });
+});
+
+describe('merchantStem — round 5 self-review fixes: dangling-hyphen cleanup', () => {
+  // Self-review of the round-5 hyphen-collapse fix surfaced these dangling
+  // edges. The store-id strip removes `-DOWNTOWN` cleanly but if the input
+  // has a trailing hyphen with no word, or a hyphen-then-#N pattern, the
+  // intermediate result keeps an orphan hyphen.
+  test('trailing dangling hyphen is stripped', () => {
+    expect(merchantStem('7 ELEVEN-')).toBe('7 ELEVEN');
+    expect(merchantStem('7 ELEVEN- ')).toBe('7 ELEVEN');
+    expect(merchantStem('7 ELEVEN-#4521')).toBe('7 ELEVEN');
+  });
+
+  test('hyphen-then-digit-suffix collapses cleanly', () => {
+    expect(merchantStem('5 GUYS-99')).toBe('5 GUYS');
+    expect(merchantStem('5 GUYS-99-AB')).toBe('5 GUYS');
+  });
+});
