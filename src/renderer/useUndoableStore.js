@@ -1,6 +1,7 @@
 import React from 'react';
 import { useStore } from './store';
 import { useUndo } from './UndoContext';
+import { extractRecategorizationEvents } from './recategorizeStats.mjs';
 
 /**
  * Drop-in replacement for useStore() that wraps the 10 destructive setters
@@ -226,6 +227,10 @@ export function useUndoableStore() {
       .map(t => {
         const snap = { id: t.id };
         for (const k of Object.keys(patch)) snap[k] = t[k];
+        // Always capture cat+path for CAR-182 re-cat detection, even if the
+        // patch only touches one of them — we need both to detect a real change.
+        snap.cat = t.cat;
+        snap.path = t.path;
         return snap;
       });
     if (before.length === 0) return;
@@ -237,10 +242,53 @@ export function useUndoableStore() {
       do:   () => store.updateTxs(ids, patch),
       undo: () => store.setTransactions(prev => {
         const byId = Object.fromEntries(before.map(s => [s.id, s]));
-        return prev.map(tx => byId[tx.id] ? { ...tx, ...byId[tx.id] } : tx);
+        // Restore only the keys the original patch touched (don't clobber
+        // cat/path back if they weren't in the patch).
+        const restoreKeys = Object.keys(patch);
+        return prev.map(tx => {
+          const snap = byId[tx.id];
+          if (!snap) return tx;
+          const restored = { ...tx };
+          for (const k of restoreKeys) restored[k] = snap[k];
+          return restored;
+        });
       }),
     });
+    // CAR-182: count any (merchant, newPath) re-categorizations in this batch.
+    if (patch.cat || Array.isArray(patch.path)) {
+      const idToTx = new Map(store.allTransactions.filter(t => idSet.has(t.id)).map(t => [t.id, t]));
+      const events = extractRecategorizationEvents(before, idToTx, patch);
+      for (const ev of events) {
+        store.recordRecategorize(ev.merchantKey, ev.newPath, ev.txId);
+      }
+    }
   }, [store, stack]);
+
+  // CAR-182: thin wrapper around store.updateTx so single-tx category edits
+  // (e.g. inline editing in the add modal) also feed the recategorize counter.
+  // Not undoable here — the existing flow doesn't track single-tx edits in
+  // the undo stack, and adding that is out of scope. The wrapper purely adds
+  // the side-channel tracking and delegates the actual write to store.updateTx.
+  const updateTx = React.useCallback((id, changes) => {
+    if (!id || !changes) {
+      store.updateTx(id, changes);
+      return;
+    }
+    if (changes.cat || Array.isArray(changes.path)) {
+      const tx = store.allTransactions.find(t => t.id === id);
+      if (tx) {
+        const before = [{ id, cat: tx.cat, path: tx.path }];
+        const idToTx = new Map([[id, tx]]);
+        const events = extractRecategorizationEvents(before, idToTx, changes);
+        store.updateTx(id, changes);
+        for (const ev of events) {
+          store.recordRecategorize(ev.merchantKey, ev.newPath, ev.txId);
+        }
+        return;
+      }
+    }
+    store.updateTx(id, changes);
+  }, [store]);
 
   const convertToTransfer = React.useCallback((aId, bId, params) => {
     const a = store.allTransactions.find(t => t.id === aId);
@@ -304,6 +352,8 @@ export function useUndoableStore() {
     removeHolding,
     // CAR-82 bulk wrappers
     deleteTxs, hideTxs, updateTxs, convertToTransfer,
+    // CAR-182 single-tx wrapper that feeds recategorize counter
+    updateTx,
     // CAR-80 per-tx bulk update
     updateTxsIndividually,
   };
