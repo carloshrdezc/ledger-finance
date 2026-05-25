@@ -28,17 +28,92 @@ import {
   updateTxsIndividuallyInArray,
 } from './bulkOps.mjs';
 
+const MIGRATED_TO_DISK_KEY = 'ledger:_migratedToDisk';
+const LEDGER_PREFIX = 'ledger:';
+const PERSIST_DEBOUNCE_MS = 250;
+const PersistenceCtx = React.createContext(null);
+
+function isPlainObject(value) {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function readLedgerStorageSnapshot() {
+  const snapshot = {};
+  try {
+    if (typeof localStorage === 'undefined') return snapshot;
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (!key || !key.startsWith(LEDGER_PREFIX)) continue;
+      const raw = localStorage.getItem(key);
+      if (raw === null) continue;
+      try {
+        snapshot[key] = JSON.parse(raw);
+      } catch {
+        // Skip malformed legacy entries; the hook falls back to defaults.
+      }
+    }
+  } catch {
+    // localStorage unavailable (private browsing, denied permissions, etc.).
+  }
+  return snapshot;
+}
+
+function writeLedgerStorageKey(key, value) {
+  try {
+    if (typeof localStorage === 'undefined') return;
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // Keep the in-memory snapshot authoritative.
+  }
+}
+
+function writeLedgerStorageSnapshot(snapshot) {
+  try {
+    if (typeof localStorage === 'undefined') return;
+    const next = isPlainObject(snapshot) ? snapshot : {};
+    // Remove ledger:* keys that are no longer in the snapshot so a stale
+    // value can't resurface if a future disk read fails and the code falls
+    // back to the localStorage mirror.
+    const toRemove = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (!key || !key.startsWith(LEDGER_PREFIX)) continue;
+      if (!Object.prototype.hasOwnProperty.call(next, key)) toRemove.push(key);
+    }
+    for (const key of toRemove) localStorage.removeItem(key);
+    for (const [key, value] of Object.entries(next)) {
+      if (!key.startsWith(LEDGER_PREFIX)) continue;
+      localStorage.setItem(key, JSON.stringify(value));
+    }
+  } catch {
+    // Best-effort mirror only.
+  }
+}
+
+function getSnapshotValue(snapshot, key, def) {
+  return Object.prototype.hasOwnProperty.call(snapshot || {}, key) ? snapshot[key] : def;
+}
+
+function resolveBootSnapshot(diskState) {
+  const disk = isPlainObject(diskState) ? diskState : {};
+  if (disk[MIGRATED_TO_DISK_KEY] === true) {
+    return { snapshot: disk, needsWrite: false };
+  }
+  if (Object.keys(disk).length > 0) {
+    return { snapshot: { ...disk, [MIGRATED_TO_DISK_KEY]: true }, needsWrite: true };
+  }
+  return { snapshot: { ...readLedgerStorageSnapshot(), [MIGRATED_TO_DISK_KEY]: true }, needsWrite: true };
+}
+
 function useLS(key, def) {
-  const [v, setV] = React.useState(() => {
-    try { const s = localStorage.getItem(key); return s !== null ? JSON.parse(s) : def; }
-    catch { return def; }
-  });
-  const set = React.useCallback(u => setV(prev => {
-    const next = typeof u === 'function' ? u(prev) : u;
-    try { localStorage.setItem(key, JSON.stringify(next)); } catch {}
-    return next;
-  }), [key]);
-  return [v, set];
+  // StoreProvider always wraps its children in PersistenceCtx.Provider, so
+  // `ctx` is never null here. The browser-preview path (no Electron `ledgerDB`)
+  // is handled inside StoreProvider by skipping the disk write; the
+  // synchronous `localStorage` mirror still keeps state durable.
+  const ctx = React.useContext(PersistenceCtx);
+  const value = getSnapshotValue(ctx.snapshot, key, def);
+  const set = React.useCallback(u => ctx.setKey(key, u, def), [ctx, key, def]);
+  return [value, set];
 }
 
 function migrateTransactions(txs) {
@@ -104,6 +179,136 @@ export const StoreCtx = React.createContext(null);
 })();
 
 export function StoreProvider({ children }) {
+  const [snapshot, setSnapshot] = React.useState(() => readLedgerStorageSnapshot());
+  const snapshotRef = React.useRef(snapshot);
+  const writeTimerRef = React.useRef(null);
+  const ledgerDB = typeof window !== 'undefined' ? window.ledgerDB : undefined;
+
+  React.useEffect(() => {
+    snapshotRef.current = snapshot;
+  }, [snapshot]);
+
+  // CAR-91: write the latest snapshot to disk *now*, cancelling the pending
+  // debounce timer if any. Called from `pagehide` so edits made within
+  // 250 ms of quitting can't be lost. No-ops when no write is pending.
+  const flushPendingWrite = React.useCallback(() => {
+    if (!ledgerDB) return Promise.resolve();
+    if (!writeTimerRef.current) return Promise.resolve();
+    clearTimeout(writeTimerRef.current);
+    writeTimerRef.current = null;
+    return ledgerDB.write(snapshotRef.current).catch(() => {});
+  }, [ledgerDB]);
+
+  const setKey = React.useCallback((key, updater, def) => {
+    setSnapshot(prev => {
+      const prevValue = getSnapshotValue(prev, key, def);
+      const nextValue = typeof updater === 'function' ? updater(prevValue) : updater;
+      const nextSnapshot = { ...prev, [key]: nextValue };
+      snapshotRef.current = nextSnapshot;
+      writeLedgerStorageKey(key, nextValue);
+      if (ledgerDB) {
+        if (writeTimerRef.current) clearTimeout(writeTimerRef.current);
+        writeTimerRef.current = setTimeout(() => {
+          writeTimerRef.current = null;
+          void ledgerDB.write(snapshotRef.current).catch(() => {});
+        }, PERSIST_DEBOUNCE_MS);
+      }
+      return nextSnapshot;
+    });
+  }, [ledgerDB]);
+
+  React.useEffect(() => {
+    if (!ledgerDB) return;
+    let cancelled = false;
+    const initialSnapshot = snapshotRef.current;
+    void (async () => {
+      try {
+        const diskState = await ledgerDB.read();
+        if (cancelled) return;
+        const { snapshot: bootSnapshot, needsWrite } = resolveBootSnapshot(diskState);
+        const currentSnapshot = snapshotRef.current;
+        const userChanges = {};
+        for (const [key, value] of Object.entries(currentSnapshot)) {
+          if (initialSnapshot[key] !== value) userChanges[key] = value;
+        }
+        const hydratedSnapshot = Object.keys(userChanges).length > 0
+          ? { ...bootSnapshot, ...userChanges }
+          : bootSnapshot;
+        if (needsWrite || Object.keys(userChanges).length > 0) {
+          await ledgerDB.write(hydratedSnapshot);
+        }
+        if (!cancelled) {
+          snapshotRef.current = hydratedSnapshot;
+          writeLedgerStorageSnapshot(hydratedSnapshot);
+          setSnapshot(hydratedSnapshot);
+        }
+      } catch {
+        // Keep the browser/localStorage snapshot if disk hydration fails.
+      }
+    })();
+    return () => {
+      cancelled = true;
+      // Note: we do NOT cancel the pending write here without flushing —
+      // see the pagehide effect below for the quit-time durability handler.
+      // Unmount during normal use (route change, etc.) is rare; if it does
+      // happen the next setKey will reschedule a write of the same data.
+    };
+  }, [ledgerDB]);
+
+  // CAR-91: durability on quit. Two coordinated paths:
+  //
+  //   1. `window.__ledgerFlush` (main → renderer round-trip). Main's
+  //      `before-quit` handler calls this via `executeJavaScript` and awaits
+  //      the returned promise BEFORE draining its own queue. This closes the
+  //      ordering race where a debounced renderer write hadn't yet reached
+  //      main's queue when `ledgerStore.flush()` was called — without the
+  //      round-trip, `pagehide` fired *after* `before-quit` already returned
+  //      and the write would race process exit.
+  //
+  //   2. `pagehide` (renderer-only). On macOS, closing the window does not
+  //      quit the app (`window-all-closed` is a no-op there) — the page is
+  //      torn down but main keeps running, so `before-quit` never fires.
+  //      `pagehide` covers that path. It's also belt-and-suspenders for any
+  //      other shutdown ordering quirk.
+  //
+  // The function returns a single promise that resolves only after both
+  // (a) the renderer's pending debounced write has been forwarded to main
+  // and (b) main has acknowledged it via the `ledgerDB.write` IPC.
+  React.useEffect(() => {
+    if (!ledgerDB) return;
+    if (typeof window === 'undefined') return;
+
+    const doFlush = async () => {
+      const pending = flushPendingWrite();
+      try { await pending; } catch { /* swallow — best-effort */ }
+      try { await ledgerDB.flush(); } catch { /* swallow */ }
+    };
+
+    // (1) main → renderer round-trip handle.
+    window.__ledgerFlush = doFlush;
+
+    // (2) renderer-side pagehide.
+    const handler = () => { void doFlush(); };
+    window.addEventListener('pagehide', handler);
+
+    return () => {
+      window.removeEventListener('pagehide', handler);
+      if (window.__ledgerFlush === doFlush) {
+        delete window.__ledgerFlush;
+      }
+    };
+  }, [ledgerDB, flushPendingWrite]);
+
+  const persistenceValue = React.useMemo(() => ({ snapshot, setKey }), [snapshot, setKey]);
+
+  return (
+    <PersistenceCtx.Provider value={persistenceValue}>
+      <StoreProviderImpl>{children}</StoreProviderImpl>
+    </PersistenceCtx.Provider>
+  );
+}
+
+function StoreProviderImpl({ children }) {
   const [txs, setTxs]         = useLS('ledger:tx',      []);
   const [catTree, setCatTree]  = useLS('ledger:cats',    DEFAULT_CAT_TREE);
   const [budgets, setBudgets]  = useLS('ledger:budgets', []);
