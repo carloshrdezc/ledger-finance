@@ -158,4 +158,65 @@ describe('store persistence', () => {
     expect(localStorage.getItem('ledger:keep')).toBe(JSON.stringify('still-here'));
     expect(localStorage.getItem('not-ledger')).toBe('untouched');
   });
+
+  // CAR-91 review-round-2 fix: the ordering race on quit. The first attempt
+  // relied on `pagehide` to fire-and-forget a write, but `pagehide` happens
+  // *after* main's `before-quit` handler resolves — so `ledgerStore.flush()`
+  // drained a queue that didn't yet contain the pending edit, and the IPC
+  // raced process exit. The fix exposes `window.__ledgerFlush` which main
+  // calls via `executeJavaScript` and AWAITS before draining its queue.
+  //
+  // This test is the renderer half of the contract: __ledgerFlush must
+  // resolve only after the pending debounced write's IPC has completed.
+  // The main-side test would require an Electron harness; here we lock the
+  // promise-completion contract with a controllable IPC mock.
+  it('exposes window.__ledgerFlush that resolves only after the pending write IPC completes', async () => {
+    let resolveWrite;
+    const writePromise = new Promise(resolve => { resolveWrite = resolve; });
+    const write = vi.fn(() => writePromise);
+    window.ledgerDB = makeLedgerDB({
+      read: vi.fn().mockResolvedValue({ 'ledger:_migratedToDisk': true }),
+      write,
+    });
+
+    const { StoreProvider, useStore } = await import('./store.jsx');
+    let store;
+
+    function Probe() {
+      store = useStore();
+      return null;
+    }
+
+    render(
+      <StoreProvider>
+        <Probe />
+      </StoreProvider>,
+    );
+
+    await waitFor(() => expect(window.ledgerDB.read).toHaveBeenCalled());
+    await waitFor(() => expect(typeof window.__ledgerFlush).toBe('function'));
+
+    // Make a debounced edit, then trigger __ledgerFlush. The returned
+    // promise must NOT resolve until we resolve the underlying IPC write —
+    // that's the whole point of the round-trip from main's before-quit.
+    act(() => { store.setCurrency('CHF'); });
+
+    let flushResolved = false;
+    const flushPromise = window.__ledgerFlush().then(() => { flushResolved = true; });
+
+    // Yield so any synchronous setup runs, but the IPC is still pending.
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(flushResolved).toBe(false);
+
+    // The pending write must have been forwarded immediately (debounce
+    // bypassed) — the timer should be cancelled.
+    const lastWrite = write.mock.calls.at(-1);
+    expect(lastWrite[0]['ledger:currency']).toBe('CHF');
+
+    // Resolve the IPC; only then __ledgerFlush should resolve.
+    resolveWrite();
+    await flushPromise;
+    expect(flushResolved).toBe(true);
+  });
 });

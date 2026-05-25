@@ -255,29 +255,48 @@ export function StoreProvider({ children }) {
     };
   }, [ledgerDB]);
 
-  // CAR-91: durability on quit. The pre-disk implementation wrote to
-  // localStorage synchronously on every change. Disk writes are debounced
-  // (250 ms) and disk is authoritative on boot, so an edit made just before
-  // quit could otherwise be lost forever. Two-pronged defense:
-  //   1. `pagehide` (renderer): fire any pending write and ask main to flush
-  //      its queue before the page is torn down.
-  //   2. `before-quit` (main, see src/main/index.js): preventDefault, await
-  //      `ledgerStore.flush()`, then re-quit.
-  // pagehide handles the renderer side cleanly; before-quit covers the
-  // cmd/ctrl-Q path where the renderer may not get enough wall time.
+  // CAR-91: durability on quit. Two coordinated paths:
+  //
+  //   1. `window.__ledgerFlush` (main → renderer round-trip). Main's
+  //      `before-quit` handler calls this via `executeJavaScript` and awaits
+  //      the returned promise BEFORE draining its own queue. This closes the
+  //      ordering race where a debounced renderer write hadn't yet reached
+  //      main's queue when `ledgerStore.flush()` was called — without the
+  //      round-trip, `pagehide` fired *after* `before-quit` already returned
+  //      and the write would race process exit.
+  //
+  //   2. `pagehide` (renderer-only). On macOS, closing the window does not
+  //      quit the app (`window-all-closed` is a no-op there) — the page is
+  //      torn down but main keeps running, so `before-quit` never fires.
+  //      `pagehide` covers that path. It's also belt-and-suspenders for any
+  //      other shutdown ordering quirk.
+  //
+  // The function returns a single promise that resolves only after both
+  // (a) the renderer's pending debounced write has been forwarded to main
+  // and (b) main has acknowledged it via the `ledgerDB.write` IPC.
   React.useEffect(() => {
     if (!ledgerDB) return;
     if (typeof window === 'undefined') return;
-    const handler = () => {
-      // Fire-and-forget: the renderer may not get a chance to await this,
-      // but the call into main has already started by the time the function
-      // returns and main's `before-quit` will block on `ledgerStore.flush()`
-      // until the queued write completes.
-      void flushPendingWrite();
-      try { void ledgerDB.flush(); } catch { /* ignore */ }
+
+    const doFlush = async () => {
+      const pending = flushPendingWrite();
+      try { await pending; } catch { /* swallow — best-effort */ }
+      try { await ledgerDB.flush(); } catch { /* swallow */ }
     };
+
+    // (1) main → renderer round-trip handle.
+    window.__ledgerFlush = doFlush;
+
+    // (2) renderer-side pagehide.
+    const handler = () => { void doFlush(); };
     window.addEventListener('pagehide', handler);
-    return () => window.removeEventListener('pagehide', handler);
+
+    return () => {
+      window.removeEventListener('pagehide', handler);
+      if (window.__ledgerFlush === doFlush) {
+        delete window.__ledgerFlush;
+      }
+    };
   }, [ledgerDB, flushPendingWrite]);
 
   const persistenceValue = React.useMemo(() => ({ snapshot, setKey }), [snapshot, setKey]);

@@ -45,17 +45,38 @@ app.whenReady().then(async () => {
   // pagehide may race with process shutdown.
   ipcMain.handle('ledger-db:flush', () => ledgerStore.flush());
 
-  // CAR-91: drain pending writes before quitting. Without this, a debounced
-  // write scheduled in the renderer (≤250 ms before quit) would be torn down
-  // mid-flight and the edit would be permanently lost on next launch (disk
-  // is authoritative). We allow `before-quit` once, await the flush, then
-  // re-quit cleanly.
+  // CAR-91: durability on quit. Closes the ordering race where a debounced
+  // renderer edit hadn't yet reached main's queue at the moment we drained
+  // it. We round-trip into each renderer first (`window.__ledgerFlush`
+  // resolves only after the renderer's pending write IPC has completed),
+  // then drain main's queue, then re-quit. Without the renderer round-trip,
+  // an edit made <250 ms before Cmd/Ctrl-Q would race process exit.
   let quitting = false;
   app.on('before-quit', event => {
     if (quitting) return;
     event.preventDefault();
     quitting = true;
-    ledgerStore.flush().then(() => app.quit(), () => app.quit());
+    (async () => {
+      try {
+        await Promise.all(
+          BrowserWindow.getAllWindows().map(async win => {
+            if (win.isDestroyed() || win.webContents.isDestroyed()) return;
+            try {
+              await win.webContents.executeJavaScript(
+                '(typeof window !== "undefined" && typeof window.__ledgerFlush === "function") ? window.__ledgerFlush() : null',
+                true,
+              );
+            } catch {
+              // Renderer may already be tearing down; main's flush below
+              // still drains anything already in the queue.
+            }
+          }),
+        );
+        await ledgerStore.flush();
+      } finally {
+        app.quit();
+      }
+    })();
   });
 
   createWindow();
