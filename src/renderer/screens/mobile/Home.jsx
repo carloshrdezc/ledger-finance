@@ -140,14 +140,14 @@ export default function Home({ t, onAcct, onAdd, onViewAll, onInsight }) {
           list lives in AlertsHub; this is a teaser. Hidden when empty. */}
       {insightRows.length > 0 && (
         <div style={{ padding: '14px 0 0' }}>
-          <ALabel>[02B] INSIGHTS · {insightRows.length}</ALabel>
+          <ALabel>[02B] WEEKLY INSIGHTS · {insightRows.length}</ALabel>
           {insightRows.slice(0, 2).map(insight => (
             <button key={insight.id} onClick={() => onInsight && onInsight(insight)} style={{ all: 'unset', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', width: '100%', padding: '9px 0', borderBottom: '1px solid ' + A.rule2, fontSize: 12, gap: 10 }}>
               <div style={{ minWidth: 0 }}>
                 <div style={{ color: insight.severity === 'high' ? A.neg : insight.severity === 'medium' ? t.accent : A.muted, fontSize: 9, letterSpacing: 1 }}>{insight.severity.toUpperCase()}</div>
                 <div style={{ marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{insight.title}</div>
               </div>
-              <div style={{ fontSize: 10, color: t.accent, letterSpacing: 1, alignSelf: 'center', fontVariantNumeric: 'tabular-nums' }}>{typeof insight.metric === 'number' ? fmtMoney(insight.metric, t.currency, t.decimals) : insight.metric}</div>
+              <div style={{ fontSize: 10, color: t.accent, letterSpacing: 1, alignSelf: 'center', fontVariantNumeric: 'tabular-nums' }}>{insight.metric}</div>
             </button>
           ))}
         </div>

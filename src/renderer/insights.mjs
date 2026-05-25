@@ -283,7 +283,7 @@ export function detectInactiveSubscriptions(recurringRules, transactions, todayI
       severity: 'medium',
       title: labels[0],
       detail: 'NO MATCHING TRANSACTION IN LAST 60 DAYS',
-      metric: 60,
+      metric: '60D',
       action: 'REVIEW',
       route: 'recurring',
       routeParams: { ruleId },

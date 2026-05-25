@@ -127,7 +127,7 @@ export default function WebAlerts({ t, onNavigate, onAdd }) {
               <div style={{ fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{insight.title}</div>
               <div style={{ fontSize: 10, color: A.muted, letterSpacing: 0.8, marginTop: 3 }}>{insight.detail}</div>
             </button>
-            <div style={{ textAlign: 'right', fontSize: 12, fontVariantNumeric: 'tabular-nums' }}>{typeof insight.metric === 'number' ? fmtMoney(insight.metric, t.currency, t.decimals) : insight.metric}</div>
+            <div style={{ textAlign: 'right', fontSize: 12, fontVariantNumeric: 'tabular-nums' }}>{insight.metric}</div>
             <button onClick={() => goToInsight(insight)} style={{ all: 'unset', cursor: 'pointer', textAlign: 'right', fontSize: 10, letterSpacing: 1.2, color: t.accent }}>
               {insight.action}
             </button>

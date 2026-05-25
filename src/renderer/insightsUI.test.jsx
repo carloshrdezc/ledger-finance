@@ -164,9 +164,9 @@ describe('CAR-217 · Mobile Home insights teaser', () => {
     renderWithStore(<Home t={THEME} onAcct={() => {}} onAdd={() => {}} onViewAll={() => {}} />, {
       insightRows: [],
     });
-    // No "[02B] INSIGHTS" header should render — this is intentional. We
+    // No "[02B] WEEKLY INSIGHTS" header should render — this is intentional. We
     // don't want to clutter Home with a "no insights" empty-state on mobile.
-    expect(screen.queryByText(/\[02B\] INSIGHTS/)).toBeNull();
+    expect(screen.queryByText(/\[02B\] WEEKLY INSIGHTS/)).toBeNull();
   });
 
   it('renders top 2 insights and forwards the row to onInsight on tap', () => {
@@ -184,7 +184,7 @@ describe('CAR-217 · Mobile Home insights teaser', () => {
       { insightRows: [spike, sub, makeSpike({ id: 'insight:spike:dining:2026-W21', title: 'DINING SPIKE' })] },
     );
 
-    expect(screen.getByText(/\[02B\] INSIGHTS · 3/)).toBeTruthy();
+    expect(screen.getByText(/\[02B\] WEEKLY INSIGHTS · 3/)).toBeTruthy();
     expect(screen.getByText('FOOD SPEND SPIKE')).toBeTruthy();
     expect(screen.getByText('NETFLIX UNUSED')).toBeTruthy();
     // Third insight should NOT render — Home only shows top 2.
@@ -248,6 +248,12 @@ describe('insightRows gate', () => {
   it('returns [] when isAppEmpty is true (fresh install)', async () => {
     // Reset localStorage so isAppEmptyFor returns true.
     window.localStorage.clear();
+    // CAR-217: vi.resetModules() forces the dynamic import below to re-evaluate
+    // ./store, so its useLS hooks read the *cleared* localStorage instead of any
+    // values cached from a previous import in this test file. Without this the
+    // module graph is hot from earlier tests in the same file and the store
+    // closure would already hold pre-clear data.
+    vi.resetModules();
     const { StoreProvider, useStore } = await import('./store');
 
     let captured = null;

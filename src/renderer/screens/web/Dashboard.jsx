@@ -163,11 +163,11 @@ export default function Dashboard({ t, onNavigate, onAdd }) {
                   <div style={{ fontSize: 10, color: A.muted, letterSpacing: 0.8, marginTop: 2 }}>{insight.detail}</div>
                 </button>
                 <div style={{ textAlign: 'right', fontSize: 11, color: t.accent, letterSpacing: 1, fontVariantNumeric: 'tabular-nums' }}>
-                  {typeof insight.metric === 'number' ? fmtMoney(insight.metric, t.currency, t.decimals) : insight.metric}
+                  {insight.metric}
                 </div>
-                <button onClick={() => goToInsight(insight)} style={{ all: 'unset', cursor: 'pointer', textAlign: 'right', fontSize: 9, letterSpacing: 1.2, color: t.accent }}>
+                <div style={{ textAlign: 'right', fontSize: 9, letterSpacing: 1.2, color: t.accent }} aria-hidden="true">
                   {insight.action}
-                </button>
+                </div>
                 <button onClick={() => dismissInsight(insight.id)} style={{ all: 'unset', cursor: 'pointer', textAlign: 'right', fontSize: 9, letterSpacing: 1.2, color: A.muted }}>DISMISS</button>
               </div>
             ))}
