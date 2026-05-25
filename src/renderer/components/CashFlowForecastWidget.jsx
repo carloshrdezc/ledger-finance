@@ -1,8 +1,8 @@
 import React from 'react';
 import { A } from '../theme';
-import { ALabel, AsciiSpark } from './Shared';
+import { ALabel, AsciiSpark, scaleSparkPoints } from './Shared';
 import { useStore } from '../store';
-import { projectBalances } from '../forecast.mjs';
+import { projectBalances, isLiquidAccount } from '../forecast.mjs';
 import { compactForecastSeries } from '../forecastSeries.mjs';
 import { fmtMoney, fmtSigned, dayLabel } from '../data';
 
@@ -44,9 +44,13 @@ export default function CashFlowForecastWidget({ t, width = 780, height = 160 })
   // helper already filters to liquid accounts (CHK / SAV) and skips
   // non-USD until FX rules are wired up. forecastLiquidAccountIds, when
   // non-empty, narrows further via compactForecastSeries.
+  const liquidAccounts = React.useMemo(
+    () => (accountsWithBalance || []).filter(isLiquidAccount),
+    [accountsWithBalance],
+  );
   const rows = React.useMemo(
-    () => projectBalances(accountsWithBalance, transactions, bills, todayIso, horizon.days),
-    [accountsWithBalance, transactions, bills, todayIso, horizon.days],
+    () => projectBalances(liquidAccounts, transactions, bills, todayIso, horizon.days),
+    [liquidAccounts, transactions, bills, todayIso, horizon.days],
   );
 
   const { dates, totals, riskIndices, minTotal, minDate } = React.useMemo(
@@ -79,13 +83,8 @@ export default function CashFlowForecastWidget({ t, width = 780, height = 160 })
 
   const riskMarkers = React.useMemo(() => {
     if (!hasData) return [];
-    const min = Math.min(...totals);
-    const max = Math.max(...totals);
-    const range = max - min || 1;
-    return riskIndices.map(i => ({
-      x: dates.length === 1 ? width / 2 : i * (width / (dates.length - 1)),
-      y: height - ((totals[i] - min) / range) * height,
-    }));
+    const markerPts = scaleSparkPoints(totals, width, height);
+    return riskIndices.map(i => markerPts[i]);
   }, [riskIndices, totals, dates.length, hasData, width, height]);
 
   if (!hasData) {
@@ -110,7 +109,7 @@ export default function CashFlowForecastWidget({ t, width = 780, height = 160 })
         <ALabel>[CF] CASH FLOW · FORECAST</ALabel>
         <div style={{ display: 'flex', gap: 6 }}>
           {HORIZON_OPTIONS.map(h => (
-            <button key={h.key} onClick={() => { setHorizonKey(h.key); setScrub(null); }} style={{
+            <button key={h.key} onClick={() => { setHorizonKey(h.key); setScrub(null); }} aria-pressed={horizonKey === h.key} style={{
               all: 'unset', cursor: 'pointer',
               fontSize: 10, letterSpacing: 1.2, padding: '5px 10px',
               border: '1px solid ' + (horizonKey === h.key ? A.ink : A.rule2),

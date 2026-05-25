@@ -73,9 +73,15 @@ export default function WebSettings({ t, onNavigate, onAdd, setAccent, setDensit
     [forecastLiquidAccountIds],
   );
   const toggleLiquidAccount = (id) => {
-    const next = new Set(selectedLiquidIds);
-    if (next.has(id)) next.delete(id);
-    else next.add(id);
+    let next;
+    if (selectedLiquidIds.size === 0) {
+      next = new Set(liquidAccounts.map(a => a.id));
+      next.delete(id);
+    } else {
+      next = new Set(selectedLiquidIds);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+    }
     setForecastLiquidAccountIds(Array.from(next));
   };
   const clearLiquidAccountFilter = () => setForecastLiquidAccountIds([]);
@@ -358,6 +364,7 @@ export default function WebSettings({ t, onNavigate, onAdd, setAccent, setDensit
                           key={a.id}
                           onClick={() => toggleLiquidAccount(a.id)}
                           title={a.name}
+                          aria-pressed={isSelected}
                           style={{
                             all: 'unset', cursor: 'pointer',
                             fontSize: 10, letterSpacing: 1.2, padding: '5px 10px',

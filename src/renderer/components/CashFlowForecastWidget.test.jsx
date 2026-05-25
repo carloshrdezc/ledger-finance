@@ -98,9 +98,16 @@ describe('CashFlowForecastWidget', () => {
       transactions: [],
       bills: [],
     });
+
+    expect(screen.getByText('30D').getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByText('60D').getAttribute('aria-pressed')).toBe('false');
+    expect(screen.getByText('90D').getAttribute('aria-pressed')).toBe('false');
+
     const ninety = screen.getByText('90D');
     fireEvent.click(ninety);
     // After clicking 90D, the "TO HERE" suffix should reflect the new horizon.
     expect(screen.getByText(/90D TO HERE/)).toBeTruthy();
+    expect(screen.getByText('90D').getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByText('30D').getAttribute('aria-pressed')).toBe('false');
   });
 });

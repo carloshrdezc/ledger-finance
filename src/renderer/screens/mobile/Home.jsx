@@ -1,7 +1,7 @@
 ﻿import React from 'react';
 import { A } from '../../theme';
 import { AsciiSpark, ARule, ALabel } from '../../components/Shared';
-import { fmtMoney, fmtSigned, fmtPct } from '../../data';
+import { fmtMoney, fmtSigned, fmtPct, dayLabel } from '../../data';
 import { buildNetWorthDailyTrend } from '../../charts.mjs';
 import { projectBalances, isLiquidAccount } from '../../forecast.mjs';
 import { compactForecastSeries } from '../../forecastSeries.mjs';
@@ -56,20 +56,22 @@ export default function Home({ t, onAcct, onAdd, onViewAll, onInsight }) {
 
   // CAR-218: 30-day cash-flow forecast (liquid accounts only). Uses the same
   // helper as the web widget so mobile + web stay in sync.
+  const liquidAccounts = React.useMemo(
+    () => (accountsWithBalance || []).filter(isLiquidAccount),
+    [accountsWithBalance],
+  );
   const forecastView = React.useMemo(() => {
-    if (!accountsWithBalance || accountsWithBalance.length === 0) {
+    if (!liquidAccounts || liquidAccounts.length === 0) {
       return { totals: [], riskIndices: [], minTotal: 0, dates: [] };
     }
-    const liquidAll = accountsWithBalance.filter(isLiquidAccount);
-    if (liquidAll.length === 0) return { totals: [], riskIndices: [], minTotal: 0, dates: [] };
-    const rows = projectBalances(liquidAll, transactions || [], bills || [], todayIso, 30);
+    const rows = projectBalances(liquidAccounts, transactions || [], bills || [], todayIso, 30);
     return compactForecastSeries(rows, {
       threshold: Number.isFinite(forecastThreshold) ? forecastThreshold : 0,
       accountIds: forecastLiquidAccountIds && forecastLiquidAccountIds.length > 0
         ? forecastLiquidAccountIds
         : null,
     });
-  }, [accountsWithBalance, forecastLiquidAccountIds, transactions, bills, todayIso, forecastThreshold]);
+  }, [liquidAccounts, forecastLiquidAccountIds, transactions, bills, todayIso, forecastThreshold]);
   const forecastSpark = forecastView.totals;
   const forecastEnd = forecastSpark.length ? forecastSpark[forecastSpark.length - 1] : 0;
   const forecastStart = forecastSpark.length ? forecastSpark[0] : 0;
@@ -101,7 +103,9 @@ export default function Home({ t, onAcct, onAdd, onViewAll, onInsight }) {
   const accent = hero.invert ? (scrub != null ? A.neg : A.ink) : t.accent;
   const displayVal = scrub != null ? hero.spark[scrub] : hero.value;
   const dateLbl = scrub != null
-    ? (() => { const d = new Date(); d.setDate(d.getDate() - (29 - scrub)); return d.toLocaleDateString('en-US', { month: 'short', day: '2-digit' }).toUpperCase(); })()
+    ? (hero.key === 'forecast' && forecastView.dates?.[scrub]
+      ? dayLabel(forecastView.dates[scrub])
+      : (() => { const d = new Date(); d.setDate(d.getDate() - (29 - scrub)); return d.toLocaleDateString('en-US', { month: 'short', day: '2-digit' }).toUpperCase(); })())
     : todayLabel;
 
   return (
