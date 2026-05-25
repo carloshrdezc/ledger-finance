@@ -7,11 +7,12 @@ import ImportExport from '../../components/ImportExport';
 import FxRatesSection from '../../components/FxRatesSection';
 import BackupSection from '../../components/BackupSection';
 import RulesEditor from '../../components/RulesEditor';
+import { isLiquidAccount } from '../../forecast.mjs';
 
 const CURRENCIES = ['USD', 'EUR', 'GBP', 'JPY', 'CAD', 'AUD', 'CHF', 'MXN'];
 
 export default function WebSettings({ t, onNavigate, onAdd, setAccent, setDensity, setDecimals, setCurrency, setTheme }) {
-  const { categoryTree, addCategory, renameCategory, removeCategory, budgetStartDay, setBudgetStartDay, reset, loadSampleData, resetAndLoadSampleData, rules, addRule, updateRule, deleteRule, reorderRules, updateTxsIndividually, transactions, accountsWithBalance } = useUndoableStore();
+  const { categoryTree, addCategory, renameCategory, removeCategory, budgetStartDay, setBudgetStartDay, reset, loadSampleData, resetAndLoadSampleData, rules, addRule, updateRule, deleteRule, reorderRules, updateTxsIndividually, transactions, accountsWithBalance, forecastLiquidAccountIds, setForecastLiquidAccountIds, forecastThreshold, setForecastThreshold } = useUndoableStore();
   const [expanded, setExpanded] = React.useState({ edu: true, 'edu.school': true, 'edu.school.supplies': true, food: true });
   const [adding, setAdding] = React.useState(null);
   const [renaming, setRenaming] = React.useState(null);
@@ -21,9 +22,15 @@ export default function WebSettings({ t, onNavigate, onAdd, setAccent, setDensit
   const [showIO, setShowIO] = React.useState(false);
   const [confirmReset, setConfirmReset] = React.useState(false);
   const [dayInput, setDayInput] = React.useState(String(budgetStartDay));
+  const [thresholdInput, setThresholdInput] = React.useState(
+    Number.isFinite(forecastThreshold) ? String(forecastThreshold) : '0'
+  );
   const resetTimerRef = React.useRef(null);
 
   React.useEffect(() => { setDayInput(String(budgetStartDay)); }, [budgetStartDay]);
+  React.useEffect(() => {
+    setThresholdInput(Number.isFinite(forecastThreshold) ? String(forecastThreshold) : '0');
+  }, [forecastThreshold]);
   React.useEffect(() => () => clearTimeout(resetTimerRef.current), []);
 
   const toggle = k => setExpanded(e => ({ ...e, [k]: !e[k] }));
@@ -46,6 +53,32 @@ export default function WebSettings({ t, onNavigate, onAdd, setAccent, setDensit
     setDayInput(String(v));
     setBudgetStartDay(v);
   };
+
+  const commitThreshold = () => {
+    const n = Number(thresholdInput);
+    const v = Number.isFinite(n) ? n : 0;
+    setThresholdInput(String(v));
+    setForecastThreshold(v);
+  };
+
+  // CAR-218: liquid-account selection. Same predicate the data layer uses
+  // (CHK/SAV in USD), so toggling here matches what the forecast actually
+  // projects.
+  const liquidAccounts = React.useMemo(
+    () => (accountsWithBalance || []).filter(isLiquidAccount),
+    [accountsWithBalance],
+  );
+  const selectedLiquidIds = React.useMemo(
+    () => new Set(forecastLiquidAccountIds || []),
+    [forecastLiquidAccountIds],
+  );
+  const toggleLiquidAccount = (id) => {
+    const next = new Set(selectedLiquidIds);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setForecastLiquidAccountIds(Array.from(next));
+  };
+  const clearLiquidAccountFilter = () => setForecastLiquidAccountIds([]);
 
   const handleResetClick = () => {
     if (!confirmReset) {
@@ -294,6 +327,76 @@ export default function WebSettings({ t, onNavigate, onAdd, setAccent, setDensit
                     }}
                   />
                   <span style={{ fontSize: 10, color: A.muted, letterSpacing: 0.8 }}>OF EACH MONTH</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* CAR-218: CASH FLOW · FORECAST */}
+          <div style={{ marginTop: 20 }}>
+            <ALabel>CASH FLOW · FORECAST</ALabel>
+            <div style={{ marginTop: 12, borderTop: '2px solid ' + A.ink }}>
+              <div style={{ padding: '10px 0', borderBottom: '1px solid ' + A.rule2 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
+                  <div style={{ fontSize: 9, color: A.muted, letterSpacing: 1 }}>LIQUID · ACCOUNTS</div>
+                  {selectedLiquidIds.size > 0 && (
+                    <button onClick={clearLiquidAccountFilter} style={{
+                      all: 'unset', cursor: 'pointer', fontSize: 9, color: A.muted, letterSpacing: 1,
+                    }}>USE · ALL</button>
+                  )}
+                </div>
+                {liquidAccounts.length === 0 ? (
+                  <div style={{ fontSize: 10, color: A.muted, letterSpacing: 0.8 }}>
+                    NO LIQUID ACCOUNTS YET — ADD A CHK OR SAV ACCOUNT IN USD.
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    {liquidAccounts.map(a => {
+                      const isSelected = selectedLiquidIds.size === 0 || selectedLiquidIds.has(a.id);
+                      return (
+                        <button
+                          key={a.id}
+                          onClick={() => toggleLiquidAccount(a.id)}
+                          title={a.name}
+                          style={{
+                            all: 'unset', cursor: 'pointer',
+                            fontSize: 10, letterSpacing: 1.2, padding: '5px 10px',
+                            border: '1px solid ' + (isSelected ? A.ink : A.rule2),
+                            background: isSelected ? A.ink : 'transparent',
+                            color: isSelected ? A.bg : A.ink,
+                          }}
+                        >
+                          {a.name.toUpperCase()}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+                <div style={{ fontSize: 9, color: A.muted, letterSpacing: 0.8, marginTop: 8 }}>
+                  {selectedLiquidIds.size === 0
+                    ? 'AUTO · USING EVERY LIQUID ACCOUNT'
+                    : `INCLUDING ${selectedLiquidIds.size} OF ${liquidAccounts.length} ACCOUNTS`}
+                </div>
+              </div>
+              <div style={{ padding: '10px 0', borderBottom: '1px solid ' + A.rule2 }}>
+                <div style={{ fontSize: 9, color: A.muted, letterSpacing: 1, marginBottom: 8 }}>RISK · THRESHOLD</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <input
+                    type="number"
+                    step="any"
+                    value={thresholdInput}
+                    onChange={e => setThresholdInput(e.target.value)}
+                    onBlur={commitThreshold}
+                    onKeyDown={e => e.key === 'Enter' && commitThreshold()}
+                    aria-label="Forecast risk threshold"
+                    style={{
+                      fontFamily: A.font, fontSize: 13, width: 96,
+                      border: 'none', borderBottom: '1px solid ' + A.ink,
+                      background: 'transparent', color: A.ink, outline: 'none', padding: '2px 0',
+                      textAlign: 'right',
+                    }}
+                  />
+                  <span style={{ fontSize: 10, color: A.muted, letterSpacing: 0.8 }}>{t.currency} · DAYS BELOW THIS ARE FLAGGED</span>
                 </div>
               </div>
             </div>

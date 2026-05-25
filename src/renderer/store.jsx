@@ -146,6 +146,15 @@ export function StoreProvider({ children }) {
   const [currency, setCurrency]   = useLS('ledger:currency', 'USD');
   const [theme, setTheme]         = useLS('ledger:theme',    'light');
 
+  // CAR-218: cash-flow forecast settings.
+  // - forecastLiquidAccountIds: explicit account-id allowlist for the
+  //   forecast widget. Empty array = "auto" (use every liquid account from
+  //   the data layer's default filter).
+  // - forecastThreshold: total-balance floor below which a day is flagged
+  //   as a risk event. Default 0 (overdraft).
+  const [forecastLiquidAccountIds, setForecastLiquidAccountIds] = useLS('ledger:forecastLiquidAccountIds', []);
+  const [forecastThreshold, setForecastThreshold] = useLS('ledger:forecastThreshold', 0);
+
   // Move the data-theme effect from useTweaks to here.
   React.useEffect(() => {
     const valid = ['light', 'dark', 'auto'].includes(theme) ? theme : 'light';
@@ -855,10 +864,10 @@ export function StoreProvider({ children }) {
       txs, accounts, catTree, budgets, hidden, bills, goals, goalContributions,
       investments, trades, rates, ratesUpdated,
       selectedPeriod, budgetStartDay,
-      settings: { accent, density, decimals, currency, theme },
+      settings: { accent, density, decimals, currency, theme, forecastLiquidAccountIds, forecastThreshold },
     });
     return JSON.stringify(obj, null, 2);
-  }, [txs, accounts, catTree, budgets, hidden, bills, goals, goalContributions, investments, trades, rates, ratesUpdated, selectedPeriod, budgetStartDay, accent, density, decimals, currency, theme]);
+  }, [txs, accounts, catTree, budgets, hidden, bills, goals, goalContributions, investments, trades, rates, ratesUpdated, selectedPeriod, budgetStartDay, accent, density, decimals, currency, theme, forecastLiquidAccountIds, forecastThreshold]);
 
   const recordBackupTaken = React.useCallback(() => {
     setLastBackupAt(new Date().toISOString().slice(0, 10));
@@ -909,6 +918,14 @@ export function StoreProvider({ children }) {
     if (s.decimals !== undefined) setDecimals(s.decimals);
     if (s.currency !== undefined) setCurrency(s.currency);
     if (s.theme    !== undefined) setTheme(s.theme);
+    // CAR-218: forecast settings ride along on the same `settings` object.
+    if (Array.isArray(s.forecastLiquidAccountIds)) {
+      setForecastLiquidAccountIds(s.forecastLiquidAccountIds);
+    }
+    if (s.forecastThreshold !== undefined) {
+      const n = Number(s.forecastThreshold);
+      setForecastThreshold(Number.isFinite(n) ? n : 0);
+    }
 
     // Session ephemera reset.
     setTxFilterRaw(null);
@@ -923,6 +940,7 @@ export function StoreProvider({ children }) {
     setGoalContributions, setRules, setInvestments, setTrades, setRates, setRatesUpdated,
     setSelectedPeriod, setBudgetStartDay,
     setAccent, setDensity, setDecimals, setCurrency, setTheme,
+    setForecastLiquidAccountIds, setForecastThreshold,
     setTxFilterRaw, setDismissedAlertIds, setDismissedInsightIds, setWelcomeSeen, setFxMigrationToastSeen,
     setBackupReminderSnoozedUntil,
   ]);
@@ -952,7 +970,10 @@ export function StoreProvider({ children }) {
     setLastBackupAt(null);
     setBackupReminderSnoozedUntil(null);
     setBackupReminderIntervalRaw(30);
-  }, [setTxs, setCatTree, setBudgets, setAccounts, setBills, setGoals, setGoalContributions, setRules, setSelectedPeriod, setHidden, setBudgetStartDay, setInvestments, setTrades, setDismissedAlertIds, setDismissedInsightIds, setTxFilterRaw, setRates, setRatesUpdated, setFxMigrationToastSeen, setWelcomeSeen, setLastBackupAt, setBackupReminderSnoozedUntil, setBackupReminderIntervalRaw]);
+    // CAR-218: clear forecast settings to defaults too.
+    setForecastLiquidAccountIds([]);
+    setForecastThreshold(0);
+  }, [setTxs, setCatTree, setBudgets, setAccounts, setBills, setGoals, setGoalContributions, setRules, setSelectedPeriod, setHidden, setBudgetStartDay, setInvestments, setTrades, setDismissedAlertIds, setDismissedInsightIds, setTxFilterRaw, setRates, setRatesUpdated, setFxMigrationToastSeen, setWelcomeSeen, setLastBackupAt, setBackupReminderSnoozedUntil, setBackupReminderIntervalRaw, setForecastLiquidAccountIds, setForecastThreshold]);
 
   return (
     <StoreCtx.Provider value={{
@@ -1074,6 +1095,9 @@ export function StoreProvider({ children }) {
       decimals, setDecimals,
       currency, setCurrency,
       theme, setTheme,
+      // CAR-218
+      forecastLiquidAccountIds, setForecastLiquidAccountIds,
+      forecastThreshold, setForecastThreshold,
       welcomeSeen,
       dismissWelcome,
       loadSampleData,

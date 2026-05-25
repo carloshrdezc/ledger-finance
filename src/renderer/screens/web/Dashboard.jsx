@@ -11,6 +11,7 @@ import { buildNetWorthDailyTrend } from '../../charts.mjs';
 import { useFx } from '../../useFx';
 import EmptySectionHint from '../../components/EmptySectionHint';
 import { applyInsightDrillDown } from '../../insightNav';
+import CashFlowForecastWidget from '../../components/CashFlowForecastWidget';
 
 const PERIOD_DAYS  = { '1D': 1, '1W': 7, '1M': 30, '3M': 90, '1Y': 365 };
 const PERIOD_LABEL = { '1D': '1D', '1W': '7D', '1M': '30D', '3M': '90D', '1Y': '1Y', 'MAX': 'ALL' };
@@ -120,6 +121,9 @@ export default function Dashboard({ t, onNavigate, onAdd }) {
           </div>
         </div>
       )}
+
+      {/* CAR-218: Cash-flow forecast widget */}
+      <CashFlowForecastWidget t={t} />
 
       {/* Alerts */}
       <div style={{ marginTop: 20, marginBottom: 8 }}>
