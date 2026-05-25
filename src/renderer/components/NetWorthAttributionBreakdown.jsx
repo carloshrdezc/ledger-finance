@@ -73,45 +73,66 @@ export default function NetWorthAttributionBreakdown({
           const barColor = row.value >= 0 ? (row.key === 'transfers' ? A.ink2 : t.accent) : A.neg;
           const drillable = bucketIsDrillable(row.key);
           const clickable = drillable && typeof onBucketClick === 'function';
-          const buttonStyle = {
-            all: 'unset',
-            display: 'block',
-            width: '100%',
-            boxSizing: 'border-box',
-            cursor: clickable ? 'pointer' : 'default',
-            padding: compact ? '9px 0' : '11px 0',
-            borderBottom: '1px solid ' + A.rule2,
-          };
-
           const titleText = clickable
             ? `Drill into ${row.label.toLowerCase()}`
             : (row.key === 'marketGains' ? 'Residual — no underlying transactions' : row.blurb);
 
           return (
-            <button
+            <BucketRow
               key={row.key}
+              row={row}
+              compact={compact}
+              clickable={clickable}
+              titleText={titleText}
               onClick={clickable ? () => onBucketClick(row.key) : undefined}
-              disabled={!clickable}
-              style={buttonStyle}
-              title={titleText}
-              aria-disabled={!clickable}
-            >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12 }}>
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: compact ? 10 : 11, letterSpacing: 1.2 }}>{row.label}</div>
-                  <div style={{ fontSize: 9, color: A.muted, letterSpacing: 0.8, marginTop: 2 }}>{row.blurb}</div>
-                </div>
-                <div style={{ fontSize: compact ? 12 : 13, fontVariantNumeric: 'tabular-nums', color: row.value < 0 ? A.neg : (row.key === 'transfers' ? A.ink2 : t.accent), flexShrink: 0 }}>
-                  {fmtSigned(row.value, t.currency, t.decimals)}
-                </div>
-              </div>
-              <div style={{ marginTop: 6, height: 4, background: A.rule2 }}>
-                <div style={{ width, height: '100%', background: barColor }} />
-              </div>
-            </button>
+              t={t}
+              barColor={barColor}
+              width={width}
+            />
           );
         })}
       </div>
     </div>
+  );
+}
+
+function BucketRow({ row, compact, clickable, titleText, onClick, t, barColor, width }) {
+  const [focused, setFocused] = React.useState(false);
+  const showFocus = focused && clickable;
+  const buttonStyle = {
+    all: 'unset',
+    display: 'block',
+    width: '100%',
+    boxSizing: 'border-box',
+    cursor: clickable ? 'pointer' : 'default',
+    padding: compact ? '9px 0' : '11px 0',
+    borderBottom: '1px solid ' + A.rule2,
+    outline: showFocus ? `2px solid ${t.accent}` : 'none',
+    outlineOffset: showFocus ? 2 : 0,
+    background: showFocus ? A.rule2 : 'transparent',
+  };
+  return (
+    <button
+      onClick={onClick}
+      disabled={!clickable}
+      style={buttonStyle}
+      title={titleText}
+      aria-disabled={!clickable}
+      onFocus={() => setFocused(true)}
+      onBlur={() => setFocused(false)}
+    >
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12 }}>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: compact ? 10 : 11, letterSpacing: 1.2 }}>{row.label}</div>
+          <div style={{ fontSize: 9, color: A.muted, letterSpacing: 0.8, marginTop: 2 }}>{row.blurb}</div>
+        </div>
+        <div style={{ fontSize: compact ? 12 : 13, fontVariantNumeric: 'tabular-nums', color: row.value < 0 ? A.neg : (row.key === 'transfers' ? A.ink2 : t.accent), flexShrink: 0 }}>
+          {fmtSigned(row.value, t.currency, t.decimals)}
+        </div>
+      </div>
+      <div style={{ marginTop: 6, height: 4, background: A.rule2 }}>
+        <div style={{ width, height: '100%', background: barColor }} />
+      </div>
+    </button>
   );
 }

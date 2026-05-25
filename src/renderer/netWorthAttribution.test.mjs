@@ -173,6 +173,25 @@ describe('attributeNetWorthChange', () => {
     });
     expect(Object.values(buckets).reduce((sum, value) => sum + value, 0)).toBe(850);
   });
+
+  test('open-ended toDate documents the marketGains-collapse contract', () => {
+    // Documented behavior (see attributeNetWorthChange JSDoc): when toDate is
+    // null/undefined, the closing balance has no defined "as-of" point and
+    // collapses to the opening balance, producing investmentBalanceDelta = 0.
+    // This test locks that contract so a future drive-by edit can't silently
+    // change it without updating the docs.
+    const accounts = [
+      { id: 'vti', type: 'INV', ccy: 'USD', openingBal: 1000 },
+    ];
+    const transactions = [
+      { id: 'gain', date: '2026-05-08', acct: 'vti', cat: 'income', amt: 50, ccy: 'USD' },
+    ];
+    const buckets = attributeNetWorthChange(accounts, transactions, '2026-05-01', null);
+    // investmentBalanceDelta = 0 (close - open = 0), investmentTxTotal = 50,
+    // so marketGains = 0 - 50 = -50. income still picks up the 50 from the tx.
+    expect(buckets.marketGains).toBe(-50);
+    expect(buckets.income).toBe(50);
+  });
 })
 ;
 

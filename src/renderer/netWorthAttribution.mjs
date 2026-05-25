@@ -51,6 +51,14 @@ function dayBefore(isoDate) {
 }
 
 function buildTransferGroups(transactions) {
+  // Groups transfer legs that share a transferId (or falls back to tx.id).
+  // Caveat: when called on a period-filtered tx list, a transfer whose two
+  // legs straddle the period boundary (rare — both legs normally share a date)
+  // produces an orphan group. The orphan fails the
+  // hasInvestment && hasNonInvestment check downstream and is bucketed as
+  // a plain transfer instead of a contribution. Acceptable for the current
+  // dataset; if same-transfer date-skew becomes common, group over the full
+  // tx list and post-filter legs to the period.
   const groups = new Map();
   for (const tx of transactions) {
     if (tx?.cat !== 'transfer') continue;
@@ -81,8 +89,11 @@ function reportingAmt(tx, account, rates, reportingCcy) {
  *
  * @param {Array} accounts
  * @param {Array} transactions
- * @param {string|null|undefined} fromDate inclusive ISO date
- * @param {string|null|undefined} toDate inclusive ISO date
+ * @param {string|null|undefined} fromDate inclusive ISO date — null/undefined means "from beginning of history"
+ * @param {string|null|undefined} toDate inclusive ISO date — null/undefined collapses the closing balance
+ *   to the opening balance (investmentBalanceDelta = 0), which makes marketGains = -investmentTxTotal.
+ *   This is intentional: an open-ended toDate has no defined "as-of" point for closing market value.
+ *   Callers should pass a concrete toDate (e.g. today) when they want a meaningful marketGains figure.
  * @param {Object<string, number>} [rates=DEFAULT_RATES]
  * @param {string} [reportingCcy='USD']
  * @returns {{ contributions: number, marketGains: number, spending: number, income: number, transfers: number }}

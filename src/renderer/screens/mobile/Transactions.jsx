@@ -66,6 +66,7 @@ export default function Transactions({ t }) {
       const wanted = Array.isArray(txFilter.accountType) ? txFilter.accountType : [txFilter.accountType];
       parts.push('TYPE · ' + wanted.join('+'));
     }
+    if (txFilter.excludeTransfers) parts.push('NO XFERS');
     return parts.join(' · ');
   }, [txFilter]);
 

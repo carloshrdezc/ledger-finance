@@ -125,6 +125,11 @@ describe('net-worth attribution drill-downs', () => {
     // CAR-87 review: marketGains is a residual (close-open minus tx flow),
     // not transaction-backed. The breakdown disables click on this bucket;
     // setTxFilter / onNavigate must NOT fire.
+    // Explicit disabled-wiring assertion so an accidental regression to a
+    // clickable button (without removing the no-op intent) fails fast.
+    const marketGainsButton = screen.getByText('MARKET GAINS').closest('button');
+    expect(marketGainsButton.disabled).toBe(true);
+    expect(marketGainsButton.getAttribute('aria-disabled')).toBe('true');
     expect(store.setTxFilter).not.toHaveBeenCalled();
     expect(onNavigate).not.toHaveBeenCalled();
   });
