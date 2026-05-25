@@ -43,8 +43,27 @@ async function readWithTmpFallback(filePath) {
   }
 }
 
+async function fsyncDir(dirPath) {
+  // fsync the parent directory so the rename is durable across crash/power-loss.
+  // Best-effort: Windows fails with EPERM/EISDIR/EINVAL on directory handles
+  // depending on the platform — that's fine, NTFS gives us metadata journaling
+  // and on POSIX the fsync is what matters.
+  let handle;
+  try {
+    handle = await open(dirPath, 'r');
+    await handle.sync();
+  } catch {
+    // Ignore — see comment above.
+  } finally {
+    if (handle) {
+      try { await handle.close(); } catch { /* ignore */ }
+    }
+  }
+}
+
 async function atomicWriteJson(filePath, state) {
-  await mkdir(path.dirname(filePath), { recursive: true });
+  const dirPath = path.dirname(filePath);
+  await mkdir(dirPath, { recursive: true });
   const tmpPath = `${filePath}.tmp`;
   const handle = await open(tmpPath, 'w');
   try {
@@ -54,27 +73,17 @@ async function atomicWriteJson(filePath, state) {
     await handle.close();
   }
   await rename(tmpPath, filePath);
+  await fsyncDir(dirPath);
 }
 
 export function createDiskStore(filePath) {
   let tail = Promise.resolve();
   let cached = {};
-  const listeners = new Set();
 
   const enqueue = task => {
     const run = tail.then(task, task);
     tail = run.catch(() => {});
     return run;
-  };
-
-  const notify = () => {
-    for (const cb of listeners) {
-      try {
-        cb();
-      } catch {
-        // Listener errors should not break store writes.
-      }
-    }
   };
 
   const read = async () => {
@@ -86,38 +95,16 @@ export function createDiskStore(filePath) {
   const write = state => enqueue(async () => {
     cached = isPlainObject(state) ? state : {};
     await atomicWriteJson(filePath, cached);
-    notify();
   });
 
-  const exportBackup = async () => {
-    await tail.catch(() => {});
-    const snapshot = await read();
-    const backupPath = path.join(path.dirname(filePath), 'ledger-state.backup.json');
-    await atomicWriteJson(backupPath, snapshot);
-    return backupPath;
-  };
-
-  const importState = json => enqueue(async () => {
-    const parsed = safeParseJson(json);
-    if (!isPlainObject(parsed)) {
-      throw new TypeError('Imported state must be a JSON object');
-    }
-    cached = parsed;
-    await atomicWriteJson(filePath, parsed);
-    notify();
-  });
-
-  const subscribe = cb => {
-    if (typeof cb !== 'function') return () => {};
-    listeners.add(cb);
-    return () => listeners.delete(cb);
-  };
+  // Awaits whatever's currently queued. Used by `before-quit` to drain pending
+  // debounced writes from the renderer before the process exits — guards
+  // against the data-loss-on-quit window where a debounced write hasn't fired.
+  const flush = () => tail.catch(() => {});
 
   return {
     read,
     write,
-    exportBackup,
-    import: importState,
-    subscribe,
+    flush,
   };
 }

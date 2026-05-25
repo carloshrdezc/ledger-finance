@@ -28,14 +28,6 @@ function createWindow() {
   return win;
 }
 
-function broadcastLedgerChange(webContentsList) {
-  for (const webContents of webContentsList) {
-    if (!webContents.isDestroyed()) {
-      webContents.send('ledger-db:changed');
-    }
-  }
-}
-
 app.commandLine.appendSwitch('no-sandbox');
 
 app.whenReady().then(async () => {
@@ -46,12 +38,24 @@ app.whenReady().then(async () => {
   ipcMain.handle('ledger-db:read', () => ledgerStore.read());
   ipcMain.handle('ledger-db:write', async (_event, state) => {
     await ledgerStore.write(state);
-    broadcastLedgerChange(BrowserWindow.getAllWindows().map(win => win.webContents));
   });
-  ipcMain.handle('ledger-db:export-backup', async () => ledgerStore.exportBackup());
-  ipcMain.handle('ledger-db:import', async (_event, json) => {
-    await ledgerStore.import(json);
-    broadcastLedgerChange(BrowserWindow.getAllWindows().map(win => win.webContents));
+  // CAR-91: invoked by the renderer on `pagehide` so any pending debounced
+  // write is awaited before the page is torn down. Also called from
+  // `before-quit` below to cover the cmd/ctrl-Q path where the renderer's
+  // pagehide may race with process shutdown.
+  ipcMain.handle('ledger-db:flush', () => ledgerStore.flush());
+
+  // CAR-91: drain pending writes before quitting. Without this, a debounced
+  // write scheduled in the renderer (≤250 ms before quit) would be torn down
+  // mid-flight and the edit would be permanently lost on next launch (disk
+  // is authoritative). We allow `before-quit` once, await the flush, then
+  // re-quit cleanly.
+  let quitting = false;
+  app.on('before-quit', event => {
+    if (quitting) return;
+    event.preventDefault();
+    quitting = true;
+    ledgerStore.flush().then(() => app.quit(), () => app.quit());
   });
 
   createWindow();

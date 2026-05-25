@@ -70,7 +70,18 @@ function writeLedgerStorageKey(key, value) {
 function writeLedgerStorageSnapshot(snapshot) {
   try {
     if (typeof localStorage === 'undefined') return;
-    for (const [key, value] of Object.entries(snapshot || {})) {
+    const next = isPlainObject(snapshot) ? snapshot : {};
+    // Remove ledger:* keys that are no longer in the snapshot so a stale
+    // value can't resurface if a future disk read fails and the code falls
+    // back to the localStorage mirror.
+    const toRemove = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (!key || !key.startsWith(LEDGER_PREFIX)) continue;
+      if (!Object.prototype.hasOwnProperty.call(next, key)) toRemove.push(key);
+    }
+    for (const key of toRemove) localStorage.removeItem(key);
+    for (const [key, value] of Object.entries(next)) {
       if (!key.startsWith(LEDGER_PREFIX)) continue;
       localStorage.setItem(key, JSON.stringify(value));
     }
@@ -95,19 +106,11 @@ function resolveBootSnapshot(diskState) {
 }
 
 function useLS(key, def) {
+  // StoreProvider always wraps its children in PersistenceCtx.Provider, so
+  // `ctx` is never null here. The browser-preview path (no Electron `ledgerDB`)
+  // is handled inside StoreProvider by skipping the disk write; the
+  // synchronous `localStorage` mirror still keeps state durable.
   const ctx = React.useContext(PersistenceCtx);
-  if (!ctx) {
-    const [v, setV] = React.useState(() => {
-      try { const s = localStorage.getItem(key); return s !== null ? JSON.parse(s) : def; }
-      catch { return def; }
-    });
-    const set = React.useCallback(u => setV(prev => {
-      const next = typeof u === 'function' ? u(prev) : u;
-      writeLedgerStorageKey(key, next);
-      return next;
-    }), [key]);
-    return [v, set];
-  }
   const value = getSnapshotValue(ctx.snapshot, key, def);
   const set = React.useCallback(u => ctx.setKey(key, u, def), [ctx, key, def]);
   return [value, set];
@@ -185,6 +188,17 @@ export function StoreProvider({ children }) {
     snapshotRef.current = snapshot;
   }, [snapshot]);
 
+  // CAR-91: write the latest snapshot to disk *now*, cancelling the pending
+  // debounce timer if any. Called from `pagehide` so edits made within
+  // 250 ms of quitting can't be lost. No-ops when no write is pending.
+  const flushPendingWrite = React.useCallback(() => {
+    if (!ledgerDB) return Promise.resolve();
+    if (!writeTimerRef.current) return Promise.resolve();
+    clearTimeout(writeTimerRef.current);
+    writeTimerRef.current = null;
+    return ledgerDB.write(snapshotRef.current).catch(() => {});
+  }, [ledgerDB]);
+
   const setKey = React.useCallback((key, updater, def) => {
     setSnapshot(prev => {
       const prevValue = getSnapshotValue(prev, key, def);
@@ -234,9 +248,37 @@ export function StoreProvider({ children }) {
     })();
     return () => {
       cancelled = true;
-      if (writeTimerRef.current) clearTimeout(writeTimerRef.current);
+      // Note: we do NOT cancel the pending write here without flushing —
+      // see the pagehide effect below for the quit-time durability handler.
+      // Unmount during normal use (route change, etc.) is rare; if it does
+      // happen the next setKey will reschedule a write of the same data.
     };
   }, [ledgerDB]);
+
+  // CAR-91: durability on quit. The pre-disk implementation wrote to
+  // localStorage synchronously on every change. Disk writes are debounced
+  // (250 ms) and disk is authoritative on boot, so an edit made just before
+  // quit could otherwise be lost forever. Two-pronged defense:
+  //   1. `pagehide` (renderer): fire any pending write and ask main to flush
+  //      its queue before the page is torn down.
+  //   2. `before-quit` (main, see src/main/index.js): preventDefault, await
+  //      `ledgerStore.flush()`, then re-quit.
+  // pagehide handles the renderer side cleanly; before-quit covers the
+  // cmd/ctrl-Q path where the renderer may not get enough wall time.
+  React.useEffect(() => {
+    if (!ledgerDB) return;
+    if (typeof window === 'undefined') return;
+    const handler = () => {
+      // Fire-and-forget: the renderer may not get a chance to await this,
+      // but the call into main has already started by the time the function
+      // returns and main's `before-quit` will block on `ledgerStore.flush()`
+      // until the queued write completes.
+      void flushPendingWrite();
+      try { void ledgerDB.flush(); } catch { /* ignore */ }
+    };
+    window.addEventListener('pagehide', handler);
+    return () => window.removeEventListener('pagehide', handler);
+  }, [ledgerDB, flushPendingWrite]);
 
   const persistenceValue = React.useMemo(() => ({ snapshot, setKey }), [snapshot, setKey]);
 
