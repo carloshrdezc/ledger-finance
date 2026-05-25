@@ -36,7 +36,7 @@ function addDays(iso, days) {
   return isoOf(new Date(parseISO(iso).getTime() + days * MS_PER_DAY));
 }
 
-function isLiquidAccount(account) {
+export function isLiquidAccount(account) {
   return Boolean(
     account &&
     LIQUID_TYPES.has(account.type) &&

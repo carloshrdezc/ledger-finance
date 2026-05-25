@@ -15,6 +15,7 @@ import WebAlerts from './screens/web/WebAlerts';
 import Home from './screens/mobile/Home';
 import Dashboard from './screens/web/Dashboard';
 import { StoreCtx } from './store';
+import { dayLabel } from './data';
 
 afterEach(() => {
   cleanup();
@@ -192,6 +193,50 @@ describe('CAR-217 · Mobile Home insights teaser', () => {
 
     fireEvent.click(screen.getByText('FOOD SPEND SPIKE'));
     expect(onInsight).toHaveBeenCalledWith(spike);
+  });
+
+  it('labels forecast scrubs from the projected date series, not trailing history', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-05-25T12:00:00Z'));
+
+    const accountsWithBalance = [
+      { id: 'chk', name: 'Checking', type: 'CHK', ccy: 'USD', balance: 1000, delta: 0 },
+    ];
+    const store = makeStore({
+      accounts: [{ id: 'chk', name: 'Checking', type: 'CHK', ccy: 'USD', openingBal: 1000, includeInTotals: true }],
+      accountsWithBalance,
+      accountsIncludedInTotals: accountsWithBalance,
+      transactions: [],
+      bills: [],
+      insightRows: [],
+      forecastLiquidAccountIds: [],
+      forecastThreshold: 0,
+    });
+
+    const { container } = render(
+      <StoreCtx.Provider value={store}>
+        <Home t={THEME} onAcct={() => {}} onAdd={() => {}} onViewAll={() => {}} />
+      </StoreCtx.Provider>,
+    );
+
+    try {
+      for (let i = 0; i < 4; i += 1) {
+        const heroAdvance = container.querySelector('div[style*="font-size: 38px"]');
+        expect(heroAdvance).toBeTruthy();
+        fireEvent.click(heroAdvance);
+      }
+
+      const spark = container.querySelector('svg');
+      expect(spark).toBeTruthy();
+      Object.defineProperty(spark, 'getBoundingClientRect', {
+        value: () => ({ left: 0, top: 0, width: 354, height: 64, right: 354, bottom: 64 }),
+      });
+      fireEvent.pointerMove(spark, { clientX: 12, clientY: 10 });
+
+      expect(screen.getByText(dayLabel('2026-05-26'))).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

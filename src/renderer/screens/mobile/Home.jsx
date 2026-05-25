@@ -1,14 +1,16 @@
 ﻿import React from 'react';
 import { A } from '../../theme';
 import { AsciiSpark, ARule, ALabel } from '../../components/Shared';
-import { fmtMoney, fmtSigned, fmtPct } from '../../data';
+import { fmtMoney, fmtSigned, fmtPct, dayLabel } from '../../data';
 import { buildNetWorthDailyTrend } from '../../charts.mjs';
+import { projectBalances, isLiquidAccount } from '../../forecast.mjs';
+import { compactForecastSeries } from '../../forecastSeries.mjs';
 import { useStore } from '../../store';
 import { useFx } from '../../useFx';
 import EmptySectionHint from '../../components/EmptySectionHint';
 
 export default function Home({ t, onAcct, onAdd, onViewAll, onInsight }) {
-  const { accounts, accountsWithBalance, accountsIncludedInTotals, transactions, billRows, alertRows, insightRows, rates } = useStore();
+  const { accounts, accountsWithBalance, accountsIncludedInTotals, transactions, billRows, alertRows, insightRows, rates, bills, forecastLiquidAccountIds, forecastThreshold } = useStore();
   const { toReporting } = useFx(t.currency || 'USD');
   const now = new Date();
   const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -52,20 +54,58 @@ export default function Home({ t, onAcct, onAdd, onViewAll, onInsight }) {
   const cashTrend = React.useMemo(() => nwTrend.map(v => v * 0.12), [nwTrend]);
   const safeTrend = React.useMemo(() => nwTrend.map(v => v * 0.0006), [nwTrend]);
 
+  // CAR-218: 30-day cash-flow forecast (liquid accounts only). Uses the same
+  // helper as the web widget so mobile + web stay in sync.
+  const liquidAccounts = React.useMemo(
+    () => (accountsWithBalance || []).filter(isLiquidAccount),
+    [accountsWithBalance],
+  );
+  const forecastView = React.useMemo(() => {
+    if (!liquidAccounts || liquidAccounts.length === 0) {
+      return { totals: [], riskIndices: [], minTotal: 0, dates: [] };
+    }
+    const rows = projectBalances(liquidAccounts, transactions || [], bills || [], todayIso, 30);
+    return compactForecastSeries(rows, {
+      threshold: Number.isFinite(forecastThreshold) ? forecastThreshold : 0,
+      accountIds: forecastLiquidAccountIds && forecastLiquidAccountIds.length > 0
+        ? forecastLiquidAccountIds
+        : null,
+    });
+  }, [liquidAccounts, forecastLiquidAccountIds, transactions, bills, todayIso, forecastThreshold]);
+  const forecastSpark = forecastView.totals;
+  const forecastEnd = forecastSpark.length ? forecastSpark[forecastSpark.length - 1] : 0;
+  const forecastStart = forecastSpark.length ? forecastSpark[0] : 0;
+  const forecastDelta = forecastEnd - forecastStart;
+  const forecastDeltaPct = forecastStart ? (forecastDelta / Math.abs(forecastStart)) * 100 : 0;
+  const forecastRiskCount = forecastView.riskIndices.length;
+
   const HERO_METRICS = [
     { key: 'nw',    label: 'NET WORTH',      value: NET_WORTH,   delta: NW_DELTA, deltaPct: NET_WORTH ? (NW_DELTA / Math.abs(NET_WORTH - NW_DELTA)) * 100 : 0, spark: nwTrend,                         ccy: t.currency },
     { key: 'spend', label: 'MONTH SPENDING', value: MONTH_SPEND, delta: 0,        deltaPct: 0,                                                                   spark: spendTrend, ccy: t.currency, invert: true },
     { key: 'cash',  label: 'CASH ON HAND',   value: CASH,        delta: 0,        deltaPct: 0,                                                                   spark: cashTrend,  ccy: t.currency },
     { key: 'safe',  label: 'SAFE TO SPEND',  value: CASH / 30,   delta: 0,        deltaPct: 0,                                                                   spark: safeTrend,  ccy: t.currency, unit: '/ DAY' },
+    ...(forecastSpark.length > 0 ? [{
+      key: 'forecast',
+      label: forecastRiskCount > 0 ? `FORECAST · 30D · ${forecastRiskCount} RISK` : 'FORECAST · 30D',
+      value: forecastEnd,
+      delta: forecastDelta,
+      deltaPct: forecastDeltaPct,
+      spark: forecastSpark,
+      ccy: t.currency,
+    }] : []),
   ];
 
   const [heroIdx, setHeroIdx] = React.useState(0);
   const [scrub, setScrub] = React.useState(null);
-  const hero = HERO_METRICS[heroIdx];
+  // CAR-218: clamp heroIdx if HERO_METRICS shrinks (e.g. forecast slide disappears).
+  const safeHeroIdx = Math.min(heroIdx, HERO_METRICS.length - 1);
+  const hero = HERO_METRICS[safeHeroIdx];
   const accent = hero.invert ? (scrub != null ? A.neg : A.ink) : t.accent;
   const displayVal = scrub != null ? hero.spark[scrub] : hero.value;
   const dateLbl = scrub != null
-    ? (() => { const d = new Date(); d.setDate(d.getDate() - (29 - scrub)); return d.toLocaleDateString('en-US', { month: 'short', day: '2-digit' }).toUpperCase(); })()
+    ? (hero.key === 'forecast' && forecastView.dates?.[scrub]
+      ? dayLabel(forecastView.dates[scrub])
+      : (() => { const d = new Date(); d.setDate(d.getDate() - (29 - scrub)); return d.toLocaleDateString('en-US', { month: 'short', day: '2-digit' }).toUpperCase(); })())
     : todayLabel;
 
   return (
@@ -94,7 +134,7 @@ export default function Home({ t, onAcct, onAdd, onViewAll, onInsight }) {
               <div style={{ fontSize: 10, color: A.muted, letterSpacing: 1 }}>{dateLbl}</div>
             </div>
             <div
-              onClick={() => setHeroIdx((heroIdx + 1) % HERO_METRICS.length)}
+              onClick={() => setHeroIdx((safeHeroIdx + 1) % HERO_METRICS.length)}
               style={{ cursor: 'pointer', marginTop: 6, marginBottom: 8, fontSize: 38, fontWeight: 500, letterSpacing: -1.2, fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>
               {fmtMoney(displayVal, hero.ccy, t.decimals)}
               {hero.unit && <span style={{ fontSize: 14, color: A.muted, marginLeft: 6 }}>{hero.unit}</span>}
@@ -107,7 +147,7 @@ export default function Home({ t, onAcct, onAdd, onViewAll, onInsight }) {
               <div style={{ flex: 1 }} />
               <div style={{ display: 'flex', gap: 4 }}>
                 {HERO_METRICS.map((_, i) => (
-                  <span key={i} style={{ width: 6, height: 6, background: i === heroIdx ? A.ink : A.rule2, display: 'block' }} />
+                  <span key={i} style={{ width: 6, height: 6, background: i === safeHeroIdx ? A.ink : A.rule2, display: 'block' }} />
                 ))}
               </div>
             </div>
