@@ -8,7 +8,7 @@ import EmptySectionHint from '../../components/EmptySectionHint';
 import { fmtMoney, fmtSigned } from '../../data';
 import { useStore } from '../../store';
 import { useFx } from '../../useFx';
-import { addMonths, filterTransactionsForPeriod, filterTransactionsForRange, formatShortPeriodLabel, getDaysInPeriod, resolveRangePreset } from '../../period.mjs';
+import { addMonths, filterTransactionsForPeriod, filterTransactionsForRange, formatShortPeriodLabel, getDaysInPeriod, getPeriodBoundaries, resolveRangePreset } from '../../period.mjs';
 import {
   buildCategoryTrend,
   buildIncomeExpenseSeries,
@@ -17,9 +17,11 @@ import {
 } from '../../charts.mjs';
 import { exportReportCSV } from '../../importExport';
 import { downloadFile } from '../../download.mjs';
+import NetWorthAttributionBreakdown from '../../components/NetWorthAttributionBreakdown';
+import { attributeNetWorthChange, buildNetWorthAttributionFilter } from '../../netWorthAttribution.mjs';
 
 export default function WebReports({ t, onNavigate, onAdd }) {
-  const { transactions, periodTransactions, categoryTree, selectedPeriod, periodLabel, accounts, setTxFilter, rates } = useStore();
+  const { transactions, periodTransactions, categoryTree, selectedPeriod, periodLabel, accounts, budgetStartDay, setTxFilter, rates } = useStore();
   const { toReporting } = useFx(t.currency || 'USD');
 
   const [range, setRange] = React.useState({ kind: 'preset', preset: 'thisMonth' });
@@ -44,6 +46,23 @@ export default function WebReports({ t, onNavigate, onAdd }) {
   const incomeExpense = buildIncomeExpenseSeries(transactions, trendPeriods, rates);
   const netWorthTrend = buildNetWorthTrend(accounts, transactions, trendPeriods, rates);
   const categoryTrend = buildCategoryTrend(transactions, trendPeriods, 5, rates);
+  const attributionRange = useRange
+    ? resolved
+    : getPeriodBoundaries(selectedPeriod, budgetStartDay);
+  const netWorthAttribution = React.useMemo(() => attributeNetWorthChange(
+    accounts,
+    transactions,
+    attributionRange?.start,
+    attributionRange?.end,
+    rates,
+    t.currency || 'USD',
+  ), [accounts, transactions, attributionRange?.start, attributionRange?.end, rates, t.currency]);
+  const drillNetWorthBucket = React.useCallback((bucket) => {
+    const filter = buildNetWorthAttributionFilter(bucket);
+    if (!filter) return;
+    setTxFilter(filter);
+    onNavigate('tx');
+  }, [setTxFilter, onNavigate]);
 
   const drillTo = React.useCallback((filter) => {
     setTxFilter(filter || null);
@@ -69,7 +88,7 @@ export default function WebReports({ t, onNavigate, onAdd }) {
 
   const merchantMap = {};
   reportTxs.filter(x => x.amt < 0).forEach(tx => {
-    const key = tx.name.split(' · ')[0];
+    const key = (tx.name || '').split(' · ')[0] || 'UNNAMED';
     const curr = merchantMap[key] || { name: key, amt: 0, n: 0 };
     curr.amt += Math.abs(toReporting(tx.amt, tx.ccy));
     curr.n += 1;
@@ -180,40 +199,50 @@ export default function WebReports({ t, onNavigate, onAdd }) {
             </div>
           </div>
 
-          <ALabel style={{ marginTop: 28 }}>[05] CALENDAR · {periodLabel}</ALabel>
+          <div style={{ marginTop: 28 }}>
+            <NetWorthAttributionBreakdown
+              t={t}
+              buckets={netWorthAttribution}
+              onBucketClick={drillNetWorthBucket}
+              label="[05] NET WORTH · ATTRIBUTION"
+              compact
+            />
+          </div>
+
+          <ALabel style={{ marginTop: 28 }}>[06] CALENDAR · {periodLabel}</ALabel>
           {useRange ? (
             <div style={{ marginTop: 12, padding: '14px 0', fontSize: 10, color: A.muted, letterSpacing: 1, borderTop: '2px solid ' + A.ink }}>
               CALENDAR HEATMAP IS PER-MONTH · SWITCH TO 'THIS MONTH' OR 'LAST MONTH' TO VIEW
             </div>
           ) : (
-          <div style={{ marginTop: 12, borderTop: '2px solid ' + A.ink, paddingTop: 16 }}>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4 }}>
-              {['S','M','T','W','T','F','S'].map((d, i) => (
-                <div key={i} style={{ fontSize: 9, color: A.muted, letterSpacing: 1, textAlign: 'center', paddingBottom: 4 }}>{d}</div>
-              ))}
-              {cells.map((v, i) => {
-                const intensity = v / cellMax;
-                const day = String(i + 1).padStart(2, '0');
-                const dateIso = `${selectedPeriod}-${day}`;
-                return (
-                  <button key={i}
-                    onClick={() => drillTo({ date: dateIso })}
-                    title={`${dateIso} · ${fmtMoney(v, t.currency, false)}`}
-                    style={{
-                      all: 'unset', cursor: 'pointer',
-                      aspectRatio: '1.2',
-                      background: v === 0 ? A.rule2 : `color-mix(in oklch, ${t.accent} ${Math.max(15, intensity * 100)}%, ${A.bg})`,
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    }}>
-                    <span style={{ fontSize: 10, color: intensity > 0.5 ? A.bg : A.ink2, fontVariantNumeric: 'tabular-nums' }}>{i + 1}</span>
-                  </button>
-                );
-              })}
+            <div style={{ marginTop: 12, borderTop: '2px solid ' + A.ink, paddingTop: 16 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4 }}>
+                {['S','M','T','W','T','F','S'].map((d, i) => (
+                  <div key={i} style={{ fontSize: 9, color: A.muted, letterSpacing: 1, textAlign: 'center', paddingBottom: 4 }}>{d}</div>
+                ))}
+                {cells.map((v, i) => {
+                  const intensity = v / cellMax;
+                  const day = String(i + 1).padStart(2, '0');
+                  const dateIso = `${selectedPeriod}-${day}`;
+                  return (
+                    <button key={i}
+                      onClick={() => drillTo({ date: dateIso })}
+                      title={`${dateIso} · ${fmtMoney(v, t.currency, false)}`}
+                      style={{
+                        all: 'unset', cursor: 'pointer',
+                        aspectRatio: '1.2',
+                        background: v === 0 ? A.rule2 : `color-mix(in oklch, ${t.accent} ${Math.max(15, intensity * 100)}%, ${A.bg})`,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      }}>
+                      <span style={{ fontSize: 10, color: intensity > 0.5 ? A.bg : A.ink2, fontVariantNumeric: 'tabular-nums' }}>{i + 1}</span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-          </div>
           )}
 
-          <ALabel style={{ marginTop: 28 }}>[06] DETECTED · INSIGHTS</ALabel>
+          <ALabel style={{ marginTop: 28 }}>[07] DETECTED · INSIGHTS</ALabel>
           <div style={{ marginTop: 8, borderTop: '2px solid ' + A.ink }}>
             {[['SPEND', `${periodTransactions.length} TXS · ${fmtMoney(total, t.currency, false)}`],['BUDGET', 'ROLLOVER ACTIVE'],['PERIOD', periodLabel],['COMPARE', `${formatShortPeriodLabel(previousPeriod)} · ${fmtMoney(previousTotal, t.currency, false)}`]].map(([k, v], i) => (
               <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid ' + A.rule2, fontSize: 11 }}>
