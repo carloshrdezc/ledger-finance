@@ -21,6 +21,35 @@ function txKey(tx) {
   return tx?.transferId || tx?.id || null;
 }
 
+/**
+ * Compute the balance of an account on a given ISO date (txs with date <= asOfDate
+ * are applied). When asOfDate is null/undefined the function returns the
+ * pre-history balance (just openingBal). Mirrors the convention used by
+ * buildNetWorthTrend / buildNetWorthDailyTrend in charts.mjs.
+ */
+function balanceAsOf(account, transactions, asOfDate, rates, reportingCcy) {
+  const opening = isFiniteNumber(account?.openingBal)
+    ? toReportingCurrency(account.openingBal, account.ccy || reportingCcy, rates, reportingCcy)
+    : 0;
+  if (!asOfDate) return opening;
+  const delta = transactions
+    .filter(tx => tx?.acct === account.id && tx.date && tx.date <= asOfDate)
+    .reduce((s, tx) => s + toReportingCurrency(tx.amt || 0, tx.ccy || account.ccy || reportingCcy, rates, reportingCcy), 0);
+  return opening + delta;
+}
+
+/**
+ * Return the ISO date one day before fromDate. Used to compute the
+ * period-opening balance: balance at end-of-day BEFORE the period starts.
+ */
+function dayBefore(isoDate) {
+  if (!isoDate) return null;
+  const d = new Date(`${isoDate}T00:00:00Z`);
+  if (Number.isNaN(d.getTime())) return null;
+  d.setUTCDate(d.getUTCDate() - 1);
+  return d.toISOString().slice(0, 10);
+}
+
 function buildTransferGroups(transactions) {
   const groups = new Map();
   for (const tx of transactions) {
@@ -80,11 +109,13 @@ export function attributeNetWorthChange(
   for (const account of accounts || []) {
     if (!INVESTMENT_TYPES.has(account?.type)) continue;
 
-    const open = isFiniteNumber(account.openingBal)
-      ? toReportingCurrency(account.openingBal, account.ccy || reportingCcy, rates, reportingCcy)
-      : 0;
-    const close = isFiniteNumber(account.balance)
-      ? toReportingCurrency(account.balance, account.ccy || reportingCcy, rates, reportingCcy)
+    // Period-boundary balances: opening = balance at end-of-day before fromDate;
+    // closing = balance at toDate. This mirrors buildNetWorthTrend's convention
+    // and is correct for arbitrary periods, including periods with prior history.
+    const openingAsOf = dayBefore(fromDate);
+    const open = balanceAsOf(account, transactions, openingAsOf, rates, reportingCcy);
+    const close = toDate
+      ? balanceAsOf(account, transactions, toDate, rates, reportingCcy)
       : open;
     investmentBalanceDelta += close - open;
   }
@@ -137,11 +168,18 @@ export function buildNetWorthAttributionFilter(bucket) {
     case 'contributions':
       return { type: 'transfer', accountType: ['INV', 'CRY'] };
     case 'marketGains':
-      return { accountType: ['INV', 'CRY'] };
+      // Market gains are a residual (close-open minus tx flow), not transaction-
+      // backed — there are no underlying txs to drill into. Returning null
+      // disables the click affordance in the breakdown UI.
+      return null;
     case 'spending':
-      return { type: 'expense' };
+      // Spending excludes transfers (transfer-out legs are negative but should
+      // not appear here).
+      return { type: 'expense', excludeTransfers: true };
     case 'income':
-      return { type: 'income' };
+      // Income excludes transfers (transfer-in legs are positive but should
+      // not appear here).
+      return { type: 'income', excludeTransfers: true };
     case 'transfers':
       return { type: 'transfer' };
     default:

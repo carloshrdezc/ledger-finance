@@ -8,7 +8,7 @@ import EmptySectionHint from '../../components/EmptySectionHint';
 import { fmtMoney, fmtSigned } from '../../data';
 import { useStore } from '../../store';
 import { useFx } from '../../useFx';
-import { addMonths, filterTransactionsForPeriod, filterTransactionsForRange, formatShortPeriodLabel, getDaysInPeriod, resolveRangePreset } from '../../period.mjs';
+import { addMonths, filterTransactionsForPeriod, filterTransactionsForRange, formatShortPeriodLabel, getDaysInPeriod, getPeriodBoundaries, resolveRangePreset } from '../../period.mjs';
 import {
   buildCategoryTrend,
   buildIncomeExpenseSeries,
@@ -21,7 +21,7 @@ import NetWorthAttributionBreakdown from '../../components/NetWorthAttributionBr
 import { attributeNetWorthChange, buildNetWorthAttributionFilter } from '../../netWorthAttribution.mjs';
 
 export default function WebReports({ t, onNavigate, onAdd }) {
-  const { transactions, periodTransactions, categoryTree, selectedPeriod, periodLabel, accounts, setTxFilter, rates } = useStore();
+  const { transactions, periodTransactions, categoryTree, selectedPeriod, periodLabel, accounts, budgetStartDay, setTxFilter, rates } = useStore();
   const { toReporting } = useFx(t.currency || 'USD');
 
   const [range, setRange] = React.useState({ kind: 'preset', preset: 'thisMonth' });
@@ -48,7 +48,7 @@ export default function WebReports({ t, onNavigate, onAdd }) {
   const categoryTrend = buildCategoryTrend(transactions, trendPeriods, 5, rates);
   const attributionRange = useRange
     ? resolved
-    : { start: `${selectedPeriod}-01`, end: `${selectedPeriod}-${String(getDaysInPeriod(selectedPeriod)).padStart(2, '0')}` };
+    : getPeriodBoundaries(selectedPeriod, budgetStartDay);
   const netWorthAttribution = React.useMemo(() => attributeNetWorthChange(
     accounts,
     transactions,

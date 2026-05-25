@@ -3,6 +3,7 @@ import React from 'react';
 import { A } from '../theme';
 import { ALabel } from './Shared';
 import { fmtSigned } from '../data';
+import { buildNetWorthAttributionFilter } from '../netWorthAttribution.mjs';
 
 const BUCKETS = [
   {
@@ -41,18 +42,20 @@ function bucketValue(buckets, key) {
   return Number.isFinite(buckets?.[key]) ? buckets[key] : 0;
 }
 
+function bucketIsDrillable(key) {
+  return buildNetWorthAttributionFilter(key) !== null;
+}
+
 export default function NetWorthAttributionBreakdown({
   t,
   buckets,
   onBucketClick,
   compact = false,
   label = '[02] NET WORTH · ATTRIBUTION',
-  showWarning = true,
 }) {
   const values = BUCKETS.map(row => ({ ...row, value: bucketValue(buckets, row.key) }));
   const total = values.reduce((sum, row) => sum + row.value, 0);
   const maxAbs = Math.max(1, ...values.map(row => Math.abs(row.value)));
-  const warning = showWarning && Math.abs(bucketValue(buckets, 'transfers')) > 0.01;
 
   return (
     <div>
@@ -68,22 +71,30 @@ export default function NetWorthAttributionBreakdown({
           const abs = Math.abs(row.value);
           const width = `${Math.max(3, (abs / maxAbs) * 100)}%`;
           const barColor = row.value >= 0 ? (row.key === 'transfers' ? A.ink2 : t.accent) : A.neg;
+          const drillable = bucketIsDrillable(row.key);
+          const clickable = drillable && typeof onBucketClick === 'function';
           const buttonStyle = {
             all: 'unset',
             display: 'block',
             width: '100%',
             boxSizing: 'border-box',
-            cursor: onBucketClick ? 'pointer' : 'default',
+            cursor: clickable ? 'pointer' : 'default',
             padding: compact ? '9px 0' : '11px 0',
             borderBottom: '1px solid ' + A.rule2,
           };
 
+          const titleText = clickable
+            ? `Drill into ${row.label.toLowerCase()}`
+            : (row.key === 'marketGains' ? 'Residual — no underlying transactions' : row.blurb);
+
           return (
             <button
               key={row.key}
-              onClick={onBucketClick ? () => onBucketClick(row.key) : undefined}
+              onClick={clickable ? () => onBucketClick(row.key) : undefined}
+              disabled={!clickable}
               style={buttonStyle}
-              title={onBucketClick ? `Drill into ${row.label.toLowerCase()}` : row.blurb}
+              title={titleText}
+              aria-disabled={!clickable}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12 }}>
                 <div style={{ minWidth: 0 }}>
@@ -101,12 +112,6 @@ export default function NetWorthAttributionBreakdown({
           );
         })}
       </div>
-
-      {warning && (
-        <div style={{ marginTop: 8, fontSize: 9, color: A.muted, letterSpacing: 1 }}>
-          TRANSFERS SHOULD NET TO ZERO · CHECK FOR ORPHANED TXS
-        </div>
-      )}
     </div>
   );
 }

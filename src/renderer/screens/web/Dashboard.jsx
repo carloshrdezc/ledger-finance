@@ -143,7 +143,7 @@ export default function Dashboard({ t, onNavigate, onAdd }) {
             t={t}
             buckets={attribution}
             onBucketClick={drillNetWorthBucket}
-            label="[02] NET WORTH · ATTRIBUTION"
+            label={`[02] NET WORTH · ATTRIBUTION · LAST ${PERIOD_LABEL[period]}`}
           />
         </div>
       )}

@@ -87,7 +87,7 @@ describe('net-worth attribution drill-downs', () => {
     vi.useRealTimers();
   });
 
-  it('Reports market-gains bucket drills into investment-account transactions', () => {
+  it('Reports market-gains bucket is non-drillable (residual, no underlying txs)', () => {
     const store = makeStore({
       transactions: [
         { id: 'xfer-out', date: '2026-05-15', acct: 'chk', cat: 'transfer', amt: -300, ccy: 'USD', transferId: 'xfer-1', transferPeer: 'xfer-in' },
@@ -122,7 +122,10 @@ describe('net-worth attribution drill-downs', () => {
     );
 
     fireEvent.click(screen.getByText('MARKET GAINS'));
-    expect(store.setTxFilter).toHaveBeenCalledWith({ accountType: ['INV', 'CRY'] });
-    expect(onNavigate).toHaveBeenCalledWith('tx');
+    // CAR-87 review: marketGains is a residual (close-open minus tx flow),
+    // not transaction-backed. The breakdown disables click on this bucket;
+    // setTxFilter / onNavigate must NOT fire.
+    expect(store.setTxFilter).not.toHaveBeenCalled();
+    expect(onNavigate).not.toHaveBeenCalled();
   });
 });

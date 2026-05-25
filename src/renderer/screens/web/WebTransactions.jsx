@@ -55,6 +55,7 @@ export default function WebTransactions({ t, onNavigate, onAdd }) {
     }
     if (txFilter.type === 'expense' && tx.amt >= 0) return false;
     if (txFilter.type === 'income' && tx.amt < 0) return false;
+    if (txFilter.excludeTransfers && tx.cat === 'transfer') return false;
     if (txFilter.account && tx.acct !== txFilter.account) return false;
     if (txFilter.accountType) {
       const wanted = Array.isArray(txFilter.accountType) ? txFilter.accountType : [txFilter.accountType];

@@ -46,6 +46,23 @@ export function filterTransactionsForPeriod(transactions, period, startDay = 1) 
   return transactions.filter(tx => tx.date >= start && tx.date <= end);
 }
 
+// Compute the inclusive [start, end] ISO boundaries that filterTransactionsForPeriod
+// uses for a given period + budgetStartDay. Useful when an analytic helper needs
+// the explicit window (e.g. net-worth attribution) rather than the filtered list.
+export function getPeriodBoundaries(period, startDay = 1) {
+  if (startDay <= 1) {
+    return {
+      start: `${period}-01`,
+      end: `${period}-${String(getDaysInPeriod(period)).padStart(2, '0')}`,
+    };
+  }
+  const [year, month] = period.split('-').map(Number);
+  const start = `${period}-${String(startDay).padStart(2, '0')}`;
+  const nextPeriod = monthKey(new Date(year, month, 1));
+  const end = `${nextPeriod}-${String(startDay - 1).padStart(2, '0')}`;
+  return { start, end };
+}
+
 // Filter transactions to an inclusive [startIso, endIso] range. Both sides
 // are 'YYYY-MM-DD'. Either side may be falsy (means open-ended).
 export function filterTransactionsForRange(transactions, startIso, endIso) {
