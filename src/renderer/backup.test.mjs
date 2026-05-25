@@ -40,7 +40,7 @@ describe('buildBackup', () => {
     expect(b.exportedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
   });
 
-  it('includes all 14 data slices and the settings block', () => {
+  it('includes all 15 data slices and the settings block', () => {
     const b = buildBackup(sampleState);
     expect(b.transactions).toEqual(sampleState.txs);
     expect(b.accounts).toEqual(sampleState.accounts);
@@ -50,6 +50,7 @@ describe('buildBackup', () => {
     expect(b.bills).toEqual([]);
     expect(b.goals).toEqual([]);
     expect(b.goalContributions).toEqual([]);
+    expect(b.rules).toEqual([]);
     expect(b.investments).toEqual([]);
     expect(b.trades).toEqual([]);
     expect(b.fxRates).toEqual(sampleState.rates);
@@ -57,6 +58,17 @@ describe('buildBackup', () => {
     expect(b.selectedPeriod).toBe('2026-05');
     expect(b.budgetStartDay).toBe(1);
     expect(b.settings).toEqual(sampleState.settings);
+  });
+
+  // Documentation-as-test: locks the user-data slice count so the comment
+  // in backup.mjs ("15 user-data slices total: 13 in SLICES + 2 in
+  // SCALAR_SLICES") can't drift silently. If a slice is added or removed,
+  // this assertion forces the count + comment to be updated together.
+  it('emits exactly 15 user-data slice keys (locks slice count)', () => {
+    const b = buildBackup({});
+    const envelopeKeys = ['_type', 'version', 'exportedAt', 'settings'];
+    const sliceKeys = Object.keys(b).filter((k) => !envelopeKeys.includes(k));
+    expect(sliceKeys).toHaveLength(15);
   });
 
   it('handles missing/undefined slices by emitting empty defaults', () => {
@@ -69,6 +81,7 @@ describe('buildBackup', () => {
     expect(b.bills).toEqual([]);
     expect(b.goals).toEqual([]);
     expect(b.goalContributions).toEqual([]);
+    expect(b.rules).toEqual([]);
     expect(b.investments).toEqual([]);
     expect(b.trades).toEqual([]);
     expect(b.fxRates).toEqual({});

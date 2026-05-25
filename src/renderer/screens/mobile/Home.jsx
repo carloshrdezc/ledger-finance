@@ -7,8 +7,8 @@ import { useStore } from '../../store';
 import { useFx } from '../../useFx';
 import EmptySectionHint from '../../components/EmptySectionHint';
 
-export default function Home({ t, onAcct, onAdd, onViewAll }) {
-  const { accounts, accountsWithBalance, accountsIncludedInTotals, transactions, billRows, alertRows, rates } = useStore();
+export default function Home({ t, onAcct, onAdd, onViewAll, onInsight }) {
+  const { accounts, accountsWithBalance, accountsIncludedInTotals, transactions, billRows, alertRows, insightRows, rates } = useStore();
   const { toReporting } = useFx(t.currency || 'USD');
   const now = new Date();
   const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -135,6 +135,23 @@ export default function Home({ t, onAcct, onAdd, onViewAll }) {
           <div style={{ padding: '9px 0', borderBottom: '1px solid ' + A.rule2, fontSize: 11, color: A.muted, letterSpacing: 1 }}>NO ACTIVE ALERTS</div>
         )}
       </div>
+
+      {/* CAR-217: Weekly insights — top 2 on Home, tap to drill in. The full
+          list lives in AlertsHub; this is a teaser. Hidden when empty. */}
+      {insightRows.length > 0 && (
+        <div style={{ padding: '14px 0 0' }}>
+          <ALabel>[02B] WEEKLY INSIGHTS · {insightRows.length}</ALabel>
+          {insightRows.slice(0, 2).map(insight => (
+            <button key={insight.id} onClick={() => onInsight && onInsight(insight)} style={{ all: 'unset', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', width: '100%', padding: '9px 0', borderBottom: '1px solid ' + A.rule2, fontSize: 12, gap: 10 }}>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ color: insight.severity === 'high' ? A.neg : insight.severity === 'medium' ? t.accent : A.muted, fontSize: 9, letterSpacing: 1 }}>{insight.severity.toUpperCase()}</div>
+                <div style={{ marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{insight.title}</div>
+              </div>
+              <div style={{ fontSize: 10, color: t.accent, letterSpacing: 1, alignSelf: 'center', fontVariantNumeric: 'tabular-nums' }}>{insight.metric}</div>
+            </button>
+          ))}
+        </div>
+      )}
       <ARule style={{ marginTop: 14 }} />
 
       {/* Accounts mini-list */}

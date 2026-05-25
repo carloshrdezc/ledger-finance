@@ -26,7 +26,8 @@ const WINDOWS_TO_LOOKBACK = 26; // ~6 months of weekly buckets
  * @property {InsightSeverity} severity
  * @property {string} title
  * @property {string} detail
- * @property {string|number} metric
+ * @property {string} metric  // CAR-217: locked to string. UI surfaces render this raw;
+ *                            // detectors must format (e.g. '$42', '150%', '60d').
  * @property {'REVIEW'|'OPEN'|'DISMISS'} action
  * @property {string} route
  * @property {Record<string, string>|undefined} [routeParams]
@@ -282,7 +283,7 @@ export function detectInactiveSubscriptions(recurringRules, transactions, todayI
       severity: 'medium',
       title: labels[0],
       detail: 'NO MATCHING TRANSACTION IN LAST 60 DAYS',
-      metric: 60,
+      metric: '60D',
       action: 'REVIEW',
       route: 'recurring',
       routeParams: { ruleId },
