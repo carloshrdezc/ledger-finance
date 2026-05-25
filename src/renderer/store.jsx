@@ -28,17 +28,89 @@ import {
   updateTxsIndividuallyInArray,
 } from './bulkOps.mjs';
 
+const MIGRATED_TO_DISK_KEY = 'ledger:_migratedToDisk';
+const LEDGER_PREFIX = 'ledger:';
+const PERSIST_DEBOUNCE_MS = 250;
+const PersistenceCtx = React.createContext(null);
+
+function isPlainObject(value) {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function readLedgerStorageSnapshot() {
+  const snapshot = {};
+  try {
+    if (typeof localStorage === 'undefined') return snapshot;
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (!key || !key.startsWith(LEDGER_PREFIX)) continue;
+      const raw = localStorage.getItem(key);
+      if (raw === null) continue;
+      try {
+        snapshot[key] = JSON.parse(raw);
+      } catch {
+        // Skip malformed legacy entries; the hook falls back to defaults.
+      }
+    }
+  } catch {
+    // localStorage unavailable (private browsing, denied permissions, etc.).
+  }
+  return snapshot;
+}
+
+function writeLedgerStorageKey(key, value) {
+  try {
+    if (typeof localStorage === 'undefined') return;
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // Keep the in-memory snapshot authoritative.
+  }
+}
+
+function writeLedgerStorageSnapshot(snapshot) {
+  try {
+    if (typeof localStorage === 'undefined') return;
+    for (const [key, value] of Object.entries(snapshot || {})) {
+      if (!key.startsWith(LEDGER_PREFIX)) continue;
+      localStorage.setItem(key, JSON.stringify(value));
+    }
+  } catch {
+    // Best-effort mirror only.
+  }
+}
+
+function getSnapshotValue(snapshot, key, def) {
+  return Object.prototype.hasOwnProperty.call(snapshot || {}, key) ? snapshot[key] : def;
+}
+
+function resolveBootSnapshot(diskState) {
+  const disk = isPlainObject(diskState) ? diskState : {};
+  if (disk[MIGRATED_TO_DISK_KEY] === true) {
+    return { snapshot: disk, needsWrite: false };
+  }
+  if (Object.keys(disk).length > 0) {
+    return { snapshot: { ...disk, [MIGRATED_TO_DISK_KEY]: true }, needsWrite: true };
+  }
+  return { snapshot: { ...readLedgerStorageSnapshot(), [MIGRATED_TO_DISK_KEY]: true }, needsWrite: true };
+}
+
 function useLS(key, def) {
-  const [v, setV] = React.useState(() => {
-    try { const s = localStorage.getItem(key); return s !== null ? JSON.parse(s) : def; }
-    catch { return def; }
-  });
-  const set = React.useCallback(u => setV(prev => {
-    const next = typeof u === 'function' ? u(prev) : u;
-    try { localStorage.setItem(key, JSON.stringify(next)); } catch {}
-    return next;
-  }), [key]);
-  return [v, set];
+  const ctx = React.useContext(PersistenceCtx);
+  if (!ctx) {
+    const [v, setV] = React.useState(() => {
+      try { const s = localStorage.getItem(key); return s !== null ? JSON.parse(s) : def; }
+      catch { return def; }
+    });
+    const set = React.useCallback(u => setV(prev => {
+      const next = typeof u === 'function' ? u(prev) : u;
+      writeLedgerStorageKey(key, next);
+      return next;
+    }), [key]);
+    return [v, set];
+  }
+  const value = getSnapshotValue(ctx.snapshot, key, def);
+  const set = React.useCallback(u => ctx.setKey(key, u, def), [ctx, key, def]);
+  return [value, set];
 }
 
 function migrateTransactions(txs) {
@@ -104,6 +176,78 @@ export const StoreCtx = React.createContext(null);
 })();
 
 export function StoreProvider({ children }) {
+  const [snapshot, setSnapshot] = React.useState(() => readLedgerStorageSnapshot());
+  const snapshotRef = React.useRef(snapshot);
+  const writeTimerRef = React.useRef(null);
+  const ledgerDB = typeof window !== 'undefined' ? window.ledgerDB : undefined;
+
+  React.useEffect(() => {
+    snapshotRef.current = snapshot;
+  }, [snapshot]);
+
+  const setKey = React.useCallback((key, updater, def) => {
+    setSnapshot(prev => {
+      const prevValue = getSnapshotValue(prev, key, def);
+      const nextValue = typeof updater === 'function' ? updater(prevValue) : updater;
+      const nextSnapshot = { ...prev, [key]: nextValue };
+      snapshotRef.current = nextSnapshot;
+      writeLedgerStorageKey(key, nextValue);
+      if (ledgerDB) {
+        if (writeTimerRef.current) clearTimeout(writeTimerRef.current);
+        writeTimerRef.current = setTimeout(() => {
+          writeTimerRef.current = null;
+          void ledgerDB.write(snapshotRef.current).catch(() => {});
+        }, PERSIST_DEBOUNCE_MS);
+      }
+      return nextSnapshot;
+    });
+  }, [ledgerDB]);
+
+  React.useEffect(() => {
+    if (!ledgerDB) return;
+    let cancelled = false;
+    const initialSnapshot = snapshotRef.current;
+    void (async () => {
+      try {
+        const diskState = await ledgerDB.read();
+        if (cancelled) return;
+        const { snapshot: bootSnapshot, needsWrite } = resolveBootSnapshot(diskState);
+        const currentSnapshot = snapshotRef.current;
+        const userChanges = {};
+        for (const [key, value] of Object.entries(currentSnapshot)) {
+          if (initialSnapshot[key] !== value) userChanges[key] = value;
+        }
+        const hydratedSnapshot = Object.keys(userChanges).length > 0
+          ? { ...bootSnapshot, ...userChanges }
+          : bootSnapshot;
+        if (needsWrite || Object.keys(userChanges).length > 0) {
+          await ledgerDB.write(hydratedSnapshot);
+        }
+        if (!cancelled) {
+          snapshotRef.current = hydratedSnapshot;
+          writeLedgerStorageSnapshot(hydratedSnapshot);
+          setSnapshot(hydratedSnapshot);
+        }
+      } catch {
+        // Keep the browser/localStorage snapshot if disk hydration fails.
+      }
+    })();
+    return () => {
+      cancelled = true;
+      if (writeTimerRef.current) clearTimeout(writeTimerRef.current);
+    };
+  }, [ledgerDB]);
+
+  const persistenceValue = React.useMemo(() => ({ snapshot, setKey }), [snapshot, setKey]);
+
+  return (
+    <PersistenceCtx.Provider value={persistenceValue}>
+      <StoreProviderImpl>{children}</StoreProviderImpl>
+    </PersistenceCtx.Provider>
+  );
+}
+
+function StoreProviderImpl({ children }) {
   const [txs, setTxs]         = useLS('ledger:tx',      []);
   const [catTree, setCatTree]  = useLS('ledger:cats',    DEFAULT_CAT_TREE);
   const [budgets, setBudgets]  = useLS('ledger:budgets', []);

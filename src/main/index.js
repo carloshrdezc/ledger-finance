@@ -1,4 +1,4 @@
-const { app, BrowserWindow } = require('electron');
+const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 
 const isDev = !app.isPackaged;
@@ -14,6 +14,7 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
+      preload: path.join(__dirname, '../preload/index.js'),
     },
   });
 
@@ -23,10 +24,38 @@ function createWindow() {
   } else {
     win.loadFile(path.join(__dirname, '../../dist/index.html'));
   }
+
+  return win;
+}
+
+function broadcastLedgerChange(webContentsList) {
+  for (const webContents of webContentsList) {
+    if (!webContents.isDestroyed()) {
+      webContents.send('ledger-db:changed');
+    }
+  }
 }
 
 app.commandLine.appendSwitch('no-sandbox');
-app.whenReady().then(createWindow);
+
+app.whenReady().then(async () => {
+  const { createDiskStore } = await import('./disk-store.mjs');
+  const ledgerPath = path.join(app.getPath('userData'), 'ledger-state.json');
+  const ledgerStore = createDiskStore(ledgerPath);
+
+  ipcMain.handle('ledger-db:read', () => ledgerStore.read());
+  ipcMain.handle('ledger-db:write', async (_event, state) => {
+    await ledgerStore.write(state);
+    broadcastLedgerChange(BrowserWindow.getAllWindows().map(win => win.webContents));
+  });
+  ipcMain.handle('ledger-db:export-backup', async () => ledgerStore.exportBackup());
+  ipcMain.handle('ledger-db:import', async (_event, json) => {
+    await ledgerStore.import(json);
+    broadcastLedgerChange(BrowserWindow.getAllWindows().map(win => win.webContents));
+  });
+
+  createWindow();
+});
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
