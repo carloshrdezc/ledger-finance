@@ -4,6 +4,7 @@ import { ARule, ALabel } from '../../components/Shared';
 import { fmtMoney } from '../../data';
 import { useStore } from '../../store';
 import WebShell from './WebShell';
+import { applyInsightDrillDown } from '../../insightNav';
 
 const SEVERITY_LABEL = {
   critical: 'CRITICAL',
@@ -24,19 +25,10 @@ export default function WebAlerts({ t, onNavigate, onAdd }) {
   const activeCount = alertRows.length;
   const criticalCount = alertRows.filter(a => a.severity === 'critical').length;
 
-  // CAR-217: same drill-down helper as Dashboard — keep them in lockstep.
+  // CAR-217: same drill-down helper as Dashboard — single source in
+  // insightNav.js so all 3 surfaces stay in lockstep.
   const goToInsight = React.useCallback((insight) => {
-    if (!insight) return;
-    if (insight.route === 'transactions') {
-      const params = insight.routeParams || {};
-      const filter = { type: 'expense' };
-      if (params.cat) filter.category = params.cat;
-      if (params.merchant) filter.merchant = params.merchant;
-      setTxFilter(filter);
-      onNavigate('tx');
-      return;
-    }
-    onNavigate(insight.route);
+    applyInsightDrillDown(insight, { setTxFilter, navigate: onNavigate });
   }, [setTxFilter, onNavigate]);
 
   return (
@@ -135,7 +127,7 @@ export default function WebAlerts({ t, onNavigate, onAdd }) {
               <div style={{ fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{insight.title}</div>
               <div style={{ fontSize: 10, color: A.muted, letterSpacing: 0.8, marginTop: 3 }}>{insight.detail}</div>
             </button>
-            <div style={{ textAlign: 'right', fontSize: 12, fontVariantNumeric: 'tabular-nums' }}>{insight.metric}</div>
+            <div style={{ textAlign: 'right', fontSize: 12, fontVariantNumeric: 'tabular-nums' }}>{typeof insight.metric === 'number' ? fmtMoney(insight.metric, t.currency, t.decimals) : insight.metric}</div>
             <button onClick={() => goToInsight(insight)} style={{ all: 'unset', cursor: 'pointer', textAlign: 'right', fontSize: 10, letterSpacing: 1.2, color: t.accent }}>
               {insight.action}
             </button>

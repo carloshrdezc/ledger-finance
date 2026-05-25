@@ -67,7 +67,7 @@ export default function AlertsHub({ t, onBack, onNavigate, onInsight }) {
 
       {/* CAR-217: Insights — same shape, separate dismiss state. */}
       <div style={{ padding: '24px 0 8px', display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-        <ALabel>[02] INSIGHTS · {insightRows.length}</ALabel>
+        <ALabel>[01B] INSIGHTS · {insightRows.length}</ALabel>
         <button onClick={restoreInsights} style={{ all: 'unset', cursor: 'pointer', fontSize: 10, letterSpacing: 1.2, color: t.accent }}>RESTORE</button>
       </div>
       <ARule />
@@ -86,7 +86,7 @@ export default function AlertsHub({ t, onBack, onNavigate, onInsight }) {
                   <div style={{ fontSize: 10, color: A.muted, letterSpacing: 0.6, marginTop: 3 }}>{insight.detail}</div>
                 </div>
                 <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                  <div style={{ fontSize: 12, fontVariantNumeric: 'tabular-nums' }}>{insight.metric}</div>
+                  <div style={{ fontSize: 12, fontVariantNumeric: 'tabular-nums' }}>{typeof insight.metric === 'number' ? fmtMoney(insight.metric, t.currency, t.decimals) : insight.metric}</div>
                   <div style={{ fontSize: 9, color: t.accent, letterSpacing: 1, marginTop: 5 }}>{insight.action}</div>
                 </div>
               </div>

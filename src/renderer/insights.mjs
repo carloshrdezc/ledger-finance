@@ -26,7 +26,8 @@ const WINDOWS_TO_LOOKBACK = 26; // ~6 months of weekly buckets
  * @property {InsightSeverity} severity
  * @property {string} title
  * @property {string} detail
- * @property {string|number} metric
+ * @property {string} metric  // CAR-217: locked to string. UI surfaces render this raw;
+ *                            // detectors must format (e.g. '$42', '150%', '60d').
  * @property {'REVIEW'|'OPEN'|'DISMISS'} action
  * @property {string} route
  * @property {Record<string, string>|undefined} [routeParams]

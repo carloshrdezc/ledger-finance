@@ -5,9 +5,10 @@
 export const BACKUP_FORMAT_VERSION = 2;
 export const BACKUP_TYPE = 'ledger-backup';
 
-// The 14 user-data slices (excluded: txFilter, dismissedAlerts, welcomeSeen,
-// fxMigrationToastSeen, lastBackupAt, backupReminderInterval,
-// backupReminderSnoozedUntil — all session-ephemera, reset on restore).
+// The 14 user-data slices (excluded: txFilter, dismissedAlerts,
+// dismissedInsights, welcomeSeen, fxMigrationToastSeen, lastBackupAt,
+// backupReminderInterval, backupReminderSnoozedUntil — all session-ephemera,
+// reset on restore).
 //
 // Each entry maps STATE_KEY → BACKUP_KEY → defaultEmpty (used both when
 // building from a state missing the slice AND when validating a backup

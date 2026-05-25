@@ -13,6 +13,7 @@ import CommandPalette from './components/CommandPalette';
 import ShortcutsOverlay from './components/Shortcuts';
 import useKeyboardShortcuts from './hooks/useKeyboardShortcuts';
 import { buildCommands } from './commands.mjs';
+import { applyInsightDrillDown } from './insightNav';
 
 // Mobile screens
 import Home from './screens/mobile/Home';
@@ -86,8 +87,8 @@ function MobileApp({ t, setAccent, setDensity, setDecimals, setCurrency, setThem
   const [navStack, setNavStack] = React.useState([]);
   const [showAdd, setShowAdd] = React.useState(false);
 
-  const push = (screen, params = {}) => setNavStack(s => [...s, { screen, params }]);
-  const pop = () => setNavStack(s => s.slice(0, -1));
+  const push = React.useCallback((screen, params = {}) => setNavStack(s => [...s, { screen, params }]), []);
+  const pop = React.useCallback(() => setNavStack(s => s.slice(0, -1)), []);
 
   // Resolve an alert route (string from alerts.mjs) to either a tab switch or
   // overlay push. Tab targets clear the overlay stack.
@@ -112,25 +113,24 @@ function MobileApp({ t, setAccent, setDensity, setDecimals, setCurrency, setThem
     }
     // Otherwise treat as an overlay screen key
     push(route, params);
-  }, []);
+  }, [push]);
 
-  // CAR-217: insight drill-down. setTxFilter + jump to TX tab when the route
-  // is `transactions`; otherwise defer to goToRoute. Lives here because Home
-  // + AlertsHub both need it.
+  // CAR-217: insight drill-down. Lives here because Home + AlertsHub both
+  // need it. The actual route resolution is in insightNav.js (single source
+  // of truth across web Dashboard, WebAlerts, and this surface).
   const { setTxFilter } = useStore();
   const goToInsight = React.useCallback((insight) => {
-    if (!insight) return;
-    if (insight.route === 'transactions') {
-      const params = insight.routeParams || {};
-      const filter = { type: 'expense' };
-      if (params.cat) filter.category = params.cat;
-      if (params.merchant) filter.merchant = params.merchant;
-      setTxFilter(filter);
-      setNavStack([]);
-      setTab('tx');
-      return;
-    }
-    goToRoute(insight.route, insight.routeParams);
+    applyInsightDrillDown(insight, {
+      setTxFilter,
+      navigate: (route, routeParams) => {
+        if (route === 'tx') {
+          setNavStack([]);
+          setTab('tx');
+          return;
+        }
+        goToRoute(route, routeParams);
+      },
+    });
   }, [setTxFilter, goToRoute]);
 
   const current = navStack.length > 0 ? navStack[navStack.length - 1] : null;

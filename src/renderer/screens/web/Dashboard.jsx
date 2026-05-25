@@ -10,6 +10,7 @@ import { useStore } from '../../store';
 import { buildNetWorthDailyTrend } from '../../charts.mjs';
 import { useFx } from '../../useFx';
 import EmptySectionHint from '../../components/EmptySectionHint';
+import { applyInsightDrillDown } from '../../insightNav';
 
 const PERIOD_DAYS  = { '1D': 1, '1W': 7, '1M': 30, '3M': 90, '1Y': 365 };
 const PERIOD_LABEL = { '1D': '1D', '1W': '7D', '1M': '30D', '3M': '90D', '1Y': '1Y', 'MAX': 'ALL' };
@@ -29,20 +30,10 @@ export default function Dashboard({ t, onNavigate, onAdd }) {
 
   // CAR-217: navigate to the right surface for an insight, applying the
   // tx-filter drill-down when the route is `transactions`. Mirrors the
-  // pattern WebReports uses (setTxFilter + onNavigate('tx')).
+  // pattern WebReports uses (setTxFilter + onNavigate('tx')). The actual
+  // resolution lives in insightNav.js so all 3 surfaces stay in lockstep.
   const goToInsight = React.useCallback((insight) => {
-    if (!insight) return;
-    if (insight.route === 'transactions') {
-      const params = insight.routeParams || {};
-      const filter = {};
-      if (params.cat) filter.category = params.cat;
-      if (params.merchant) filter.merchant = params.merchant;
-      filter.type = 'expense';
-      setTxFilter(filter);
-      onNavigate('tx');
-      return;
-    }
-    onNavigate(insight.route);
+    applyInsightDrillDown(insight, { setTxFilter, navigate: onNavigate });
   }, [setTxFilter, onNavigate]);
 
   const now = new Date();
@@ -165,13 +156,18 @@ export default function Dashboard({ t, onNavigate, onAdd }) {
           </div>
           <div style={{ marginTop: 8, borderTop: '2px solid ' + A.ink }}>
             {insightRows.slice(0, 3).map(insight => (
-              <div key={insight.id} style={{ display: 'grid', gridTemplateColumns: '86px 1fr 80px 64px', gap: 16, width: '100%', padding: '9px 0', borderBottom: '1px solid ' + A.rule2, alignItems: 'center' }}>
+              <div key={insight.id} style={{ display: 'grid', gridTemplateColumns: '86px 1fr 80px 64px 64px', gap: 16, width: '100%', padding: '9px 0', borderBottom: '1px solid ' + A.rule2, alignItems: 'center' }}>
                 <div style={{ fontSize: 9, letterSpacing: 1, color: insight.severity === 'high' ? A.neg : insight.severity === 'medium' ? t.accent : A.muted }}>{insight.severity.toUpperCase()}</div>
                 <button onClick={() => goToInsight(insight)} style={{ all: 'unset', cursor: 'pointer', minWidth: 0 }}>
                   <div style={{ fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{insight.title}</div>
                   <div style={{ fontSize: 10, color: A.muted, letterSpacing: 0.8, marginTop: 2 }}>{insight.detail}</div>
                 </button>
-                <div style={{ textAlign: 'right', fontSize: 11, color: t.accent, letterSpacing: 1, fontVariantNumeric: 'tabular-nums' }}>{insight.metric}</div>
+                <div style={{ textAlign: 'right', fontSize: 11, color: t.accent, letterSpacing: 1, fontVariantNumeric: 'tabular-nums' }}>
+                  {typeof insight.metric === 'number' ? fmtMoney(insight.metric, t.currency, t.decimals) : insight.metric}
+                </div>
+                <button onClick={() => goToInsight(insight)} style={{ all: 'unset', cursor: 'pointer', textAlign: 'right', fontSize: 9, letterSpacing: 1.2, color: t.accent }}>
+                  {insight.action}
+                </button>
                 <button onClick={() => dismissInsight(insight.id)} style={{ all: 'unset', cursor: 'pointer', textAlign: 'right', fontSize: 9, letterSpacing: 1.2, color: A.muted }}>DISMISS</button>
               </div>
             ))}

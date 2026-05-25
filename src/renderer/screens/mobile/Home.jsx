@@ -147,7 +147,7 @@ export default function Home({ t, onAcct, onAdd, onViewAll, onInsight }) {
                 <div style={{ color: insight.severity === 'high' ? A.neg : insight.severity === 'medium' ? t.accent : A.muted, fontSize: 9, letterSpacing: 1 }}>{insight.severity.toUpperCase()}</div>
                 <div style={{ marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{insight.title}</div>
               </div>
-              <div style={{ fontSize: 10, color: t.accent, letterSpacing: 1, alignSelf: 'center', fontVariantNumeric: 'tabular-nums' }}>{insight.metric}</div>
+              <div style={{ fontSize: 10, color: t.accent, letterSpacing: 1, alignSelf: 'center', fontVariantNumeric: 'tabular-nums' }}>{typeof insight.metric === 'number' ? fmtMoney(insight.metric, t.currency, t.decimals) : insight.metric}</div>
             </button>
           ))}
         </div>

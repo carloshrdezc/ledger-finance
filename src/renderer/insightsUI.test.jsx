@@ -73,7 +73,6 @@ function makeStore(overrides = {}) {
     restoreAlerts: vi.fn(),
     // CAR-217 surface
     insightRows: [],
-    dismissedInsightIds: [],
     dismissInsight: vi.fn(),
     restoreInsights: vi.fn(),
     setTxFilter: vi.fn(),
@@ -106,10 +105,15 @@ describe('CAR-217 · WebAlerts insights section', () => {
     expect(screen.getByText('FOOD SPEND SPIKE')).toBeTruthy();
     expect(screen.getByText('NETFLIX UNUSED')).toBeTruthy();
 
-    // The dismiss buttons are siblings of the insight title button. There's
-    // one DISMISS button per insight; click the first.
-    const dismissButtons = screen.getAllByText('DISMISS');
-    fireEvent.click(dismissButtons[dismissButtons.length - 2]); // first insight (alerts dismiss buttons render first if any)
+    // Each insight row has exactly one DISMISS button. Insights render
+    // AFTER alerts in WebAlerts, so insight dismiss buttons are the LAST
+    // `insightRows.length` entries in the DISMISS list. Use a length-aware
+    // slice instead of fixed indices so the test stays correct if the
+    // alerts fixture grows in the future.
+    const allDismiss = screen.getAllByText('DISMISS');
+    const insightDismissButtons = allDismiss.slice(-2); // 2 insights = last 2
+    expect(insightDismissButtons).toHaveLength(2);
+    fireEvent.click(insightDismissButtons[0]); // first insight (FOOD SPEND SPIKE)
     expect(store.dismissInsight).toHaveBeenCalledWith(spike.id);
   });
 
@@ -136,7 +140,9 @@ describe('CAR-217 · WebAlerts insights section', () => {
     );
 
     fireEvent.click(screen.getByText('NETFLIX UNUSED'));
-    expect(onNavigate).toHaveBeenCalledWith('recurring');
+    // applyInsightDrillDown forwards routeParams as the 2nd arg so callers
+    // can opt into params per-route. Fixture has routeParams: {}.
+    expect(onNavigate).toHaveBeenCalledWith('recurring', {});
     expect(store.setTxFilter).not.toHaveBeenCalled();
   });
 
@@ -231,5 +237,31 @@ describe('CAR-217 · Dashboard category-spike drill-down (AC 3)', () => {
       merchant: 'NEW STORE',
     });
     expect(onNavigate).toHaveBeenCalledWith('tx');
+  });
+});
+
+// CAR-217: lock the empty-app gate. The store memo wraps buildInsightRows
+// with `isAppEmpty ? [] : buildInsightRows(...)` so a brand-new user isn't
+// shown stale-looking detector output. This test mounts the real
+// StoreProvider with empty localStorage and asserts the gate holds.
+describe('insightRows gate', () => {
+  it('returns [] when isAppEmpty is true (fresh install)', async () => {
+    // Reset localStorage so isAppEmptyFor returns true.
+    window.localStorage.clear();
+    const { StoreProvider, useStore } = await import('./store');
+
+    let captured = null;
+    function Probe() {
+      const { insightRows, isAppEmpty } = useStore();
+      captured = { insightRows, isAppEmpty };
+      return null;
+    }
+    render(
+      <StoreProvider>
+        <Probe />
+      </StoreProvider>,
+    );
+    expect(captured.isAppEmpty).toBe(true);
+    expect(captured.insightRows).toEqual([]);
   });
 });

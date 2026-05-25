@@ -1010,7 +1010,6 @@ export function StoreProvider({ children }) {
       restoreAlerts,
       // CAR-217
       insightRows,
-      dismissedInsightIds,
       dismissInsight,
       restoreInsights,
       lastBackupAt,
