@@ -12,6 +12,8 @@ import { useFx } from '../../useFx';
 import EmptySectionHint from '../../components/EmptySectionHint';
 import { applyInsightDrillDown } from '../../insightNav';
 import CashFlowForecastWidget from '../../components/CashFlowForecastWidget';
+import NetWorthAttributionBreakdown from '../../components/NetWorthAttributionBreakdown';
+import { attributeNetWorthChange, buildNetWorthAttributionFilter } from '../../netWorthAttribution.mjs';
 
 const PERIOD_DAYS  = { '1D': 1, '1W': 7, '1M': 30, '3M': 90, '1Y': 365 };
 const PERIOD_LABEL = { '1D': '1D', '1W': '7D', '1M': '30D', '3M': '90D', '1Y': '1Y', 'MAX': 'ALL' };
@@ -38,7 +40,6 @@ export default function Dashboard({ t, onNavigate, onAdd }) {
   }, [setTxFilter, onNavigate]);
 
   const now = new Date();
-  const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   const NET_WORTH  = accountsIncludedInTotals.reduce((s, a) => s + toReporting(a.balance, a.ccy), 0);
   const NW_DELTA   = accountsIncludedInTotals.reduce((s, a) => s + toReporting(a.delta,   a.ccy), 0);
   const NW_PCT     = NET_WORTH ? (NW_DELTA / Math.abs(NET_WORTH - NW_DELTA)) * 100 : 0;
@@ -55,6 +56,20 @@ export default function Dashboard({ t, onNavigate, onAdd }) {
     const indexes = [0, 0.25, 0.5, 0.75, 1].map(x => Math.round(x * (netWorthTrend.length - 1)));
     return indexes.map(i => netWorthTrend[i]);
   }, [netWorthTrend]);
+  const attribution = React.useMemo(() => attributeNetWorthChange(
+    accountsIncludedInTotals,
+    transactions,
+    windowStart(period),
+    todayIso,
+    rates,
+    t.currency || 'USD',
+  ), [accountsIncludedInTotals, transactions, period, todayIso, rates, t.currency]);
+  const drillNetWorthBucket = React.useCallback((bucket) => {
+    const filter = buildNetWorthAttributionFilter(bucket);
+    if (!filter) return;
+    setTxFilter(filter);
+    onNavigate('tx');
+  }, [setTxFilter, onNavigate]);
 
   const { inflow, outflow, net, deltaByAcct } = React.useMemo(() => {
     const cutoff = windowStart(period);
@@ -119,6 +134,17 @@ export default function Dashboard({ t, onNavigate, onAdd }) {
               <span key={point.date}>{dayLabel(point.date)}</span>
             ))}
           </div>
+        </div>
+      )}
+
+      {transactions.length > 0 && (
+        <div style={{ marginTop: 18 }}>
+          <NetWorthAttributionBreakdown
+            t={t}
+            buckets={attribution}
+            onBucketClick={drillNetWorthBucket}
+            label="[02] NET WORTH · ATTRIBUTION"
+          />
         </div>
       )}
 

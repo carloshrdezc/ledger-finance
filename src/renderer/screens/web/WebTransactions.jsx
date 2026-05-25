@@ -38,6 +38,7 @@ export default function WebTransactions({ t, onNavigate, onAdd }) {
   const [selectedIdx, setSelectedIdx] = React.useState(0);
   const searchRef = React.useRef(null);
   const rowRefs = React.useRef({});
+  const accountTypeById = React.useMemo(() => new Map((accountsWithBalance || []).map(a => [a.id, a.type])), [accountsWithBalance]);
 
   const matchesTxFilter = React.useCallback((tx) => {
     if (!txFilter) return true;
@@ -55,8 +56,12 @@ export default function WebTransactions({ t, onNavigate, onAdd }) {
     if (txFilter.type === 'expense' && tx.amt >= 0) return false;
     if (txFilter.type === 'income' && tx.amt < 0) return false;
     if (txFilter.account && tx.acct !== txFilter.account) return false;
+    if (txFilter.accountType) {
+      const wanted = Array.isArray(txFilter.accountType) ? txFilter.accountType : [txFilter.accountType];
+      if (!wanted.includes(accountTypeById.get(tx.acct))) return false;
+    }
     return true;
-  }, [txFilter]);
+  }, [txFilter, accountTypeById]);
 
   // When a date filter is active, search across ALL transactions (not just
   // the current period) so the user sees their click target.
@@ -162,6 +167,10 @@ export default function WebTransactions({ t, onNavigate, onAdd }) {
     if (txFilter.weekday != null) parts.push('DAY · ' + ['MON','TUE','WED','THU','FRI','SAT','SUN'][txFilter.weekday]);
     if (txFilter.type) parts.push(txFilter.type.toUpperCase());
     if (txFilter.account) parts.push('ACCT · ' + txFilter.account);
+    if (txFilter.accountType) {
+      const wanted = Array.isArray(txFilter.accountType) ? txFilter.accountType : [txFilter.accountType];
+      parts.push('TYPE · ' + wanted.join('+'));
+    }
     return parts.join(' · ');
   }, [txFilter]);
 

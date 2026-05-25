@@ -12,6 +12,7 @@ export default function Transactions({ t }) {
   const [filter, setFilter] = React.useState('ALL');
   const [search, setSearch] = React.useState('');
   const [editTx, setEditTx] = React.useState(null);
+  const accountTypeById = React.useMemo(() => new Map((accountsWithBalance || []).map(a => [a.id, a.type])), [accountsWithBalance]);
 
   const matchesTxFilter = React.useCallback((tx) => {
     if (!txFilter) return true;
@@ -29,8 +30,12 @@ export default function Transactions({ t }) {
     if (txFilter.type === 'expense' && tx.amt >= 0) return false;
     if (txFilter.type === 'income' && tx.amt < 0) return false;
     if (txFilter.account && tx.acct !== txFilter.account) return false;
+    if (txFilter.accountType) {
+      const wanted = Array.isArray(txFilter.accountType) ? txFilter.accountType : [txFilter.accountType];
+      if (!wanted.includes(accountTypeById.get(tx.acct))) return false;
+    }
     return true;
-  }, [txFilter]);
+  }, [txFilter, accountTypeById]);
 
   const sourceTxs = txFilter && txFilter.date ? transactions : periodTransactions;
 
@@ -56,6 +61,10 @@ export default function Transactions({ t }) {
     if (txFilter.date) parts.push(txFilter.date);
     if (txFilter.weekday != null) parts.push(['MON','TUE','WED','THU','FRI','SAT','SUN'][txFilter.weekday]);
     if (txFilter.type) parts.push(txFilter.type.toUpperCase());
+    if (txFilter.accountType) {
+      const wanted = Array.isArray(txFilter.accountType) ? txFilter.accountType : [txFilter.accountType];
+      parts.push('TYPE · ' + wanted.join('+'));
+    }
     return parts.join(' · ');
   }, [txFilter]);
 
