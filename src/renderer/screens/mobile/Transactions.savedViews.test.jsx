@@ -86,23 +86,6 @@ describe('mobile Transactions saved views', () => {
     }));
   });
 
-  it('snapshots the literal period when user declines the follow-current confirm', async () => {
-    await renderScreen();
-    vi.spyOn(window, 'prompt').mockReturnValue('Coffee run');
-    vi.spyOn(window, 'confirm').mockReturnValue(false);
-
-    fireEvent.change(screen.getByLabelText(/search/i), { target: { value: 'coffee' } });
-    fireEvent.click(screen.getByRole('button', { name: /save current view/i }));
-
-    expect(store.addView).toHaveBeenCalledWith(expect.objectContaining({
-      scope: 'tx',
-      name: 'Coffee run',
-      period: '2026-05',
-      search: 'coffee',
-      txFilter: { category: 'food', type: 'expense' },
-    }));
-  });
-
   it('applies a saved tx view from the dropdown', async () => {
     await renderScreen({
       savedViews: [

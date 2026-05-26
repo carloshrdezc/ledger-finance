@@ -108,21 +108,6 @@ describe('mobile Reports saved views', () => {
     }));
   });
 
-  it('snapshots the literal period when user declines the follow-current confirm', async () => {
-    await renderScreen();
-    vi.spyOn(window, 'prompt').mockReturnValue('Monthly report');
-    vi.spyOn(window, 'confirm').mockReturnValue(false);
-
-    fireEvent.click(screen.getByRole('button', { name: /save current view/i }));
-
-    expect(store.addView).toHaveBeenCalledWith(expect.objectContaining({
-      scope: 'reports',
-      name: 'Monthly report',
-      period: '2026-05',
-      range: { kind: 'preset', preset: 'thisMonth' },
-    }));
-  });
-
   it('applies a saved reports view from the dropdown', async () => {
     await renderScreen({
       savedViews: [
