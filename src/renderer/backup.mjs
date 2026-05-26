@@ -5,10 +5,11 @@
 export const BACKUP_FORMAT_VERSION = 2;
 export const BACKUP_TYPE = 'ledger-backup';
 
-// 18 user-data slices total: 13 in SLICES + 5 in SCALAR_SLICES.
+// 15 user-data slices total: 13 in SLICES + 2 in SCALAR_SLICES.
 // Excluded (session-ephemera, reset on restore): txFilter, dismissedAlerts,
 // dismissedInsights, welcomeSeen, fxMigrationToastSeen, lastBackupAt,
-// backupReminderInterval, backupReminderSnoozedUntil.
+// backupReminderInterval, backupReminderSnoozedUntil,
+// fxAutoFetch, fxLastFetchedAt, fxLastFetchError.
 //
 // Each entry maps STATE_KEY -> BACKUP_KEY -> defaultEmpty (used both when
 // building from a state missing the slice AND when validating a backup
@@ -34,9 +35,6 @@ const SCALAR_SLICES = [
   // [stateKey, backupKey, defaultValue]
   ['selectedPeriod',  'selectedPeriod',  null],
   ['budgetStartDay',  'budgetStartDay',  1],
-  ['fxAutoFetch',     'fxAutoFetch',     'off'],
-  ['fxLastFetchedAt', 'fxLastFetchedAt', null],
-  ['fxLastFetchError','fxLastFetchError',null],
 ];
 
 function isPlainObject(v) {

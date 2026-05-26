@@ -82,4 +82,24 @@ describe('fetchRatesFromFrankfurter', () => {
 
     await expect(fetchRatesFromFrankfurter(['EUR'], undefined)).rejects.toThrow('Frankfurter API response was missing rates');
   });
+
+  // Documentation-as-test (PR #61 review): when called with no non-USD
+  // currencies, the fetcher emits an unfiltered URL ('?from=USD' with no
+  // '&to='), which Frankfurter answers with all ~33 supported currencies.
+  // This is by design — the fetcher is a thin wrapper. Callers are
+  // responsible for guarding against the empty-currency case so the store
+  // does not silently inject 30+ unwanted currencies into the user's rates
+  // table. See refreshRatesNow in store.jsx for the guard.
+  it('emits unfiltered URL when called with no non-USD currencies (callers must guard)', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      mockResponse({ json: async () => ({ rates: { EUR: 0.9 } }) }),
+    );
+
+    await fetchRatesFromFrankfurter([], undefined);
+    expect(fetchSpy.mock.calls[0][0]).toBe('https://api.frankfurter.app/latest?from=USD');
+
+    fetchSpy.mockClear();
+    await fetchRatesFromFrankfurter(['USD'], undefined);
+    expect(fetchSpy.mock.calls[0][0]).toBe('https://api.frankfurter.app/latest?from=USD');
+  });
 });

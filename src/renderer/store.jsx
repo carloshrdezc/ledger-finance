@@ -671,7 +671,7 @@ function StoreProviderImpl({ children }) {
     abortFxFetch();
     setRates(DEFAULT_RATES);
     setRatesUpdated({});
-  }, [setRates, setRatesUpdated]);
+  }, [abortFxFetch, setRates, setRatesUpdated]);
 
   // Auto-seed a placeholder rate (1.0) when an account in a new currency
   // shows up. The missing-rate alert (added in CAR-140) will then surface.
@@ -679,7 +679,7 @@ function StoreProviderImpl({ children }) {
     if (!ccy || ccy === 'USD') return;
     setRates(prev => prev[ccy] != null ? prev : { ...prev, [ccy]: 1.0 });
     setRatesUpdated(prev => prev[ccy] !== undefined ? prev : { ...prev, [ccy]: null });
-  }, [abortFxFetch, setRates, setRatesUpdated]);
+  }, [setRates, setRatesUpdated]);
 
   const addAccount = React.useCallback(acct => {
     ensureRateForCurrency(acct.ccy);
@@ -1083,6 +1083,13 @@ function StoreProviderImpl({ children }) {
 
   const refreshRatesNow = React.useCallback(async () => {
     const requested = Object.keys(rates).filter(ccy => ccy !== 'USD');
+    // Guard: with no non-USD currencies configured, an unfiltered request
+    // would return all ~33 Frankfurter currencies and silently inject them
+    // into the user's rates table (review: PR #61).
+    if (requested.length === 0) {
+      setFxLastFetchError(null);
+      return { ok: true };
+    }
     abortFxFetch();
 
     const controller = new AbortController();
@@ -1168,9 +1175,6 @@ function StoreProviderImpl({ children }) {
     setTrades(Array.isArray(data.trades) ? data.trades : []);
     setRates(data.fxRates && typeof data.fxRates === 'object' ? data.fxRates : DEFAULT_RATES);
     setRatesUpdated(data.fxRatesUpdated && typeof data.fxRatesUpdated === 'object' ? data.fxRatesUpdated : {});
-    setFxAutoFetch(data.fxAutoFetch ?? 'off');
-    setFxLastFetchedAt(data.fxLastFetchedAt ?? null);
-    setFxLastFetchError(data.fxLastFetchError ?? null);
     if (data.selectedPeriod) setSelectedPeriod(data.selectedPeriod);
     // CAR-77 review hardening: clamp budgetStartDay to [1, 28] to mirror the
     // UI invariant in commitDay. Backup files are human-readable JSON by
@@ -1212,11 +1216,13 @@ function StoreProviderImpl({ children }) {
   }, [
     abortFxFetch,
     setTxs, setAccounts, setCatTree, setBudgets, setHidden, setBills, setGoals,
-    setGoalContributions, setRules, setInvestments, setTrades, setRates, setRatesUpdated,
+    setGoalContributions, setRules, setRecategorizeStats, setInvestments, setTrades, setRates, setRatesUpdated,
     setSelectedPeriod, setBudgetStartDay,
     setAccent, setDensity, setDecimals, setCurrency, setTheme,
     setForecastLiquidAccountIds, setForecastThreshold,
-    setTxFilterRaw, setDismissedAlertIds, setDismissedInsightIds, setWelcomeSeen, setFxMigrationToastSeen,
+    setTxFilterRaw, setDismissedAlertIds, setDismissedInsightIds,
+    setFxAutoFetch, setFxLastFetchedAt, setFxLastFetchError,
+    setWelcomeSeen, setFxMigrationToastSeen,
     setBackupReminderSnoozedUntil,
   ]);
 
@@ -1252,7 +1258,7 @@ function StoreProviderImpl({ children }) {
     // CAR-218: clear forecast settings to defaults too.
     setForecastLiquidAccountIds([]);
     setForecastThreshold(0);
-  }, [setTxs, setCatTree, setBudgets, setAccounts, setBills, setGoals, setGoalContributions, setRules, setSelectedPeriod, setHidden, setBudgetStartDay, setInvestments, setTrades, setDismissedAlertIds, setDismissedInsightIds, setTxFilterRaw, setRates, setRatesUpdated, setFxMigrationToastSeen, setWelcomeSeen, setLastBackupAt, setBackupReminderSnoozedUntil, setBackupReminderIntervalRaw, setForecastLiquidAccountIds, setForecastThreshold]);
+  }, [abortFxFetch, setTxs, setCatTree, setBudgets, setAccounts, setBills, setGoals, setGoalContributions, setRules, setRecategorizeStats, setSelectedPeriod, setHidden, setBudgetStartDay, setInvestments, setTrades, setDismissedAlertIds, setDismissedInsightIds, setTxFilterRaw, setRates, setRatesUpdated, setFxAutoFetch, setFxLastFetchedAt, setFxLastFetchError, setFxMigrationToastSeen, setWelcomeSeen, setLastBackupAt, setBackupReminderSnoozedUntil, setBackupReminderIntervalRaw, setForecastLiquidAccountIds, setForecastThreshold]);
 
   return (
     <StoreCtx.Provider value={{
