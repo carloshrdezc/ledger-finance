@@ -91,6 +91,34 @@ describe('saved views store', () => {
     expect(JSON.parse(localStorage.getItem('ledger:savedViews'))).toEqual([]);
   });
 
+  it('round-trips the current-period sentinel literally when adding a view', async () => {
+    const { StoreProvider, useStore } = await import('./store.jsx');
+    let store;
+
+    function Probe() {
+      store = useStore();
+      return null;
+    }
+
+    render(
+      <StoreProvider>
+        <Probe />
+      </StoreProvider>,
+    );
+
+    act(() => {
+      store.addView({
+        scope: 'reports',
+        name: 'Follow current',
+        period: '__current__',
+        range: { kind: 'preset', preset: 'thisMonth' },
+      });
+    });
+
+    expect(store.savedViews).toHaveLength(1);
+    expect(store.savedViews[0].period).toBe('__current__');
+  });
+
   it('gives unique ids to views created in the same tick', async () => {
     const { StoreProvider, useStore } = await import('./store.jsx');
     let store;

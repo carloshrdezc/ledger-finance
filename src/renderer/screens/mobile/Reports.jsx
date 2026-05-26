@@ -7,7 +7,7 @@ import { useStore } from '../../store';
 import { useFx } from '../../useFx';
 import { exportReportCSV } from '../../importExport';
 import RangeSelector from '../../components/RangeSelector';
-import { addMonths, filterTransactionsForPeriod, filterTransactionsForRange, formatShortPeriodLabel, resolveRangePreset } from '../../period.mjs';
+import { CURRENT_PERIOD_SENTINEL, addMonths, filterTransactionsForPeriod, filterTransactionsForRange, formatShortPeriodLabel, resolvePeriod, resolveRangePreset } from '../../period.mjs';
 import { buildCategoryTrend, buildIncomeExpenseSeries, buildNetWorthTrend, getRecentPeriods } from '../../charts.mjs';
 
 export default function Reports({ t, onBack, onGoToRoute }) {
@@ -31,7 +31,7 @@ export default function Reports({ t, onBack, onGoToRoute }) {
   const selectedView = React.useMemo(() => txViews.find(view => view.id === selectedViewId) || null, [txViews, selectedViewId]);
   const applySavedView = React.useCallback((view) => {
     if (!view) return;
-    if (view.period) setSelectedPeriod(view.period);
+    if (view.period) setSelectedPeriod(resolvePeriod(view.period));
     if (view.range) setRange(view.range);
     setTxFilter(view.txFilter || null);
   }, [setSelectedPeriod, setTxFilter]);
@@ -45,8 +45,9 @@ export default function Reports({ t, onBack, onGoToRoute }) {
     if (!raw) return;
     const name = raw.trim();
     if (!name) return;
-    addView({ scope: 'reports', name, period: selectedPeriod, range, txFilter });
-  }, [addView, selectedPeriod, range, txFilter]);
+    const followCurrent = window.confirm('Follow current period?\n\nOK: this view always shows the current month.\nCancel: snapshot this period (' + periodLabel + ').');
+    addView({ scope: 'reports', name, period: followCurrent ? CURRENT_PERIOD_SENTINEL : selectedPeriod, range, txFilter });
+  }, [addView, periodLabel, selectedPeriod, range, txFilter]);
   const renameSelectedView = React.useCallback(() => {
     if (!selectedView) return;
     const raw = window.prompt('Rename view', selectedView.name);

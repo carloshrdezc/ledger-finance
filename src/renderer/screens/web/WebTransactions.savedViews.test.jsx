@@ -2,6 +2,7 @@
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, cleanup, render, screen } from '@testing-library/react';
+import { monthKey } from '../../period.mjs';
 
 let store;
 
@@ -81,6 +82,41 @@ describe('WebTransactions saved views', () => {
   it('prompts for a name and saves the current tx filters', async () => {
     await renderScreen();
     vi.spyOn(window, 'prompt').mockReturnValue('Coffee run');
+    vi.spyOn(window, 'confirm').mockReturnValue(false);
+
+    fireEvent.change(screen.getByLabelText(/search/i), { target: { value: 'coffee' } });
+    fireEvent.click(screen.getByRole('button', { name: /save current view/i }));
+
+    expect(store.addView).toHaveBeenCalledWith(expect.objectContaining({
+      scope: 'tx',
+      name: 'Coffee run',
+      period: '2026-05',
+      search: 'coffee',
+      txFilter: { category: 'food', type: 'expense' },
+    }));
+  });
+
+  it('saves with __current__ sentinel when user accepts the follow-current confirm', async () => {
+    await renderScreen();
+    vi.spyOn(window, 'prompt').mockReturnValue('Coffee run');
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+    fireEvent.change(screen.getByLabelText(/search/i), { target: { value: 'coffee' } });
+    fireEvent.click(screen.getByRole('button', { name: /save current view/i }));
+
+    expect(store.addView).toHaveBeenCalledWith(expect.objectContaining({
+      scope: 'tx',
+      name: 'Coffee run',
+      period: '__current__',
+      search: 'coffee',
+      txFilter: { category: 'food', type: 'expense' },
+    }));
+  });
+
+  it('snapshots the literal period when user declines the follow-current confirm', async () => {
+    await renderScreen();
+    vi.spyOn(window, 'prompt').mockReturnValue('Coffee run');
+    vi.spyOn(window, 'confirm').mockReturnValue(false);
 
     fireEvent.change(screen.getByLabelText(/search/i), { target: { value: 'coffee' } });
     fireEvent.click(screen.getByRole('button', { name: /save current view/i }));
@@ -111,6 +147,27 @@ describe('WebTransactions saved views', () => {
     fireEvent.change(screen.getByLabelText(/views/i), { target: { value: 'sv_tx_1' } });
 
     expect(store.setSelectedPeriod).toHaveBeenCalledWith('2026-05');
+    expect(store.setTxFilter).toHaveBeenCalledWith({ category: 'dining', type: 'expense' });
+    expect(screen.getByLabelText(/search/i).value).toBe('latte');
+  });
+
+  it('applying a __current__ sentinel view sets selectedPeriod to the current month, not the snapshot date', async () => {
+    await renderScreen({
+      savedViews: [
+        {
+          id: 'sv_tx_1',
+          scope: 'tx',
+          name: 'Follow current',
+          period: '__current__',
+          search: 'latte',
+          txFilter: { category: 'dining', type: 'expense' },
+        },
+      ],
+    });
+
+    fireEvent.change(screen.getByLabelText(/views/i), { target: { value: 'sv_tx_1' } });
+
+    expect(store.setSelectedPeriod).toHaveBeenCalledWith(monthKey(new Date()));
     expect(store.setTxFilter).toHaveBeenCalledWith({ category: 'dining', type: 'expense' });
     expect(screen.getByLabelText(/search/i).value).toBe('latte');
   });
