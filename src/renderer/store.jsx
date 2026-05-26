@@ -719,9 +719,12 @@ function StoreProviderImpl({ children }) {
     });
   }, [ensureRateForCurrency, setAccounts]);
 
-  const updateAccount = React.useCallback((id, patch) => setAccounts(prev =>
-    prev.map(a => a.id === id ? { ...a, ...patch } : a)
-  ), [setAccounts]);
+  const updateAccount = React.useCallback((id, patch) => {
+    if (patch && Object.prototype.hasOwnProperty.call(patch, 'ccy')) {
+      ensureRateForCurrency(patch.ccy);
+    }
+    setAccounts(prev => prev.map(a => a.id === id ? { ...a, ...patch } : a));
+  }, [ensureRateForCurrency, setAccounts]);
 
   const archiveAccount = React.useCallback(id => setAccounts(prev =>
     prev.map(a => a.id === id ? { ...a, archived: true } : a)
