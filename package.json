@@ -37,7 +37,11 @@
           "arch": ["x64"]
         }
       ],
-      "artifactName": "${productName}-Setup-${version}.${ext}"
+      "artifactName": "${productName}-Setup-${version}.${ext}",
+      "signtoolOptions": {
+        "publisherName": "LEDGER",
+        "signingHashAlgorithms": ["sha256"]
+      }
     },
     "nsis": {
       "oneClick": false,

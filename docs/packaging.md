@@ -52,11 +52,69 @@ All packaging config lives in the top-level `"build"` block of `package.json`:
 
 ## Code Signing
 
-**Not configured for v1.** Users will see Windows SmartScreen on first install ("Don't run / Run anyway").
+**Status:** Windows code-signing scaffold landed in CAR-214. Signing turns on automatically once a cert is provisioned via `CSC_LINK` + `CSC_KEY_PASSWORD`; until then, unsigned builds continue to work.
 
-Follow-ups tracked in:
-- [CAR-214](https://linear.app/carloshrdezc/issue/CAR-214) — Windows code signing
-- [CAR-213](https://linear.app/carloshrdezc/issue/CAR-213) — macOS notarization
+### EV vs OV certificate options
+
+| Type | Cost (yr) | SmartScreen reputation | Storage | Recommended |
+|------|-----------|------------------------|---------|-------------|
+| EV   | $300-500  | Instant | Hardware token (USB) or cloud HSM (Azure KV, DigiCert ONE) | Yes for solo dev — instant trust |
+| OV   | $80-200   | Builds slowly (after ~thousands of installs) | Software `.pfx` | Cheaper but worse UX |
+
+### Vendor recommendations
+
+Good places to start: SSL.com, DigiCert, Sectigo, and Certum. Certum can be cheaper for OV certificates (often around ~$70/yr) but validation is slower.
+
+### Local signing flow
+
+Once the certificate is acquired, set the env vars and build the Windows installer:
+
+```bash
+# OV (.pfx file):
+export CSC_LINK="C:\path\to\cert.pfx"
+export CSC_KEY_PASSWORD="your-password"
+npm run package:win
+
+# Verify:
+signtool verify /pa dist-app/LEDGER-Setup-1.0.0.exe
+```
+
+### EV cert / hardware token note
+
+The `.pfx` flow above does **not** work for EV USB tokens. Those need either:
+- cloud-HSM signing (Azure Key Vault + `azuresigntool` — supported by electron-builder via custom sign script), or
+- manual `signtool` with `/n "Cert CN"` after build as a fallback.
+
+### CI signing flow
+
+CAR-216 will wire CI signing later. The intended GitHub Actions env shape is:
+
+```yaml
+env:
+  CSC_LINK: ${{ secrets.WINDOWS_CERT_PFX_BASE64 }}
+  CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
+```
+
+`CSC_LINK` accepts either a filesystem path or a base64-encoded `.pfx` blob. For GitHub Actions, base64 is the right choice because it avoids checking in a cert file.
+
+### Verification commands
+
+```bash
+signtool verify /pa /v dist-app/LEDGER-Setup-1.0.0.exe
+# Expected output (after cert is real):
+# "Successfully verified: dist-app/LEDGER-Setup-1.0.0.exe"
+```
+
+### Important note on `publisherName`
+
+`package.json` `win.signtoolOptions.publisherName` must match the certificate Subject CN exactly. For example, if the cert Subject CN is `Carlos Hernandez`, the config must use `Carlos Hernandez` or signing fails with a mismatch error.
+
+### Acceptance criteria status
+
+- [x] Configuration in `package.json` is ready for a cert (env-var-gated)
+- [x] Local and CI signing flows are documented
+- [ ] Signed `.exe` validates via `signtool verify /pa` — pending cert acquisition
+- [ ] SmartScreen shows the publisher name — pending cert + first installs
 
 ## Auto-Update
 
