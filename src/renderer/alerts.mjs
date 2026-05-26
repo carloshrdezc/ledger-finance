@@ -1,3 +1,5 @@
+import { latestRateEntry } from './fx.mjs';
+
 const SEVERITY_RANK = { critical: 0, high: 1, medium: 2, low: 3 };
 const KIND_RANK = { bill: 0, budget: 1, account: 2, goal: 3, investment: 4, fx: 5, backup: 6 };
 
@@ -186,7 +188,8 @@ export function buildAlertRows({
   for (const a of accountsWithBalance) if (a.ccy && a.ccy !== 'USD') usedCcys.add(a.ccy);
   for (const tx of transactions) if (tx.ccy && tx.ccy !== 'USD') usedCcys.add(tx.ccy);
   for (const ccy of usedCcys) {
-    const rate = rates[ccy];
+    const entry = latestRateEntry(rates, ccy, todayIso);
+    const rate = entry?.rate;
     const updated = ratesUpdated[ccy];
     if (rate == null || updated == null) {
       alerts.push({
