@@ -212,4 +212,29 @@ describe('WebReports saved views', () => {
     }).not.toThrow();
     expect(alertSpy).toHaveBeenCalledWith(expect.stringContaining('YTD'));
   });
+
+  it('only shows reports-scoped views in the dropdown', async () => {
+    await renderScreen({
+      savedViews: [
+        {
+          id: 'sv_reports_1',
+          scope: 'reports',
+          name: 'Last month',
+          period: '2026-04',
+          range: { kind: 'preset', preset: 'lastMonth' },
+        },
+        {
+          id: 'sv_tx_1',
+          scope: 'tx',
+          name: 'Tx view',
+          period: '2026-05',
+          txFilter: { category: 'food', type: 'expense' },
+        },
+      ],
+    });
+
+    const options = Array.from(screen.getByLabelText(/views/i).options).map(o => o.textContent);
+    expect(options).toEqual(['Views…', 'Last month']);
+    expect(store.setTxFilter).not.toHaveBeenCalled();
+  });
 });

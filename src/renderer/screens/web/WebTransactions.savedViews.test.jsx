@@ -232,4 +232,29 @@ describe('WebTransactions saved views', () => {
     }).not.toThrow();
     expect(alertSpy).toHaveBeenCalledWith(expect.stringContaining('Travel'));
   });
+
+  it('only shows tx-scoped views in the dropdown', async () => {
+    await renderScreen({
+      savedViews: [
+        {
+          id: 'sv_tx_1',
+          scope: 'tx',
+          name: 'Food focus',
+          period: '2026-05',
+          txFilter: { category: 'dining', type: 'expense' },
+        },
+        {
+          id: 'sv_reports_1',
+          scope: 'reports',
+          name: 'Reports view',
+          period: '2026-05',
+          range: { kind: 'preset', preset: 'thisMonth' },
+        },
+      ],
+    });
+
+    const options = Array.from(screen.getByLabelText(/views/i).options).map(o => o.textContent);
+    expect(options).toEqual(['Views…', 'Food focus']);
+    expect(store.setTxFilter).not.toHaveBeenCalled();
+  });
 });

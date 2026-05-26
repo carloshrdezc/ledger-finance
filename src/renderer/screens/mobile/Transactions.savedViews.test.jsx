@@ -196,4 +196,41 @@ describe('mobile Transactions saved views', () => {
     expect(options).toEqual(['Views…', 'Food focus']);
     expect(store.setTxFilter).not.toHaveBeenCalled();
   });
+
+  it('alerts the user when renaming would collide with another view in the same scope', async () => {
+    await renderScreen({
+      savedViews: [
+        {
+          id: 'sv_tx_1',
+          scope: 'tx',
+          name: 'Food focus',
+          period: '2026-05',
+          txFilter: { category: 'dining', type: 'expense' },
+        },
+        {
+          id: 'sv_tx_2',
+          scope: 'tx',
+          name: 'Travel',
+          period: '2026-05',
+          txFilter: { category: 'travel', type: 'expense' },
+        },
+      ],
+      // Real updateView contract: throws on duplicate (scope, name).
+      // Without the try/catch in renameSelectedView this would surface
+      // as an uncaught exception in a React event handler → renderer
+      // crash. Locking it here keeps mobile parity with web behavior.
+      updateView: vi.fn(() => {
+        throw new Error('LEDGER_DUPLICATE_VIEW_NAME');
+      }),
+    });
+
+    fireEvent.change(screen.getByLabelText(/views/i), { target: { value: 'sv_tx_1' } });
+    vi.spyOn(window, 'prompt').mockReturnValue('Travel');
+    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
+
+    expect(() => {
+      fireEvent.click(screen.getByRole('button', { name: /rename view/i }));
+    }).not.toThrow();
+    expect(alertSpy).toHaveBeenCalledWith(expect.stringContaining('Travel'));
+  });
 });
