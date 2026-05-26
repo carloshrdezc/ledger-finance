@@ -30,6 +30,9 @@ import {
 } from './bulkOps.mjs';
 
 const MIGRATED_TO_DISK_KEY = 'ledger:_migratedToDisk';
+const ONBOARDED_KEY = 'ledger:onboarded';
+const FIRST_RUN_SLICES = ['ledger:tx', 'ledger:accounts', 'ledger:bills', 'ledger:goals',
+                          'ledger:budgets', 'ledger:investments', 'ledger:trades'];
 const LEDGER_PREFIX = 'ledger:';
 const PERSIST_DEBOUNCE_MS = 250;
 const PersistenceCtx = React.createContext(null);
@@ -95,15 +98,33 @@ function getSnapshotValue(snapshot, key, def) {
   return Object.prototype.hasOwnProperty.call(snapshot || {}, key) ? snapshot[key] : def;
 }
 
+function hasExistingUserData(snapshot) {
+  return FIRST_RUN_SLICES.some(key => {
+    const value = snapshot[key];
+    if (Array.isArray(value)) return value.length > 0;
+    if (isPlainObject(value)) return Object.keys(value).length > 0;
+    return value != null && value !== false;
+  }) || snapshot['ledger:welcomeSeen'] === true;
+}
+
+function seedOnboardingFlag(snapshot) {
+  if (Object.prototype.hasOwnProperty.call(snapshot, ONBOARDED_KEY)) return snapshot;
+  if (!hasExistingUserData(snapshot)) return snapshot;
+  return { ...snapshot, [ONBOARDED_KEY]: true };
+}
+
 function resolveBootSnapshot(diskState) {
   const disk = isPlainObject(diskState) ? diskState : {};
   if (disk[MIGRATED_TO_DISK_KEY] === true) {
-    return { snapshot: disk, needsWrite: false };
+    const snapshot = seedOnboardingFlag(disk);
+    return { snapshot, needsWrite: snapshot !== disk };
   }
   if (Object.keys(disk).length > 0) {
-    return { snapshot: { ...disk, [MIGRATED_TO_DISK_KEY]: true }, needsWrite: true };
+    const snapshot = seedOnboardingFlag({ ...disk, [MIGRATED_TO_DISK_KEY]: true });
+    return { snapshot, needsWrite: true };
   }
-  return { snapshot: { ...readLedgerStorageSnapshot(), [MIGRATED_TO_DISK_KEY]: true }, needsWrite: true };
+  const snapshot = seedOnboardingFlag({ ...readLedgerStorageSnapshot(), [MIGRATED_TO_DISK_KEY]: true });
+  return { snapshot, needsWrite: true };
 }
 
 function useLS(key, def) {
@@ -338,6 +359,7 @@ function StoreProviderImpl({ children }) {
   // insight ids the user has dismissed; insightRows filters them out.
   const [dismissedInsightIds, setDismissedInsightIds] = useLS('ledger:dismissedInsights', []);
   const [welcomeSeen, setWelcomeSeen] = useLS('ledger:welcomeSeen', false);
+  const [onboarded, setOnboarded] = useLS('ledger:onboarded', false);
   const [rates, setRates] = useLS('ledger:fxRates', DEFAULT_RATES);
   const [ratesUpdated, setRatesUpdated] = useLS('ledger:fxRatesUpdated', {});
   const [fxAutoFetch, setFxAutoFetch] = useLS('ledger:fxAutoFetch', 'off');
@@ -1071,11 +1093,12 @@ function StoreProviderImpl({ children }) {
     setFxLastFetchError(null);
     setFxMigrationToastSeen(false);
     setWelcomeSeen(true); // already past the welcome — don't re-show it
+    setOnboarded(true);
     setLastBackupAt(null);
     setBackupReminderSnoozedUntil(null);
     setBackupReminderIntervalRaw(30);
     _seedSampleData();
-  }, [_seedSampleData, abortFxFetch, setTxs, setCatTree, setBudgets, setAccounts, setBills, setGoals, setGoalContributions, setRules, setSelectedPeriod, setHidden, setBudgetStartDay, setInvestments, setTrades, setDismissedAlertIds, setDismissedInsightIds, setTxFilterRaw, setRates, setRatesUpdated, setFxAutoFetch, setFxLastFetchedAt, setFxLastFetchError, setFxMigrationToastSeen, setWelcomeSeen, setLastBackupAt, setBackupReminderSnoozedUntil, setBackupReminderIntervalRaw]);
+  }, [_seedSampleData, abortFxFetch, setTxs, setCatTree, setBudgets, setAccounts, setBills, setGoals, setGoalContributions, setRules, setSelectedPeriod, setHidden, setBudgetStartDay, setInvestments, setTrades, setDismissedAlertIds, setDismissedInsightIds, setTxFilterRaw, setRates, setRatesUpdated, setFxAutoFetch, setFxLastFetchedAt, setFxLastFetchError, setFxMigrationToastSeen, setWelcomeSeen, setOnboarded, setLastBackupAt, setBackupReminderSnoozedUntil, setBackupReminderIntervalRaw]);
 
   React.useEffect(() => () => {
     if (fxFetchAbortRef.current) fxFetchAbortRef.current.abort();
@@ -1252,13 +1275,14 @@ function StoreProviderImpl({ children }) {
     setFxLastFetchError(null);
     setFxMigrationToastSeen(false);
     setWelcomeSeen(false);
+    setOnboarded(false);
     setLastBackupAt(null);
     setBackupReminderSnoozedUntil(null);
     setBackupReminderIntervalRaw(30);
     // CAR-218: clear forecast settings to defaults too.
     setForecastLiquidAccountIds([]);
     setForecastThreshold(0);
-  }, [abortFxFetch, setTxs, setCatTree, setBudgets, setAccounts, setBills, setGoals, setGoalContributions, setRules, setRecategorizeStats, setSelectedPeriod, setHidden, setBudgetStartDay, setInvestments, setTrades, setDismissedAlertIds, setDismissedInsightIds, setTxFilterRaw, setRates, setRatesUpdated, setFxAutoFetch, setFxLastFetchedAt, setFxLastFetchError, setFxMigrationToastSeen, setWelcomeSeen, setLastBackupAt, setBackupReminderSnoozedUntil, setBackupReminderIntervalRaw, setForecastLiquidAccountIds, setForecastThreshold]);
+  }, [abortFxFetch, setTxs, setCatTree, setBudgets, setAccounts, setBills, setGoals, setGoalContributions, setRules, setRecategorizeStats, setSelectedPeriod, setHidden, setBudgetStartDay, setInvestments, setTrades, setDismissedAlertIds, setDismissedInsightIds, setTxFilterRaw, setRates, setRatesUpdated, setFxAutoFetch, setFxLastFetchedAt, setFxLastFetchError, setFxMigrationToastSeen, setWelcomeSeen, setOnboarded, setLastBackupAt, setBackupReminderSnoozedUntil, setBackupReminderIntervalRaw, setForecastLiquidAccountIds, setForecastThreshold]);
 
   return (
     <StoreCtx.Provider value={{
@@ -1390,6 +1414,8 @@ function StoreProviderImpl({ children }) {
       forecastLiquidAccountIds, setForecastLiquidAccountIds,
       forecastThreshold, setForecastThreshold,
       welcomeSeen,
+      onboarded,
+      setOnboarded,
       dismissWelcome,
       loadSampleData,
       resetAndLoadSampleData,

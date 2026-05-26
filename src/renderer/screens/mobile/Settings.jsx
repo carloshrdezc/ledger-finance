@@ -10,7 +10,7 @@ const SETTINGS_CURRENCIES = ['USD', 'EUR', 'GBP', 'JPY', 'CAD', 'AUD', 'CHF', 'M
 const SETTINGS_THEMES = ['light', 'dark', 'auto'];
 
 export default function Settings({ t, onBack, onNavigate, setAccent, setDensity, setDecimals, setCurrency, setTheme }) {
-  const { budgetStartDay, setBudgetStartDay, reset, loadSampleData, resetAndLoadSampleData } = useStore();
+  const { budgetStartDay, setBudgetStartDay, reset, loadSampleData, resetAndLoadSampleData, setOnboarded } = useStore();
   const [showIO, setShowIO] = React.useState(false);
   const [confirmReset, setConfirmReset] = React.useState(false);
   const [editingDay, setEditingDay] = React.useState(false);
@@ -34,6 +34,10 @@ export default function Settings({ t, onBack, onNavigate, setAccent, setDensity,
     // Atomic reset+seed via the store action — see CAR-76 review notes.
     resetAndLoadSampleData();
     setShowResetAndLoad(false);
+  };
+
+  const replayOnboarding = () => {
+    setOnboarded(false);
   };
 
   React.useEffect(() => () => clearTimeout(resetTimerRef.current), []);
@@ -190,6 +194,13 @@ export default function Settings({ t, onBack, onNavigate, setAccent, setDensity,
               <span style={{ fontSize: 11, color: confirmReset ? A.neg : A.muted }}>
                 {confirmReset ? 'TAP AGAIN ↩' : 'RESET ▸'}
               </span>
+            </div>
+          </button>
+          <button onClick={replayOnboarding}
+            style={{ all: 'unset', cursor: 'pointer', display: 'block', width: '100%' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: t.density === 'compact' ? '9px 0' : '11px 0', borderBottom: '1px solid ' + A.rule2 }}>
+              <span style={{ fontSize: 12 }}>REPLAY ONBOARDING</span>
+              <span style={{ fontSize: 11, color: A.muted }}>↺</span>
             </div>
           </button>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '11px 0', borderBottom: '1px solid ' + A.rule2 }}>

@@ -43,6 +43,7 @@ function makeStore(overrides = {}) {
     setForecastLiquidAccountIds: vi.fn(),
     forecastThreshold: 0,
     setForecastThreshold: noop,
+    setOnboarded: noop,
     ...overrides,
   };
 }
@@ -77,5 +78,13 @@ describe('CAR-218 · WebSettings liquid account toggles', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'CHECKING' }));
     expect(store.setForecastLiquidAccountIds).toHaveBeenCalledWith(['sav']);
+  });
+
+  it('can replay onboarding without clearing data', () => {
+    const { store } = renderWithStore();
+
+    fireEvent.click(screen.getByRole('button', { name: /replay onboarding/i }));
+
+    expect(store.setOnboarded).toHaveBeenCalledWith(false);
   });
 });

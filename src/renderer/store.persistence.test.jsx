@@ -77,6 +77,35 @@ describe('store persistence', () => {
     expect(store.currency).toBe('EUR');
   });
 
+  it('persists ledger:onboarded and clears it on reset', async () => {
+    localStorage.setItem('ledger:onboarded', JSON.stringify(true));
+    window.ledgerDB = makeLedgerDB();
+
+    const { StoreProvider, useStore } = await import('./store.jsx');
+    let store;
+
+    function Probe() {
+      store = useStore();
+      return null;
+    }
+
+    render(
+      <StoreProvider>
+        <Probe />
+      </StoreProvider>,
+    );
+
+    await waitFor(() => expect(window.ledgerDB.read).toHaveBeenCalledTimes(1));
+    expect(store.onboarded).toBe(true);
+
+    act(() => {
+      store.reset();
+    });
+
+    expect(store.onboarded).toBe(false);
+    expect(localStorage.getItem('ledger:onboarded')).toBe(JSON.stringify(false));
+  });
+
   // CAR-91 review fix: durability on quit. The disk write is debounced by
   // 250 ms and disk is authoritative on boot, so without a quit-time flush an
   // edit made within the debounce window would be lost forever. The renderer
