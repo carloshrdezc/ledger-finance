@@ -17,7 +17,7 @@ import {
 } from './recategorizeStats.mjs';
 import { buildAlertRows } from './alerts.mjs';
 import { buildInsightRows } from './insights.mjs';
-import { DEFAULT_RATES } from './fx.mjs';
+import { DEFAULT_RATES, buildDefaultRatesHistory, latestRateEntry, normalizeRatesHistory } from './fx.mjs';
 import { fetchRatesFromFrankfurter } from './fxFetch.mjs';
 import { buildBackup } from './backup.mjs';
 import { ACCENTS } from './theme';
@@ -42,6 +42,48 @@ function isPlainObject(value) {
   return !!value && typeof value === 'object' && !Array.isArray(value);
 }
 
+function migrateFxRatesSnapshot(snapshot, todayIso = new Date().toISOString().slice(0, 10)) {
+  if (!isPlainObject(snapshot) || !Object.prototype.hasOwnProperty.call(snapshot, 'ledger:fxRates')) {
+    return snapshot;
+  }
+  const current = snapshot['ledger:fxRates'];
+  const normalized = normalizeRatesHistory(current, todayIso);
+  const currentJson = JSON.stringify(current);
+  const nextJson = JSON.stringify(normalized);
+  if (currentJson === nextJson) return snapshot;
+  const next = { ...snapshot, 'ledger:fxRates': normalized };
+  writeLedgerStorageKey('ledger:fxRates', normalized);
+  return next;
+}
+
+function todayIso() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function rateSourcePriority(source) {
+  if (source === 'manual') return 2;
+  if (source === 'fetched') return 1;
+  return 0;
+}
+
+function upsertRateHistory(history, ccy, rate, effectiveFrom = todayIso(), source = 'manual') {
+  if (!ccy) return history;
+  const current = isPlainObject(history) ? history : {};
+  const nextEntry = { rate, effectiveFrom, source };
+  const previous = Array.isArray(current[ccy]) ? current[ccy] : [];
+  const filtered = previous.filter(entry => entry?.effectiveFrom !== effectiveFrom);
+  const sameDay = previous.filter(entry => entry?.effectiveFrom === effectiveFrom);
+  let winner = nextEntry;
+  for (const entry of sameDay) {
+    if (!entry) continue;
+    if (rateSourcePriority(entry.source) > rateSourcePriority(winner.source)) {
+      winner = entry;
+    }
+  }
+  const nextHistory = [...filtered, winner].sort((a, b) => a.effectiveFrom.localeCompare(b.effectiveFrom));
+  return { ...current, [ccy]: nextHistory };
+}
+
 function readLedgerStorageSnapshot() {
   const snapshot = {};
   try {
@@ -60,7 +102,7 @@ function readLedgerStorageSnapshot() {
   } catch {
     // localStorage unavailable (private browsing, denied permissions, etc.).
   }
-  return snapshot;
+  return migrateFxRatesSnapshot(snapshot);
 }
 
 function writeLedgerStorageKey(key, value) {
@@ -121,14 +163,14 @@ function seedOnboardingFlag(snapshot) {
 function resolveBootSnapshot(diskState) {
   const disk = isPlainObject(diskState) ? diskState : {};
   if (disk[MIGRATED_TO_DISK_KEY] === true) {
-    const snapshot = seedOnboardingFlag(disk);
+    const snapshot = migrateFxRatesSnapshot(seedOnboardingFlag(disk));
     return { snapshot, needsWrite: snapshot !== disk };
   }
   if (Object.keys(disk).length > 0) {
-    const snapshot = seedOnboardingFlag({ ...disk, [MIGRATED_TO_DISK_KEY]: true });
+    const snapshot = migrateFxRatesSnapshot(seedOnboardingFlag({ ...disk, [MIGRATED_TO_DISK_KEY]: true }));
     return { snapshot, needsWrite: true };
   }
-  const snapshot = seedOnboardingFlag({ ...readLedgerStorageSnapshot(), [MIGRATED_TO_DISK_KEY]: true });
+  const snapshot = migrateFxRatesSnapshot(seedOnboardingFlag({ ...readLedgerStorageSnapshot(), [MIGRATED_TO_DISK_KEY]: true }));
   return { snapshot, needsWrite: true };
 }
 
@@ -368,7 +410,7 @@ function StoreProviderImpl({ children }) {
   const [dismissedInsightIds, setDismissedInsightIds] = useLS('ledger:dismissedInsights', []);
   const [welcomeSeen, setWelcomeSeen] = useLS('ledger:welcomeSeen', false);
   const [onboarded, setOnboarded] = useLS('ledger:onboarded', false);
-  const [rates, setRates] = useLS('ledger:fxRates', DEFAULT_RATES);
+  const [rates, setRates] = useLS('ledger:fxRates', buildDefaultRatesHistory());
   const [ratesUpdated, setRatesUpdated] = useLS('ledger:fxRatesUpdated', {});
   const [fxAutoFetch, setFxAutoFetch] = useLS('ledger:fxAutoFetch', 'off');
   const [fxLastFetchedAt, setFxLastFetchedAt] = useLS('ledger:fxLastFetchedAt', null);
@@ -675,12 +717,14 @@ function StoreProviderImpl({ children }) {
     });
   }, [setCatTree]);
 
-  const setRate = React.useCallback((ccy, rate) => {
-    if (ccy === 'USD') return; // USD is always 1.0; not editable
+  const setRate = React.useCallback((ccy, rate, options = {}) => {
+    if (!ccy || ccy === 'USD') return; // USD is always 1.0; not editable
     const numeric = Number(rate);
     if (!Number.isFinite(numeric) || numeric <= 0) return;
-    setRates(prev => ({ ...prev, [ccy]: numeric }));
-    setRatesUpdated(prev => ({ ...prev, [ccy]: new Date().toISOString().slice(0, 10) }));
+    const effectiveFrom = options.effectiveFrom ? String(options.effectiveFrom).slice(0, 10) : todayIso();
+    const source = options.source || 'manual';
+    setRates(prev => upsertRateHistory(prev, ccy, numeric, effectiveFrom, source));
+    setRatesUpdated(prev => ({ ...prev, [ccy]: source === 'seed' ? null : effectiveFrom }));
   }, [setRates, setRatesUpdated]);
 
   const removeRate = React.useCallback(ccy => {
@@ -699,7 +743,7 @@ function StoreProviderImpl({ children }) {
 
   const resetRates = React.useCallback(() => {
     abortFxFetch();
-    setRates(DEFAULT_RATES);
+    setRates(buildDefaultRatesHistory());
     setRatesUpdated({});
   }, [abortFxFetch, setRates, setRatesUpdated]);
 
@@ -707,8 +751,8 @@ function StoreProviderImpl({ children }) {
   // shows up. The missing-rate alert (added in CAR-140) will then surface.
   const ensureRateForCurrency = React.useCallback(ccy => {
     if (!ccy || ccy === 'USD') return;
-    setRates(prev => prev[ccy] != null ? prev : { ...prev, [ccy]: 1.0 });
-    setRatesUpdated(prev => prev[ccy] !== undefined ? prev : { ...prev, [ccy]: null });
+    setRates(prev => (prev[ccy] != null ? prev : upsertRateHistory(prev, ccy, 1.0, todayIso(), 'seed')));
+    setRatesUpdated(prev => (prev[ccy] !== undefined ? prev : { ...prev, [ccy]: null }));
   }, [setRates, setRatesUpdated]);
 
   const addAccount = React.useCallback(acct => {
@@ -1215,7 +1259,7 @@ function StoreProviderImpl({ children }) {
 
       for (const [ccy, rate] of Object.entries(result.rates)) {
         if (ccy === 'USD') continue;
-        setRate(ccy, rate);
+        setRate(ccy, rate, { source: 'fetched', effectiveFrom: result.fetchedAt });
       }
 
       setFxLastFetchedAt(result.fetchedAt);
@@ -1284,7 +1328,7 @@ function StoreProviderImpl({ children }) {
     setRecategorizeStats({});
     setInvestments(Array.isArray(data.investments) ? data.investments : []);
     setTrades(Array.isArray(data.trades) ? data.trades : []);
-    setRates(data.fxRates && typeof data.fxRates === 'object' ? data.fxRates : DEFAULT_RATES);
+    setRates(normalizeRatesHistory(data.fxRates, todayIso()));
     setRatesUpdated(data.fxRatesUpdated && typeof data.fxRatesUpdated === 'object' ? data.fxRatesUpdated : {});
     if (data.selectedPeriod) setSelectedPeriod(data.selectedPeriod);
     // CAR-77 review hardening: clamp budgetStartDay to [1, 28] to mirror the

@@ -2,7 +2,7 @@ import React from 'react';
 import { A } from '../theme';
 import { ALabel } from './Shared';
 import { useStore } from '../store';
-import { ALL_CURRENCIES, DEFAULT_RATES, formatRate } from '../fx.mjs';
+import { ALL_CURRENCIES, DEFAULT_RATES, formatRate, latestRateEntry } from '../fx.mjs';
 
 function formatRelativeTime(iso) {
   if (!iso) return 'never';
@@ -66,7 +66,7 @@ export default function FxRatesSection() {
 
   const startEdit = (ccy) => {
     setEditing(ccy);
-    setEditVal(String(rates[ccy] ?? 1));
+    setEditVal(String(latestRateEntry(rates, ccy)?.rate ?? 1));
   };
 
   const commitEdit = () => {
@@ -83,7 +83,7 @@ export default function FxRatesSection() {
   };
 
   const addCurrency = (ccy) => {
-    if (rates[ccy] != null) return;
+    if (latestRateEntry(rates, ccy)) return;
     setRate(ccy, DEFAULT_RATES[ccy] ?? 1.0);
   };
 
@@ -108,12 +108,12 @@ export default function FxRatesSection() {
     void refreshRatesNow();
   };
 
-  const candidateCurrencies = ALL_CURRENCIES.filter(c => rates[c] == null);
+  const candidateCurrencies = ALL_CURRENCIES.filter(c => !latestRateEntry(rates, c));
 
   return (
     <div style={{ marginTop: 12, borderTop: '2px solid ' + A.ink }}>
       {ordered.map(ccy => {
-        const rate = rates[ccy];
+        const rate = latestRateEntry(rates, ccy)?.rate;
         const updated = ratesUpdated[ccy];
         const isUsd = ccy === 'USD';
         const isEditing = editing === ccy;
