@@ -18,6 +18,7 @@ import {
 import { buildAlertRows } from './alerts.mjs';
 import { buildInsightRows } from './insights.mjs';
 import { DEFAULT_RATES } from './fx.mjs';
+import { fetchRatesFromFrankfurter } from './fxFetch.mjs';
 import { buildBackup } from './backup.mjs';
 import { ACCENTS } from './theme';
 import {
@@ -339,6 +340,9 @@ function StoreProviderImpl({ children }) {
   const [welcomeSeen, setWelcomeSeen] = useLS('ledger:welcomeSeen', false);
   const [rates, setRates] = useLS('ledger:fxRates', DEFAULT_RATES);
   const [ratesUpdated, setRatesUpdated] = useLS('ledger:fxRatesUpdated', {});
+  const [fxAutoFetch, setFxAutoFetch] = useLS('ledger:fxAutoFetch', 'off');
+  const [fxLastFetchedAt, setFxLastFetchedAt] = useLS('ledger:fxLastFetchedAt', null);
+  const [fxLastFetchError, setFxLastFetchError] = useLS('ledger:fxLastFetchError', null);
   const [fxMigrationToastSeen, setFxMigrationToastSeen] = useLS('ledger:fxMigrationToastSeen', false);
 
   // CAR-77: settings keys moved from App.jsx's useTweaks. Same keys, same
@@ -359,6 +363,16 @@ function StoreProviderImpl({ children }) {
   //   as a risk event. Default 0 (overdraft).
   const [forecastLiquidAccountIds, setForecastLiquidAccountIds] = useLS('ledger:forecastLiquidAccountIds', []);
   const [forecastThreshold, setForecastThreshold] = useLS('ledger:forecastThreshold', 0);
+
+  const fxFetchAbortRef = React.useRef(null);
+  const [fxFetchInFlight, setFxFetchInFlight] = React.useState(false);
+  const abortFxFetch = React.useCallback(() => {
+    if (fxFetchAbortRef.current) {
+      fxFetchAbortRef.current.abort();
+      fxFetchAbortRef.current = null;
+    }
+    setFxFetchInFlight(false);
+  }, []);
 
   // Move the data-theme effect from useTweaks to here.
   React.useEffect(() => {
@@ -654,6 +668,7 @@ function StoreProviderImpl({ children }) {
   }, [setRates, setRatesUpdated]);
 
   const resetRates = React.useCallback(() => {
+    abortFxFetch();
     setRates(DEFAULT_RATES);
     setRatesUpdated({});
   }, [setRates, setRatesUpdated]);
@@ -664,7 +679,7 @@ function StoreProviderImpl({ children }) {
     if (!ccy || ccy === 'USD') return;
     setRates(prev => prev[ccy] != null ? prev : { ...prev, [ccy]: 1.0 });
     setRatesUpdated(prev => prev[ccy] !== undefined ? prev : { ...prev, [ccy]: null });
-  }, [setRates, setRatesUpdated]);
+  }, [abortFxFetch, setRates, setRatesUpdated]);
 
   const addAccount = React.useCallback(acct => {
     ensureRateForCurrency(acct.ccy);
@@ -1031,6 +1046,7 @@ function StoreProviderImpl({ children }) {
   // Bypasses loadSampleData's precondition because we just wiped the store; the
   // closure-captured `txs`/`accounts`/etc. would still be non-empty here.
   const resetAndLoadSampleData = React.useCallback(() => {
+    abortFxFetch();
     setTxs([]);
     setCatTree(DEFAULT_CAT_TREE);
     setBudgets([]);
@@ -1050,13 +1066,59 @@ function StoreProviderImpl({ children }) {
     setTxFilterRaw(null);
     setRates(DEFAULT_RATES);
     setRatesUpdated({});
+    setFxAutoFetch('off');
+    setFxLastFetchedAt(null);
+    setFxLastFetchError(null);
     setFxMigrationToastSeen(false);
     setWelcomeSeen(true); // already past the welcome — don't re-show it
     setLastBackupAt(null);
     setBackupReminderSnoozedUntil(null);
     setBackupReminderIntervalRaw(30);
     _seedSampleData();
-  }, [_seedSampleData, setTxs, setCatTree, setBudgets, setAccounts, setBills, setGoals, setGoalContributions, setRules, setSelectedPeriod, setHidden, setBudgetStartDay, setInvestments, setTrades, setDismissedAlertIds, setDismissedInsightIds, setTxFilterRaw, setRates, setRatesUpdated, setFxMigrationToastSeen, setWelcomeSeen, setLastBackupAt, setBackupReminderSnoozedUntil, setBackupReminderIntervalRaw]);
+  }, [_seedSampleData, abortFxFetch, setTxs, setCatTree, setBudgets, setAccounts, setBills, setGoals, setGoalContributions, setRules, setSelectedPeriod, setHidden, setBudgetStartDay, setInvestments, setTrades, setDismissedAlertIds, setDismissedInsightIds, setTxFilterRaw, setRates, setRatesUpdated, setFxAutoFetch, setFxLastFetchedAt, setFxLastFetchError, setFxMigrationToastSeen, setWelcomeSeen, setLastBackupAt, setBackupReminderSnoozedUntil, setBackupReminderIntervalRaw]);
+
+  React.useEffect(() => () => {
+    if (fxFetchAbortRef.current) fxFetchAbortRef.current.abort();
+  }, []);
+
+  const refreshRatesNow = React.useCallback(async () => {
+    const requested = Object.keys(rates).filter(ccy => ccy !== 'USD');
+    abortFxFetch();
+
+    const controller = new AbortController();
+    fxFetchAbortRef.current = controller;
+    setFxFetchInFlight(true);
+    setFxLastFetchError(null);
+
+    try {
+      const result = await fetchRatesFromFrankfurter(requested, controller.signal);
+      if (fxFetchAbortRef.current !== controller) {
+        return { ok: false, error: 'Aborted' };
+      }
+
+      for (const [ccy, rate] of Object.entries(result.rates)) {
+        if (ccy === 'USD') continue;
+        setRate(ccy, rate);
+      }
+
+      setFxLastFetchedAt(result.fetchedAt);
+      setFxLastFetchError(null);
+      return { ok: true };
+    } catch (error) {
+      if (fxFetchAbortRef.current !== controller || controller.signal.aborted || error?.name === 'AbortError') {
+        return { ok: false, error: 'Aborted' };
+      }
+
+      const message = error instanceof Error ? error.message : String(error || 'Failed to fetch FX rates.');
+      setFxLastFetchError(message);
+      return { ok: false, error: message };
+    } finally {
+      if (fxFetchAbortRef.current === controller) {
+        fxFetchAbortRef.current = null;
+        setFxFetchInFlight(false);
+      }
+    }
+  }, [abortFxFetch, rates, setRate, setFxLastFetchedAt, setFxLastFetchError]);
 
   // CAR-77: returns the JSON string the user will download. Reads the
   // current state synchronously via the captured useLS values; if React
@@ -1067,12 +1129,12 @@ function StoreProviderImpl({ children }) {
   const exportBackup = React.useCallback(() => {
     const obj = buildBackup({
       txs, accounts, catTree, budgets, hidden, bills, goals, goalContributions,
-      investments, trades, rates, ratesUpdated,
+      investments, trades, rates, ratesUpdated, fxAutoFetch, fxLastFetchedAt, fxLastFetchError,
       selectedPeriod, budgetStartDay,
       settings: { accent, density, decimals, currency, theme, forecastLiquidAccountIds, forecastThreshold },
     });
     return JSON.stringify(obj, null, 2);
-  }, [txs, accounts, catTree, budgets, hidden, bills, goals, goalContributions, investments, trades, rates, ratesUpdated, selectedPeriod, budgetStartDay, accent, density, decimals, currency, theme, forecastLiquidAccountIds, forecastThreshold]);
+  }, [txs, accounts, catTree, budgets, hidden, bills, goals, goalContributions, investments, trades, rates, ratesUpdated, fxAutoFetch, fxLastFetchedAt, fxLastFetchError, selectedPeriod, budgetStartDay, accent, density, decimals, currency, theme, forecastLiquidAccountIds, forecastThreshold]);
 
   const recordBackupTaken = React.useCallback(() => {
     setLastBackupAt(new Date().toISOString().slice(0, 10));
@@ -1085,6 +1147,7 @@ function StoreProviderImpl({ children }) {
   // fxMigrationToastSeen) is reset explicitly: post-restore they should
   // not carry over. lastBackupAt is NOT updated — restore is not a backup.
   const restoreBackup = React.useCallback(data => {
+    abortFxFetch();
     // CAR-77 review hardening: defense-in-depth. Callers should always pass
     // validated data (parseBackup result), but a future regression that
     // forgets the .ok gate shouldn't crash the entire app.
@@ -1105,6 +1168,9 @@ function StoreProviderImpl({ children }) {
     setTrades(Array.isArray(data.trades) ? data.trades : []);
     setRates(data.fxRates && typeof data.fxRates === 'object' ? data.fxRates : DEFAULT_RATES);
     setRatesUpdated(data.fxRatesUpdated && typeof data.fxRatesUpdated === 'object' ? data.fxRatesUpdated : {});
+    setFxAutoFetch(data.fxAutoFetch ?? 'off');
+    setFxLastFetchedAt(data.fxLastFetchedAt ?? null);
+    setFxLastFetchError(data.fxLastFetchError ?? null);
     if (data.selectedPeriod) setSelectedPeriod(data.selectedPeriod);
     // CAR-77 review hardening: clamp budgetStartDay to [1, 28] to mirror the
     // UI invariant in commitDay. Backup files are human-readable JSON by
@@ -1136,11 +1202,15 @@ function StoreProviderImpl({ children }) {
     setTxFilterRaw(null);
     setDismissedAlertIds([]);
     setDismissedInsightIds([]);
+    setFxAutoFetch('off');
+    setFxLastFetchedAt(null);
+    setFxLastFetchError(null);
     setWelcomeSeen(true);          // user is past the welcome by definition.
     setFxMigrationToastSeen(true); // restored data already has whatever rates it has.
     setBackupReminderSnoozedUntil(null);
     // Note: NOT touching lastBackupAt — restoring is not the same as backing up.
   }, [
+    abortFxFetch,
     setTxs, setAccounts, setCatTree, setBudgets, setHidden, setBills, setGoals,
     setGoalContributions, setRules, setInvestments, setTrades, setRates, setRatesUpdated,
     setSelectedPeriod, setBudgetStartDay,
@@ -1151,6 +1221,7 @@ function StoreProviderImpl({ children }) {
   ]);
 
   const reset = React.useCallback(() => {
+    abortFxFetch();
     setTxs([]);
     setCatTree(DEFAULT_CAT_TREE);
     setBudgets([]);
@@ -1170,6 +1241,9 @@ function StoreProviderImpl({ children }) {
     setTxFilterRaw(null);
     setRates(DEFAULT_RATES);
     setRatesUpdated({});
+    setFxAutoFetch('off');
+    setFxLastFetchedAt(null);
+    setFxLastFetchError(null);
     setFxMigrationToastSeen(false);
     setWelcomeSeen(false);
     setLastBackupAt(null);
@@ -1290,9 +1364,15 @@ function StoreProviderImpl({ children }) {
       restoreHolding,
       rates,
       ratesUpdated,
+      fxAutoFetch,
+      fxLastFetchedAt,
+      fxLastFetchError,
       setRate,
       removeRate,
       resetRates,
+      refreshRatesNow,
+      fxFetchInFlight,
+      setFxAutoFetch,
       fxMigrationToastSeen,
       setFxMigrationToastSeen,
       accent, setAccent,

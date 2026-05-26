@@ -5,12 +5,12 @@
 export const BACKUP_FORMAT_VERSION = 2;
 export const BACKUP_TYPE = 'ledger-backup';
 
-// 15 user-data slices total: 13 in SLICES + 2 in SCALAR_SLICES.
+// 18 user-data slices total: 13 in SLICES + 5 in SCALAR_SLICES.
 // Excluded (session-ephemera, reset on restore): txFilter, dismissedAlerts,
 // dismissedInsights, welcomeSeen, fxMigrationToastSeen, lastBackupAt,
 // backupReminderInterval, backupReminderSnoozedUntil.
 //
-// Each entry maps STATE_KEY → BACKUP_KEY → defaultEmpty (used both when
+// Each entry maps STATE_KEY -> BACKUP_KEY -> defaultEmpty (used both when
 // building from a state missing the slice AND when validating a backup
 // that omits or mistypes the slice).
 const SLICES = [
@@ -34,6 +34,9 @@ const SCALAR_SLICES = [
   // [stateKey, backupKey, defaultValue]
   ['selectedPeriod',  'selectedPeriod',  null],
   ['budgetStartDay',  'budgetStartDay',  1],
+  ['fxAutoFetch',     'fxAutoFetch',     'off'],
+  ['fxLastFetchedAt', 'fxLastFetchedAt', null],
+  ['fxLastFetchError','fxLastFetchError',null],
 ];
 
 function isPlainObject(v) {
@@ -49,7 +52,7 @@ function matchesType(value, expected) {
 // Build a backup object from the store's current state. `state` is a plain
 // object containing the same keys used by `<StoreProvider>`'s value (txs,
 // accounts, catTree, budgets, ...) plus a `settings` sub-object for the 5
-// preference values. Missing keys → empty defaults.
+// preference values. Missing keys -> empty defaults.
 export function buildBackup(state = {}, appVersion) {
   const out = {
     _type: BACKUP_TYPE,
@@ -74,7 +77,7 @@ export function buildBackup(state = {}, appVersion) {
 //   { ok: false, error }
 //
 // Strict on identity (`_type`) and `version`; tolerant on slice presence
-// and slice types (wrong type → skipped with a warning).
+// and slice types (wrong type -> skipped with a warning).
 export function validateBackup(obj) {
   if (!isPlainObject(obj)) {
     return { ok: false, error: 'Not a Ledger backup file.' };
