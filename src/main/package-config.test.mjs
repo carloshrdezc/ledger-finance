@@ -17,4 +17,14 @@ describe('Windows packaging config', () => {
     expect(win).not.toHaveProperty('certificateFile');
     expect(win).not.toHaveProperty('certificatePassword');
   });
+
+  it('publishes releases to the GitHub repo', () => {
+    expect(packageJson.build?.publish).toEqual([
+      {
+        provider: 'github',
+        owner: 'carloshrdezc',
+        repo: 'ledger-finance',
+      },
+    ]);
+  });
 });

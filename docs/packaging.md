@@ -152,9 +152,41 @@ signtool verify /pa /v dist-app/LEDGER-Setup-1.0.0.exe
 - [ ] Signed `.exe` validates via `signtool verify /pa` — pending cert acquisition
 - [ ] SmartScreen shows the publisher name — pending cert + first installs
 
-## Auto-Update
+## Auto-update
 
-**Not configured for v1.** Users update by re-running a fresh installer. Tracked in [CAR-215](https://linear.app/carloshrdezc/issue/CAR-215).
+LEDGER uses `electron-updater` to check for tagged GitHub Releases on app launch. The installed app downloads the new build in the background and prompts the user to restart once the update is ready.
+
+### Release flow
+
+1. Bump `package.json` `version` using semver.
+2. Commit the change and push a `v<version>` tag.
+3. GitHub Actions (`.github/workflows/release.yml`) builds Windows, macOS, and Linux installers and publishes a GitHub Release.
+4. Installed apps read the release metadata files (`latest.yml`, `latest-mac.yml`, `latest-linux.yml`) from GitHub Releases.
+5. When the app starts, it waits 10 seconds, checks for updates, downloads the new build in the background, and installs it on quit.
+
+### Detection cycle
+
+Auto-update runs once on launch after a 10-second delay so it does not compete with cold-start IPC. This repo does **not** do periodic polling; the check happens on launch only.
+
+### Platform notes
+
+- **Windows:** works with the current scaffold, including unsigned builds. SmartScreen may re-flag each new version until code signing is enabled.
+- **macOS:** blocked on CAR-213 code signing / notarization. Until that lands, mac builds will not auto-update.
+- **Linux:** uses the AppImage update flow.
+
+### How to test locally
+
+Local testing is awkward because `electron-updater` expects an installed app that can read a real release feed. The most realistic check is to publish a pre-release from a test branch, install that build, then bump `version` and confirm the installed app detects the new tag on next launch.
+
+### Acceptance status
+
+- [x] GitHub Release publishing is configured in `package.json`
+- [x] The app checks for updates after launch and downloads in the background
+- [x] A restart banner appears when an update is downloaded
+- [x] The user can trigger restart from the banner
+- [x] Release flow and local testing notes are documented
+- [ ] macOS auto-update is still blocked on CAR-213 signing
+- [ ] Signed builds still need end-to-end validation on real release artifacts
 
 ## Troubleshooting
 
