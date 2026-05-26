@@ -178,7 +178,7 @@ export default function WebTransactions({ t, onNavigate, onAdd }) {
     return parts.join(' · ');
   }, [txFilter]);
 
-  const txViews = React.useMemo(() => (savedViews || []).filter(view => view.scope === 'tx'), [savedViews]);
+  const txViews = React.useMemo(() => savedViews.filter(view => view.scope === 'tx'), [savedViews]);
   const selectedView = React.useMemo(() => txViews.find(view => view.id === selectedViewId) || null, [txViews, selectedViewId]);
   const applySavedView = React.useCallback((view) => {
     if (!view) return;

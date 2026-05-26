@@ -70,7 +70,7 @@ export default function WebReports({ t, onNavigate, onAdd }) {
     onNavigate('tx');
   }, [setTxFilter, onNavigate]);
 
-  const txViews = React.useMemo(() => (savedViews || []).filter(view => view.scope === 'reports'), [savedViews]);
+  const txViews = React.useMemo(() => savedViews.filter(view => view.scope === 'reports'), [savedViews]);
   const selectedView = React.useMemo(() => txViews.find(view => view.id === selectedViewId) || null, [txViews, selectedViewId]);
   const applySavedView = React.useCallback((view) => {
     if (!view) return;

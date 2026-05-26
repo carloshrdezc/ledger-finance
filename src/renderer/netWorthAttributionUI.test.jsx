@@ -7,6 +7,7 @@ import Dashboard from './screens/web/Dashboard';
 import WebReports from './screens/web/WebReports';
 import { StoreCtx } from './store';
 
+let store;
 afterEach(() => {
   cleanup();
 });
@@ -31,6 +32,10 @@ function makeStore(overrides = {}) {
     insightRows: [],
     dismissInsight: vi.fn(),
     setTxFilter: vi.fn(),
+    savedViews: [],
+    addView: vi.fn(),
+    updateView: vi.fn(),
+    deleteView: vi.fn(),
     bills: [],
     ...overrides,
   };
@@ -88,7 +93,7 @@ describe('net-worth attribution drill-downs', () => {
   });
 
   it('Reports market-gains bucket is non-drillable (residual, no underlying txs)', () => {
-    const store = makeStore({
+    store = makeStore({
       transactions: [
         { id: 'xfer-out', date: '2026-05-15', acct: 'chk', cat: 'transfer', amt: -300, ccy: 'USD', transferId: 'xfer-1', transferPeer: 'xfer-in' },
         { id: 'xfer-in', date: '2026-05-15', acct: 'vti', cat: 'transfer', amt: 300, ccy: 'USD', transferId: 'xfer-1', transferPeer: 'xfer-out' },

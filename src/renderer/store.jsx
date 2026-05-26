@@ -976,9 +976,10 @@ function StoreProviderImpl({ children }) {
     if (!view || !view.name) return;
     const name = String(view.name).trim();
     if (!name) return;
+    const scope = view.scope === 'reports' ? 'reports' : 'tx';
     const entry = {
-      id: view.id || `sv_${Date.now()}`,
-      scope: view.scope === 'reports' ? 'reports' : 'tx',
+      id: view.id || `sv_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      scope,
       name,
       period: view.period,
       range: view.range,
@@ -987,7 +988,15 @@ function StoreProviderImpl({ children }) {
       sortBy: view.sortBy,
       sortOrder: view.sortOrder,
     };
-    setSavedViews(prev => [...prev, entry]);
+    setSavedViews(prev => {
+      const matchIdx = prev.findIndex(existing =>
+        existing.scope === scope && String(existing.name || '').trim().toLowerCase() === name.toLowerCase(),
+      );
+      if (matchIdx === -1) return [...prev, entry];
+      const next = prev.slice();
+      next[matchIdx] = { ...prev[matchIdx], ...entry, id: prev[matchIdx].id };
+      return next;
+    });
   }, [setSavedViews]);
 
   const updateView = React.useCallback((id, patch) => {
@@ -995,8 +1004,11 @@ function StoreProviderImpl({ children }) {
     setSavedViews(prev => prev.map(view => {
       if (view.id !== id) return view;
       const next = { ...view, ...patch };
-      if (next.name !== undefined) next.name = String(next.name).trim();
-      if (!next.name) return view;
+      if (next.name !== undefined) {
+        const name = String(next.name).trim();
+        if (!name) throw new Error('LEDGER_INVALID_VIEW_NAME');
+        next.name = name;
+      }
       if (next.scope !== 'reports' && next.scope !== 'tx') next.scope = view.scope;
       if (next.txFilter === undefined) next.txFilter = view.txFilter ?? null;
       return next;
