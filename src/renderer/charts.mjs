@@ -1,7 +1,7 @@
 import { toReportingCurrency } from './fx.mjs';
 
-function toUsd(amount, ccy, rates) {
-  return toReportingCurrency(amount, ccy, rates, 'USD');
+function toUsd(amount, ccy, rates, date) {
+  return toReportingCurrency(amount, ccy, rates, 'USD', date);
 }
 
 function roundCents(value) {
@@ -36,7 +36,7 @@ export function buildCategoryTrend(transactions, periods, limit = 6, rates = { U
     if (!periods.includes(period)) continue;
     const cat = txCategory(tx);
     if (!totals.has(cat)) totals.set(cat, Object.fromEntries(periods.map(p => [p, 0])));
-    totals.get(cat)[period] += Math.abs(toUsd(tx.amt, tx.ccy, rates));
+    totals.get(cat)[period] += Math.abs(toUsd(tx.amt, tx.ccy, rates, tx.date));
   }
 
   return [...totals.entries()]
@@ -51,8 +51,8 @@ export function buildCategoryTrend(transactions, periods, limit = 6, rates = { U
 export function buildIncomeExpenseSeries(transactions, periods, rates = { USD: 1 }) {
   return periods.map(period => {
     const periodTxs = transactions.filter(tx => txPeriod(tx) === period);
-    const income = periodTxs.filter(tx => tx.amt > 0).reduce((s, tx) => s + toUsd(tx.amt, tx.ccy, rates), 0);
-    const expense = periodTxs.filter(tx => tx.amt < 0).reduce((s, tx) => s + Math.abs(toUsd(tx.amt, tx.ccy, rates)), 0);
+    const income = periodTxs.filter(tx => tx.amt > 0).reduce((s, tx) => s + toUsd(tx.amt, tx.ccy, rates, tx.date), 0);
+    const expense = periodTxs.filter(tx => tx.amt < 0).reduce((s, tx) => s + Math.abs(toUsd(tx.amt, tx.ccy, rates, tx.date)), 0);
     return {
       period,
       income: roundCents(income),
@@ -66,10 +66,12 @@ export function buildNetWorthTrend(accounts, transactions, periods, rates = { US
   return periods.map(period => {
     const value = accounts.reduce((sum, account) => {
       if (!countedAccount(account)) return sum;
+      // Opening balances stay at current valuation (date-free) — they're user-entered
+      // current numbers, not aggregations of historical txs. Don't thread a date here.
       const opening = toUsd(account.openingBal || 0, account.ccy, rates);
       const delta = transactions
         .filter(tx => tx.acct === account.id && txPeriod(tx) <= period)
-        .reduce((s, tx) => s + toUsd(tx.amt, tx.ccy, rates), 0);
+        .reduce((s, tx) => s + toUsd(tx.amt, tx.ccy, rates, tx.date), 0);
       return sum + opening + delta;
     }, 0);
     return { period, value: roundCents(value) };
@@ -86,10 +88,11 @@ export function buildNetWorthDailyTrend(accounts, transactions, endDateIso, dayC
     const value = accounts
       .filter(countedAccount)
       .reduce((sum, account) => {
+        // Opening balance is current valuation (date-free); only the tx delta below threads tx.date.
         const opening = toUsd(account.openingBal || 0, account.ccy, rates);
         const delta = transactions
           .filter(tx => tx.acct === account.id && tx.date <= iso)
-          .reduce((s, tx) => s + toUsd(tx.amt, tx.ccy, rates), 0);
+          .reduce((s, tx) => s + toUsd(tx.amt, tx.ccy, rates, tx.date), 0);
         return sum + opening + delta;
       }, 0);
     return { date: iso, value: roundCents(value) };

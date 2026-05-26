@@ -14,6 +14,7 @@ export function Accounts({ t, onAcct }) {
   const [reorderMode, setReorderMode]   = React.useState(false);
   const [showArchived, setShowArchived] = React.useState(false);
 
+  // Account balances are current valuation; do not thread transaction dates here.
   const NET_WORTH = accountsIncludedInTotals.reduce(
     (s, a) => s + toReporting(a.balance, a.ccy), 0
   );

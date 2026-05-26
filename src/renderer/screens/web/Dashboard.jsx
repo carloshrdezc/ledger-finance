@@ -40,6 +40,7 @@ export default function Dashboard({ t, onNavigate, onAdd }) {
   }, [setTxFilter, onNavigate]);
 
   const now = new Date();
+  // Account balances are current valuation; only transaction aggregates thread tx.date.
   const NET_WORTH  = accountsIncludedInTotals.reduce((s, a) => s + toReporting(a.balance, a.ccy), 0);
   const NW_DELTA   = accountsIncludedInTotals.reduce((s, a) => s + toReporting(a.delta,   a.ccy), 0);
   const NW_PCT     = NET_WORTH ? (NW_DELTA / Math.abs(NET_WORTH - NW_DELTA)) * 100 : 0;
@@ -77,7 +78,7 @@ export default function Dashboard({ t, onNavigate, onAdd }) {
     let inflow = 0, outflow = 0;
     const deltaByAcct = new Map();
     for (const tx of filtered) {
-      const usd = toReporting(tx.amt, tx.ccy);
+      const usd = toReporting(tx.amt, tx.ccy, tx.date);
       if (usd > 0) inflow += usd;
       else outflow += usd;
       deltaByAcct.set(tx.acct, (deltaByAcct.get(tx.acct) ?? 0) + usd);

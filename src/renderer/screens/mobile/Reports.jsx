@@ -92,13 +92,13 @@ export default function Reports({ t, onBack, onGoToRoute }) {
   const previousPeriod = addMonths(selectedPeriod, -1);
   const previousPeriodTxs = filterTransactionsForPeriod(transactions, previousPeriod);
   const previousTotal = previousPeriodTxs.filter(x => x.amt < 0)
-    .reduce((s, x) => s + Math.abs(toReporting(x.amt, x.ccy)), 0);
+    .reduce((s, x) => s + Math.abs(toReporting(x.amt, x.ccy, x.date)), 0);
   const total = reportTxs.filter(x => x.amt < 0)
-    .reduce((s, x) => s + Math.abs(toReporting(x.amt, x.ccy)), 0);
+    .reduce((s, x) => s + Math.abs(toReporting(x.amt, x.ccy, x.date)), 0);
   const byCat = {};
   reportTxs.filter(x => x.amt < 0).forEach(x => {
     const k = (x.path || [x.cat])[0];
-    byCat[k] = (byCat[k] || 0) + Math.abs(toReporting(x.amt, x.ccy));
+    byCat[k] = (byCat[k] || 0) + Math.abs(toReporting(x.amt, x.ccy, x.date));
   });
   const cats = Object.entries(byCat).sort((a, b) => b[1] - a[1]).slice(0, 6);
   const maxCat = cats[0] ? cats[0][1] : 1;
@@ -109,7 +109,7 @@ export default function Reports({ t, onBack, onGoToRoute }) {
     const key = (tx.name || '').split(' · ')[0];
     if (!key) return;
     const curr = merchantMap[key] || { name: key, amt: 0, n: 0 };
-    curr.amt += Math.abs(toReporting(tx.amt, tx.ccy));
+    curr.amt += Math.abs(toReporting(tx.amt, tx.ccy, tx.date));
     curr.n += 1;
     merchantMap[key] = curr;
   });
@@ -125,7 +125,7 @@ export default function Reports({ t, onBack, onGoToRoute }) {
   const momPeriods = getRecentPeriods(selectedPeriod, 12);
   const momSpend = momPeriods.map(p => filterTransactionsForPeriod(transactions, p)
     .filter(x => x.amt < 0)
-    .reduce((s, x) => s + Math.abs(toReporting(x.amt, x.ccy)), 0));
+    .reduce((s, x) => s + Math.abs(toReporting(x.amt, x.ccy, x.date)), 0));
   const momMax = Math.max(...momSpend, 1);
   const momAvg = momSpend.reduce((s, v) => s + v, 0) / momSpend.length;
 
@@ -134,7 +134,7 @@ export default function Reports({ t, onBack, onGoToRoute }) {
   const prevByCat = {};
   previousPeriodTxs.filter(x => x.amt < 0).forEach(x => {
     const k = (x.path || [x.cat])[0];
-    prevByCat[k] = (prevByCat[k] || 0) + Math.abs(toReporting(x.amt, x.ccy));
+    prevByCat[k] = (prevByCat[k] || 0) + Math.abs(toReporting(x.amt, x.ccy, x.date));
   });
   const allCatKeys = new Set([...Object.keys(byCat), ...Object.keys(prevByCat)]);
   let topGrowth = null;
@@ -171,12 +171,12 @@ export default function Reports({ t, onBack, onGoToRoute }) {
 
   // 4. Savings rate for current period: (income - expenses) / income.
   const periodIncome = reportTxs.filter(x => x.amt > 0 && x.cat !== 'transfer')
-    .reduce((s, x) => s + toReporting(x.amt, x.ccy), 0);
+    .reduce((s, x) => s + toReporting(x.amt, x.ccy, x.date), 0);
   const periodExpense = total;
   const savingsRate = periodIncome > 0 ? ((periodIncome - periodExpense) / periodIncome) * 100 : null;
   // Compare to prior period.
   const prevIncome = previousPeriodTxs.filter(x => x.amt > 0 && x.cat !== 'transfer')
-    .reduce((s, x) => s + toReporting(x.amt, x.ccy), 0);
+    .reduce((s, x) => s + toReporting(x.amt, x.ccy, x.date), 0);
   const prevSavingsRate = prevIncome > 0 ? ((prevIncome - previousTotal) / prevIncome) * 100 : null;
   const savingsDelta = (savingsRate != null && prevSavingsRate != null) ? savingsRate - prevSavingsRate : null;
 
