@@ -994,25 +994,50 @@ function StoreProviderImpl({ children }) {
       );
       if (matchIdx === -1) return [...prev, entry];
       const next = prev.slice();
-      next[matchIdx] = { ...prev[matchIdx], ...entry, id: prev[matchIdx].id };
+      // Upsert: refresh the filter snapshot but PRESERVE the existing
+      // entry's id and the original display-case of its name. Otherwise
+      // saving "foo" then "FOO" silently rewrites the user's label.
+      next[matchIdx] = { ...prev[matchIdx], ...entry, id: prev[matchIdx].id, name: prev[matchIdx].name };
       return next;
     });
   }, [setSavedViews]);
 
   const updateView = React.useCallback((id, patch) => {
     if (!id) return;
-    setSavedViews(prev => prev.map(view => {
-      if (view.id !== id) return view;
-      const next = { ...view, ...patch };
-      if (next.name !== undefined) {
-        const name = String(next.name).trim();
-        if (!name) throw new Error('LEDGER_INVALID_VIEW_NAME');
-        next.name = name;
+    setSavedViews(prev => {
+      const target = prev.find(view => view.id === id);
+      if (!target) return prev;
+
+      // Validate name patches BEFORE mutating: whitespace-only is a
+      // developer error (callers must trim at the boundary), and
+      // renaming into an existing (scope, name) collision would
+      // leave the dropdown showing two rows with the same label —
+      // mirror addView's silent-upsert protection by rejecting it
+      // here too. The UI guards against the only path that can hit
+      // this, so callers don't need to try/catch.
+      if (patch && patch.name !== undefined) {
+        const nextName = String(patch.name).trim();
+        if (!nextName) throw new Error('LEDGER_INVALID_VIEW_NAME');
+        const nextScope = (patch.scope === 'reports' || patch.scope === 'tx') ? patch.scope : target.scope;
+        const collision = prev.some(view =>
+          view.id !== id
+          && view.scope === nextScope
+          && String(view.name || '').trim().toLowerCase() === nextName.toLowerCase(),
+        );
+        if (collision) throw new Error('LEDGER_DUPLICATE_VIEW_NAME');
       }
-      if (next.scope !== 'reports' && next.scope !== 'tx') next.scope = view.scope;
-      if (next.txFilter === undefined) next.txFilter = view.txFilter ?? null;
-      return next;
-    }));
+
+      return prev.map(view => {
+        if (view.id !== id) return view;
+        const next = { ...view, ...patch };
+        if (next.name !== undefined) {
+          next.name = String(next.name).trim();
+        }
+        if (next.scope !== 'reports' && next.scope !== 'tx') next.scope = view.scope;
+        if (next.txFilter === undefined) next.txFilter = view.txFilter ?? null;
+        return next;
+      });
+    });
   }, [setSavedViews]);
 
   const deleteView = React.useCallback((id) => {

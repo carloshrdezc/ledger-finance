@@ -163,4 +163,73 @@ describe('WebTransactions saved views', () => {
 
     expect(store.deleteView).toHaveBeenCalledWith('sv_tx_1');
   });
+
+  it('does not call updateView when the rename prompt returns whitespace-only input', async () => {
+    await renderScreen({
+      savedViews: [
+        {
+          id: 'sv_tx_1',
+          scope: 'tx',
+          name: 'Food focus',
+          period: '2026-05',
+          search: 'latte',
+          txFilter: { category: 'dining', type: 'expense' },
+        },
+      ],
+    });
+
+    fireEvent.change(screen.getByLabelText(/views/i), { target: { value: 'sv_tx_1' } });
+    vi.spyOn(window, 'prompt').mockReturnValue('   ');
+
+    // Must not throw and must not call updateView — store.jsx throws on
+    // whitespace-only names; the call site is required to trim.
+    expect(() => {
+      fireEvent.click(screen.getByRole('button', { name: /rename view/i }));
+    }).not.toThrow();
+    expect(store.updateView).not.toHaveBeenCalled();
+  });
+
+  it('does not call addView when the save-current-view prompt returns whitespace-only input', async () => {
+    await renderScreen();
+    vi.spyOn(window, 'prompt').mockReturnValue('   ');
+
+    expect(() => {
+      fireEvent.click(screen.getByRole('button', { name: /save current view/i }));
+    }).not.toThrow();
+    expect(store.addView).not.toHaveBeenCalled();
+  });
+
+  it('alerts the user when renaming would collide with another view in the same scope', async () => {
+    await renderScreen({
+      savedViews: [
+        {
+          id: 'sv_tx_1',
+          scope: 'tx',
+          name: 'Food focus',
+          period: '2026-05',
+          txFilter: { category: 'dining', type: 'expense' },
+        },
+        {
+          id: 'sv_tx_2',
+          scope: 'tx',
+          name: 'Travel',
+          period: '2026-05',
+          txFilter: { category: 'travel', type: 'expense' },
+        },
+      ],
+      // Real updateView contract: throws on duplicate (scope, name).
+      updateView: vi.fn(() => {
+        throw new Error('LEDGER_DUPLICATE_VIEW_NAME');
+      }),
+    });
+
+    fireEvent.change(screen.getByLabelText(/views/i), { target: { value: 'sv_tx_1' } });
+    vi.spyOn(window, 'prompt').mockReturnValue('Travel');
+    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
+
+    expect(() => {
+      fireEvent.click(screen.getByRole('button', { name: /rename view/i }));
+    }).not.toThrow();
+    expect(alertSpy).toHaveBeenCalledWith(expect.stringContaining('Travel'));
+  });
 });

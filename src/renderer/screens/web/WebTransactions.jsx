@@ -193,15 +193,27 @@ export default function WebTransactions({ t, onNavigate, onAdd }) {
     applySavedView(txViews.find(view => view.id === id));
   }, [applySavedView, txViews]);
   const saveCurrentView = React.useCallback(() => {
-    const name = window.prompt('Save current view as');
+    const raw = window.prompt('Save current view as');
+    if (!raw) return;
+    const name = raw.trim();
     if (!name) return;
     addView({ scope: 'tx', name, period: selectedPeriod, search, txFilter });
   }, [addView, selectedPeriod, search, txFilter]);
   const renameSelectedView = React.useCallback(() => {
     if (!selectedView) return;
-    const name = window.prompt('Rename view', selectedView.name);
+    const raw = window.prompt('Rename view', selectedView.name);
+    if (raw === null) return;
+    const name = raw.trim();
     if (!name) return;
-    updateView(selectedView.id, { name });
+    try {
+      updateView(selectedView.id, { name });
+    } catch (err) {
+      if (err && err.message === 'LEDGER_DUPLICATE_VIEW_NAME') {
+        window.alert(`A view named "${name}" already exists.`);
+        return;
+      }
+      throw err;
+    }
   }, [selectedView, updateView]);
   const updateSelectedView = React.useCallback(() => {
     if (!selectedView) return;
