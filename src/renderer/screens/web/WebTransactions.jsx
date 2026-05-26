@@ -25,7 +25,8 @@ function download(name, content) {
 export default function WebTransactions({ t, onNavigate, onAdd }) {
   const {
     transactions, periodTransactions, deleteTx, deleteTransfer,
-    accountsWithBalance, periodLabel, txFilter, clearTxFilter,
+    accountsWithBalance, periodLabel, selectedPeriod, txFilter, clearTxFilter,
+    savedViews, addView, updateView, deleteView, setSelectedPeriod, setTxFilter,
     // CAR-82
     deleteTxs, hideTxs, updateTxs,
     // CAR-80 — for CategoryPicker in BulkActionBar
@@ -33,6 +34,7 @@ export default function WebTransactions({ t, onNavigate, onAdd }) {
   } = useUndoableStore();
   const [filter, setFilter] = React.useState('ALL');
   const [search, setSearch] = React.useState('');
+  const [selectedViewId, setSelectedViewId] = React.useState('');
   const [editTx, setEditTx] = React.useState(null);
   const [convertFromTxs, setConvertFromTxs] = React.useState(null);
   const [selectedIdx, setSelectedIdx] = React.useState(0);
@@ -176,6 +178,54 @@ export default function WebTransactions({ t, onNavigate, onAdd }) {
     return parts.join(' · ');
   }, [txFilter]);
 
+  const txViews = React.useMemo(() => savedViews.filter(view => view.scope === 'tx'), [savedViews]);
+  const selectedView = React.useMemo(() => txViews.find(view => view.id === selectedViewId) || null, [txViews, selectedViewId]);
+  const applySavedView = React.useCallback((view) => {
+    if (!view) return;
+    if (view.period) setSelectedPeriod(view.period);
+    setTxFilter(view.txFilter || null);
+    if (view.search !== undefined) setSearch(view.search || '');
+    setFilter('ALL');
+  }, [setSelectedPeriod, setTxFilter]);
+  const onSavedViewChange = React.useCallback((e) => {
+    const id = e.target.value;
+    setSelectedViewId(id);
+    applySavedView(txViews.find(view => view.id === id));
+  }, [applySavedView, txViews]);
+  const saveCurrentView = React.useCallback(() => {
+    const raw = window.prompt('Save current view as');
+    if (!raw) return;
+    const name = raw.trim();
+    if (!name) return;
+    addView({ scope: 'tx', name, period: selectedPeriod, search, txFilter });
+  }, [addView, selectedPeriod, search, txFilter]);
+  const renameSelectedView = React.useCallback(() => {
+    if (!selectedView) return;
+    const raw = window.prompt('Rename view', selectedView.name);
+    if (raw === null) return;
+    const name = raw.trim();
+    if (!name) return;
+    try {
+      updateView(selectedView.id, { name });
+    } catch (err) {
+      if (err && err.message === 'LEDGER_DUPLICATE_VIEW_NAME') {
+        window.alert(`A view named "${name}" already exists.`);
+        return;
+      }
+      throw err;
+    }
+  }, [selectedView, updateView]);
+  const updateSelectedView = React.useCallback(() => {
+    if (!selectedView) return;
+    updateView(selectedView.id, { period: selectedPeriod, search, txFilter });
+  }, [selectedView, selectedPeriod, search, txFilter, updateView]);
+  const deleteSelectedView = React.useCallback(() => {
+    if (!selectedView) return;
+    if (!window.confirm(`Delete view "${selectedView.name}"?`)) return;
+    deleteView(selectedView.id);
+    setSelectedViewId('');
+  }, [deleteView, selectedView]);
+
   return (
     <WebShell active="tx" t={t} onNavigate={onNavigate} onAdd={onAdd}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
@@ -188,6 +238,7 @@ export default function WebTransactions({ t, onNavigate, onAdd }) {
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
           <PeriodSwitcher />
           <input ref={searchRef} value={search} onChange={e => setSearch(e.target.value)}
+            aria-label="Search"
             placeholder="SEARCH…"
             style={{ fontFamily: A.font, fontSize: 11, padding: '6px 10px', border: '1px solid ' + A.rule2, background: A.bg, color: A.ink, letterSpacing: 1, width: 160, outline: 'none' }} />
           <button onClick={() => download(`ledger-${new Date().toISOString().slice(0,10)}.csv`, exportCSV(transactions))} style={{ all: 'unset', cursor: 'pointer', fontSize: 10, letterSpacing: 1.2, padding: '6px 12px', border: '1px solid ' + A.ink, background: A.ink, color: A.bg }}>
@@ -213,6 +264,17 @@ export default function WebTransactions({ t, onNavigate, onAdd }) {
             fontSize: 10, letterSpacing: 1.2,
           }}>FROM REPORT · {filterChipLabel} · ✕</button>
         )}
+      </div>
+
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginTop: 12 }}>
+        <select aria-label="Views" value={selectedViewId} onChange={onSavedViewChange} style={{ fontFamily: A.font, fontSize: 11, padding: '6px 10px', border: '1px solid ' + A.rule2, background: A.bg, color: A.ink, letterSpacing: 1, minWidth: 160 }}>
+          <option value="">Views…</option>
+          {txViews.map(view => <option key={view.id} value={view.id}>{view.name}</option>)}
+        </select>
+        <button onClick={saveCurrentView} style={{ all: 'unset', cursor: 'pointer', fontSize: 10, letterSpacing: 1.2, padding: '6px 12px', border: '1px solid ' + A.ink, background: A.ink, color: A.bg }}>SAVE CURRENT VIEW</button>
+        <button onClick={renameSelectedView} disabled={!selectedView} style={{ all: 'unset', cursor: selectedView ? 'pointer' : 'not-allowed', fontSize: 10, letterSpacing: 1.2, padding: '6px 12px', border: '1px solid ' + (selectedView ? A.rule2 : A.rule3), color: selectedView ? A.ink : A.muted }}>RENAME VIEW</button>
+        <button onClick={updateSelectedView} disabled={!selectedView} style={{ all: 'unset', cursor: selectedView ? 'pointer' : 'not-allowed', fontSize: 10, letterSpacing: 1.2, padding: '6px 12px', border: '1px solid ' + (selectedView ? A.rule2 : A.rule3), color: selectedView ? A.ink : A.muted }}>UPDATE FROM CURRENT FILTERS</button>
+        <button onClick={deleteSelectedView} disabled={!selectedView} style={{ all: 'unset', cursor: selectedView ? 'pointer' : 'not-allowed', fontSize: 10, letterSpacing: 1.2, padding: '6px 12px', border: '1px solid ' + (selectedView ? A.neg : A.rule3), color: selectedView ? A.neg : A.muted }}>DELETE VIEW</button>
       </div>
 
       <div style={{ marginTop: 18, borderTop: '2px solid ' + A.ink }}>

@@ -61,14 +61,14 @@ describe('buildBackup', () => {
   });
 
   // Documentation-as-test: locks the user-data slice count so the comment
-  // in backup.mjs ("15 user-data slices total: 13 in SLICES + 2 in
+  // in backup.mjs ("16 user-data slices total: 14 in SLICES + 2 in
   // SCALAR_SLICES") can't drift silently. If a slice is added or removed,
   // this assertion forces the count + comment to be updated together.
-  it('emits exactly 15 user-data slice keys (locks slice count)', () => {
+  it('emits exactly 16 user-data slice keys (locks slice count)', () => {
     const b = buildBackup({});
     const envelopeKeys = ['_type', 'version', 'exportedAt', 'settings'];
     const sliceKeys = Object.keys(b).filter((k) => !envelopeKeys.includes(k));
-    expect(sliceKeys).toHaveLength(15);
+    expect(sliceKeys).toHaveLength(16);
   });
 
   it('handles missing/undefined slices by emitting empty defaults', () => {

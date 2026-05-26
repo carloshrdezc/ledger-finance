@@ -21,10 +21,11 @@ import NetWorthAttributionBreakdown from '../../components/NetWorthAttributionBr
 import { attributeNetWorthChange, buildNetWorthAttributionFilter } from '../../netWorthAttribution.mjs';
 
 export default function WebReports({ t, onNavigate, onAdd }) {
-  const { transactions, periodTransactions, categoryTree, selectedPeriod, periodLabel, accounts, budgetStartDay, setTxFilter, rates } = useStore();
+  const { transactions, periodTransactions, categoryTree, selectedPeriod, setSelectedPeriod, periodLabel, accounts, budgetStartDay, txFilter, setTxFilter, rates, savedViews, addView, updateView, deleteView } = useStore();
   const { toReporting } = useFx(t.currency || 'USD');
 
   const [range, setRange] = React.useState({ kind: 'preset', preset: 'thisMonth' });
+  const [selectedViewId, setSelectedViewId] = React.useState('');
   const isMonthRange = range.kind === 'preset' && (range.preset === 'thisMonth' || range.preset === 'lastMonth');
   const resolved = range.kind === 'custom' ? { start: range.start, end: range.end, label: `${range.start} → ${range.end}` } : resolveRangePreset(range.preset);
   const useRange = range.kind === 'custom' || (range.preset !== 'thisMonth' && range.preset !== 'lastMonth');
@@ -68,6 +69,53 @@ export default function WebReports({ t, onNavigate, onAdd }) {
     setTxFilter(filter || null);
     onNavigate('tx');
   }, [setTxFilter, onNavigate]);
+
+  const txViews = React.useMemo(() => savedViews.filter(view => view.scope === 'reports'), [savedViews]);
+  const selectedView = React.useMemo(() => txViews.find(view => view.id === selectedViewId) || null, [txViews, selectedViewId]);
+  const applySavedView = React.useCallback((view) => {
+    if (!view) return;
+    if (view.period) setSelectedPeriod(view.period);
+    if (view.range) setRange(view.range);
+    setTxFilter(view.txFilter || null);
+  }, [setSelectedPeriod, setTxFilter]);
+  const onSavedViewChange = React.useCallback((e) => {
+    const id = e.target.value;
+    setSelectedViewId(id);
+    applySavedView(txViews.find(view => view.id === id));
+  }, [applySavedView, txViews]);
+  const saveCurrentView = React.useCallback(() => {
+    const raw = window.prompt('Save current view as');
+    if (!raw) return;
+    const name = raw.trim();
+    if (!name) return;
+    addView({ scope: 'reports', name, period: selectedPeriod, range, txFilter });
+  }, [addView, selectedPeriod, range, txFilter]);
+  const renameSelectedView = React.useCallback(() => {
+    if (!selectedView) return;
+    const raw = window.prompt('Rename view', selectedView.name);
+    if (raw === null) return;
+    const name = raw.trim();
+    if (!name) return;
+    try {
+      updateView(selectedView.id, { name });
+    } catch (err) {
+      if (err && err.message === 'LEDGER_DUPLICATE_VIEW_NAME') {
+        window.alert(`A view named "${name}" already exists.`);
+        return;
+      }
+      throw err;
+    }
+  }, [selectedView, updateView]);
+  const updateSelectedView = React.useCallback(() => {
+    if (!selectedView) return;
+    updateView(selectedView.id, { period: selectedPeriod, range, txFilter });
+  }, [selectedView, selectedPeriod, range, txFilter, updateView]);
+  const deleteSelectedView = React.useCallback(() => {
+    if (!selectedView) return;
+    if (!window.confirm(`Delete view "${selectedView.name}"?`)) return;
+    deleteView(selectedView.id);
+    setSelectedViewId('');
+  }, [deleteView, selectedView]);
 
   const byCat = {};
   reportTxs.filter(x => x.amt < 0).forEach(x => {
@@ -142,6 +190,16 @@ export default function WebReports({ t, onNavigate, onAdd }) {
           </div>
           <RangeSelector range={range} onChange={setRange} t={t} />
           {isMonthRange && range.preset === 'thisMonth' && <PeriodSwitcher />}
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+            <select aria-label="Views" value={selectedViewId} onChange={onSavedViewChange} style={{ fontFamily: A.font, fontSize: 11, padding: '6px 10px', border: '1px solid ' + A.rule2, background: A.bg, color: A.ink, letterSpacing: 1, minWidth: 160 }}>
+              <option value="">Views…</option>
+              {txViews.map(view => <option key={view.id} value={view.id}>{view.name}</option>)}
+            </select>
+            <button onClick={saveCurrentView} style={{ all: 'unset', cursor: 'pointer', fontSize: 10, letterSpacing: 1.2, padding: '5px 12px', border: '1px solid ' + A.ink, color: A.ink }}>SAVE CURRENT VIEW</button>
+            <button onClick={renameSelectedView} disabled={!selectedView} style={{ all: 'unset', cursor: selectedView ? 'pointer' : 'not-allowed', fontSize: 10, letterSpacing: 1.2, padding: '5px 12px', border: '1px solid ' + (selectedView ? A.rule2 : A.rule3), color: selectedView ? A.ink : A.muted }}>RENAME VIEW</button>
+            <button onClick={updateSelectedView} disabled={!selectedView} style={{ all: 'unset', cursor: selectedView ? 'pointer' : 'not-allowed', fontSize: 10, letterSpacing: 1.2, padding: '5px 12px', border: '1px solid ' + (selectedView ? A.rule2 : A.rule3), color: selectedView ? A.ink : A.muted }}>UPDATE FROM CURRENT FILTERS</button>
+            <button onClick={deleteSelectedView} disabled={!selectedView} style={{ all: 'unset', cursor: selectedView ? 'pointer' : 'not-allowed', fontSize: 10, letterSpacing: 1.2, padding: '5px 12px', border: '1px solid ' + (selectedView ? A.neg : A.rule3), color: selectedView ? A.neg : A.muted }}>DELETE VIEW</button>
+          </div>
         </div>
       </div>
 
