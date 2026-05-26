@@ -28,13 +28,14 @@ function txKey(tx) {
  * buildNetWorthTrend / buildNetWorthDailyTrend in charts.mjs.
  */
 function balanceAsOf(account, transactions, asOfDate, rates, reportingCcy) {
+  // Opening balances intentionally use current valuation semantics (no tx date).
   const opening = isFiniteNumber(account?.openingBal)
     ? toReportingCurrency(account.openingBal, account.ccy || reportingCcy, rates, reportingCcy)
     : 0;
   if (!asOfDate) return opening;
   const delta = transactions
     .filter(tx => tx?.acct === account.id && tx.date && tx.date <= asOfDate)
-    .reduce((s, tx) => s + toReportingCurrency(tx.amt || 0, tx.ccy || account.ccy || reportingCcy, rates, reportingCcy), 0);
+    .reduce((s, tx) => s + toReportingCurrency(tx.amt || 0, tx.ccy || account.ccy || reportingCcy, rates, reportingCcy, tx.date), 0);
   return opening + delta;
 }
 
@@ -72,7 +73,7 @@ function buildTransferGroups(transactions) {
 
 function reportingAmt(tx, account, rates, reportingCcy) {
   const ccy = tx?.ccy || account?.ccy || reportingCcy;
-  return toReportingCurrency(tx?.amt || 0, ccy, rates, reportingCcy);
+  return toReportingCurrency(tx?.amt || 0, ccy, rates, reportingCcy, tx?.date);
 }
 
 /**

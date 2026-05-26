@@ -133,7 +133,7 @@ function txBudgetCategory(tx) {
 function spentByCategory(transactions, period, cat, rates) {
   return transactions
     .filter(tx => tx.amt < 0 && tx.date?.startsWith(period) && txBudgetCategory(tx) === cat)
-    .reduce((sum, tx) => sum + Math.abs(toReportingCurrency(tx.amt, tx.ccy, rates, 'USD')), 0);
+    .reduce((sum, tx) => sum + Math.abs(toReportingCurrency(tx.amt, tx.ccy, rates, 'USD', tx.date)), 0);
 }
 
 function roundCents(value) {

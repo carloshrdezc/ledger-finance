@@ -34,6 +34,7 @@ export default function WebAccounts({ t, onNavigate, onAdd }) {
   const archivedAccounts = (allAccountsWithBalance || []).filter(a => a.archived);
   const archivedCount    = archivedAccounts.length;
 
+  // Account balances are current valuation; do not thread transaction dates here.
   const NET_WORTH = accountsIncludedInTotals.reduce(
     (s, a) => s + toReporting(a.balance, a.ccy), 0
   );

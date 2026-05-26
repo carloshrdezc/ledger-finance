@@ -17,10 +17,11 @@ export default function Home({ t, onAcct, onAdd, onViewAll, onInsight }) {
   const todayIso = now.toISOString().slice(0, 10);
   const todayLabel = now.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }).toUpperCase();
 
+  // Account balances are current valuation; only transaction aggregates thread tx.date.
   const NET_WORTH   = accountsIncludedInTotals.reduce((s, a) => s + toReporting(a.balance, a.ccy), 0);
   const monthTxs    = transactions.filter(tx => tx.date?.startsWith(thisMonth));
-  const MONTH_IN    = monthTxs.filter(tx => tx.amt > 0 && tx.cat !== 'transfer').reduce((s, tx) => s + toReporting(tx.amt, tx.ccy), 0);
-  const MONTH_OUT   = monthTxs.filter(tx => tx.amt < 0 && tx.cat !== 'transfer').reduce((s, tx) => s + toReporting(tx.amt, tx.ccy), 0);
+  const MONTH_IN    = monthTxs.filter(tx => tx.amt > 0 && tx.cat !== 'transfer').reduce((s, tx) => s + toReporting(tx.amt, tx.ccy, tx.date), 0);
+  const MONTH_OUT   = monthTxs.filter(tx => tx.amt < 0 && tx.cat !== 'transfer').reduce((s, tx) => s + toReporting(tx.amt, tx.ccy, tx.date), 0);
   const MONTH_NET   = MONTH_IN + MONTH_OUT;
   const MONTH_SPEND = Math.abs(MONTH_OUT);
   const CASH        = accountsWithBalance
@@ -46,7 +47,7 @@ export default function Home({ t, onAcct, onAdd, onViewAll, onInsight }) {
       const diff = Math.round((end - d) / 86400000);
       if (diff >= 0 && diff < days) {
         const idx = days - 1 - diff;
-        out[idx] += Math.abs(toReporting(tx.amt, tx.ccy));
+        out[idx] += Math.abs(toReporting(tx.amt, tx.ccy, tx.date));
       }
     }
     return out;

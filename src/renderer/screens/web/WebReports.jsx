@@ -39,7 +39,7 @@ export default function WebReports({ t, onNavigate, onAdd }) {
   const reportTxs = useRange ? rangeTxs : periodTransactions;
   const heroLabel = useRange ? (resolved?.label || 'CUSTOM') : periodLabel;
 
-  const sumExpense = (txs) => txs.filter(x => x.amt < 0).reduce((s, x) => s + Math.abs(toReporting(x.amt, x.ccy)), 0);
+  const sumExpense = (txs) => txs.filter(x => x.amt < 0).reduce((s, x) => s + Math.abs(toReporting(x.amt, x.ccy, x.date)), 0);
   const total = sumExpense(reportTxs);
   const previousPeriod = addMonths(selectedPeriod, -1);
   const previousTotal = sumExpense(filterTransactionsForPeriod(transactions, previousPeriod));
@@ -121,7 +121,7 @@ export default function WebReports({ t, onNavigate, onAdd }) {
   const byCat = {};
   reportTxs.filter(x => x.amt < 0).forEach(x => {
     const k = (x.path || [x.cat])[0];
-    byCat[k] = (byCat[k] || 0) + Math.abs(toReporting(x.amt, x.ccy));
+    byCat[k] = (byCat[k] || 0) + Math.abs(toReporting(x.amt, x.ccy, x.date));
   });
   const cats = Object.entries(byCat).sort((a, b) => b[1] - a[1]);
   const maxCat = cats[0] ? cats[0][1] : 1;
@@ -131,7 +131,7 @@ export default function WebReports({ t, onNavigate, onAdd }) {
     const day = String(i + 1).padStart(2, '0');
     return periodTransactions
       .filter(x => x.date === `${selectedPeriod}-${day}` && x.amt < 0)
-      .reduce((s, x) => s + Math.abs(toReporting(x.amt, x.ccy)), 0);
+      .reduce((s, x) => s + Math.abs(toReporting(x.amt, x.ccy, x.date)), 0);
   });
   const cellMax = Math.max(...cells, 1);
 
@@ -139,7 +139,7 @@ export default function WebReports({ t, onNavigate, onAdd }) {
   reportTxs.filter(x => x.amt < 0).forEach(tx => {
     const key = (tx.name || '').split(' · ')[0] || 'UNNAMED';
     const curr = merchantMap[key] || { name: key, amt: 0, n: 0 };
-    curr.amt += Math.abs(toReporting(tx.amt, tx.ccy));
+    curr.amt += Math.abs(toReporting(tx.amt, tx.ccy, tx.date));
     curr.n += 1;
     merchantMap[key] = curr;
   });

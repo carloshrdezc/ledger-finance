@@ -19,7 +19,7 @@ export default function ReportsCalendar({ t, onBack, onGoToRoute }) {
     const day = String(i + 1).padStart(2, '0');
     return periodTransactions
       .filter(x => x.date === `${selectedPeriod}-${day}` && x.amt < 0)
-      .reduce((s, x) => s + Math.abs(toReporting(x.amt, x.ccy)), 0);
+      .reduce((s, x) => s + Math.abs(toReporting(x.amt, x.ccy, x.date)), 0);
   });
   const max = Math.max(...cells, 1);
   const total = cells.reduce((a, b) => a + b, 0);
@@ -32,7 +32,7 @@ export default function ReportsCalendar({ t, onBack, onGoToRoute }) {
     const d = new Date(`${tx.date}T00:00:00`);
     // Date.getDay(): 0 = Sunday. Re-map so Mon = 0 ... Sun = 6.
     const dow = (d.getDay() + 6) % 7;
-    weekdayTotals[dow] += Math.abs(toReporting(tx.amt, tx.ccy));
+    weekdayTotals[dow] += Math.abs(toReporting(tx.amt, tx.ccy, tx.date));
   }
   const maxWeekday = Math.max(...weekdayTotals, 1);
 
