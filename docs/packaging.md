@@ -87,7 +87,7 @@ The `.pfx` flow above does **not** work for EV USB tokens. Those need either:
 
 ### CI signing flow
 
-CAR-216 will wire CI signing later. The intended GitHub Actions env shape is:
+The GitHub Actions env shape is:
 
 ```yaml
 env:
@@ -96,6 +96,42 @@ env:
 ```
 
 `CSC_LINK` accepts either a filesystem path or a base64-encoded `.pfx` blob. For GitHub Actions, base64 is the right choice because it avoids checking in a cert file.
+
+## Releases & CI
+
+The `release.yml` GitHub Actions workflow builds installers for all 3 platforms on every `v*` tag and attaches them to a GitHub Release.
+
+### Cutting a release
+
+1. Bump `version` in `package.json` and commit.
+2. Tag and push:
+   ```bash
+   git tag v1.0.0
+   git push origin v1.0.0
+   ```
+3. The workflow runs automatically, builds Windows + macOS + Linux installers in parallel, and creates a GitHub Release with all artifacts attached.
+
+### Testing the workflow without a real release
+
+Use the `workflow_dispatch` trigger from the Actions tab on GitHub. This builds artifacts (downloadable from the run's artifacts panel for 30 days) but does NOT create a Release.
+
+### Signing in CI
+
+Code-signing turns on automatically when these secrets are present in the repo settings:
+
+| Secret | Purpose | Required for |
+|---|---|---|
+| `WINDOWS_CERT_PFX_BASE64` | base64 of a `.pfx` file | Windows signing (CAR-214) |
+| `WINDOWS_CERT_PASSWORD` | `.pfx` password | Windows signing |
+| `MAC_CERT_P12_BASE64` | base64 of a Developer ID `.p12` | macOS signing (CAR-213) |
+| `MAC_CERT_PASSWORD` | `.p12` password | macOS signing |
+| `APPLE_ID` | Apple ID email | macOS notarization |
+| `APPLE_APP_SPECIFIC_PASSWORD` | App-specific password from appleid.apple.com | macOS notarization |
+| `APPLE_TEAM_ID` | 10-char Apple Team ID | macOS notarization |
+
+When secrets are unset, builds produce UNSIGNED artifacts (a warning is logged but the build succeeds). This means the workflow ships today; signing turns on the moment secrets are provisioned.
+
+To encode a `.pfx` or `.p12` for the secret value: `base64 -w 0 cert.pfx | clip` (Linux/macOS) or `[Convert]::ToBase64String([IO.File]::ReadAllBytes('cert.pfx')) | Set-Clipboard` (PowerShell).
 
 ### Verification commands
 
@@ -132,4 +168,4 @@ signtool verify /pa /v dist-app/LEDGER-Setup-1.0.0.exe
 
 ## CI Builds
 
-Not yet wired — tracked in [CAR-216](https://linear.app/carloshrdezc/issue/CAR-216) (build & attach `.exe` on tagged releases).
+See [Releases & CI](#releases--ci) for the tag-triggered release workflow tracked in [CAR-216](https://linear.app/carloshrdezc/issue/CAR-216).
