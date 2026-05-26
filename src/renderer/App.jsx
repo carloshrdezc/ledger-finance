@@ -311,7 +311,7 @@ function AccountFromEmpty({ onClose, t, isMobile }) {
 
 function AppShell() {
   const {
-    welcomeSeen, onboarded, isAppEmpty,
+    onboarded, isAppEmpty,
     accent, setAccent,
     density, setDensity,
     decimals, setDecimals,

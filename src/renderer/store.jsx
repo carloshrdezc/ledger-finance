@@ -32,7 +32,8 @@ import {
 const MIGRATED_TO_DISK_KEY = 'ledger:_migratedToDisk';
 const ONBOARDED_KEY = 'ledger:onboarded';
 const FIRST_RUN_SLICES = ['ledger:tx', 'ledger:accounts', 'ledger:bills', 'ledger:goals',
-                          'ledger:budgets', 'ledger:investments', 'ledger:trades'];
+                          'ledger:budgets', 'ledger:investments', 'ledger:trades',
+                          'ledger:catTree', 'ledger:rules'];
 const LEDGER_PREFIX = 'ledger:';
 const PERSIST_DEBOUNCE_MS = 250;
 const PersistenceCtx = React.createContext(null);
@@ -99,11 +100,15 @@ function getSnapshotValue(snapshot, key, def) {
 }
 
 function hasExistingUserData(snapshot) {
+  // All keys in FIRST_RUN_SLICES are arrays or plain objects in practice
+  // (catTree/rules added in PR #62 round-2). The `welcomeSeen === true` clause
+  // covers returning users who dismissed the legacy Welcome screen but never
+  // imported any data — they shouldn't see the new onboarding wizard either.
   return FIRST_RUN_SLICES.some(key => {
     const value = snapshot[key];
     if (Array.isArray(value)) return value.length > 0;
     if (isPlainObject(value)) return Object.keys(value).length > 0;
-    return value != null && value !== false;
+    return false;
   }) || snapshot['ledger:welcomeSeen'] === true;
 }
 

@@ -17,23 +17,22 @@ afterEach(() => cleanup());
 const THEME = { currency: 'USD', decimals: 2, accent: '#0f0', density: 'comfortable', theme: 'light' };
 
 function makeStore(overrides = {}) {
-  const noop = vi.fn();
   return {
     categoryTree: {},
-    addCategory: noop,
-    renameCategory: noop,
-    removeCategory: noop,
+    addCategory: vi.fn(),
+    renameCategory: vi.fn(),
+    removeCategory: vi.fn(),
     budgetStartDay: 1,
-    setBudgetStartDay: noop,
-    reset: noop,
-    loadSampleData: noop,
-    resetAndLoadSampleData: noop,
+    setBudgetStartDay: vi.fn(),
+    reset: vi.fn(),
+    loadSampleData: vi.fn(),
+    resetAndLoadSampleData: vi.fn(),
     rules: [],
-    addRule: noop,
-    updateRule: noop,
-    deleteRule: noop,
-    reorderRules: noop,
-    updateTxsIndividually: noop,
+    addRule: vi.fn(),
+    updateRule: vi.fn(),
+    deleteRule: vi.fn(),
+    reorderRules: vi.fn(),
+    updateTxsIndividually: vi.fn(),
     transactions: [],
     accountsWithBalance: [
       { id: 'chk', name: 'Checking', type: 'CHK', ccy: 'USD' },
@@ -42,8 +41,8 @@ function makeStore(overrides = {}) {
     forecastLiquidAccountIds: [],
     setForecastLiquidAccountIds: vi.fn(),
     forecastThreshold: 0,
-    setForecastThreshold: noop,
-    setOnboarded: noop,
+    setForecastThreshold: vi.fn(),
+    setOnboarded: vi.fn(),
     ...overrides,
   };
 }

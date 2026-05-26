@@ -19,7 +19,13 @@ function useViewportMobile() {
     if (typeof window === 'undefined') return undefined;
     const onResize = () => setIsMobile(get());
     window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
+    // Older iOS Safari fires `orientationchange` without `resize`; modern
+    // browsers fire both. Listening to both is harmless and covers the gap.
+    window.addEventListener('orientationchange', onResize);
+    return () => {
+      window.removeEventListener('resize', onResize);
+      window.removeEventListener('orientationchange', onResize);
+    };
   }, []);
   return isMobile;
 }
