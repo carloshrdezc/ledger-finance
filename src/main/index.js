@@ -80,8 +80,8 @@ app.whenReady().then(async () => {
     })();
   });
 
-  const mainWindow = createWindow();
-  await setupAutoUpdater(mainWindow);
+  createWindow();
+  await setupAutoUpdater();
 });
 
 app.on('window-all-closed', () => {

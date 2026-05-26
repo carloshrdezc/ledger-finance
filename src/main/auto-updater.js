@@ -1,4 +1,4 @@
-const { app, ipcMain, net } = require('electron');
+const { app, ipcMain, net, BrowserWindow } = require('electron');
 const { autoUpdater } = require('electron-updater');
 
 let configured = false;
@@ -11,7 +11,18 @@ function logUpdateEvent(name, payload) {
   console.log(`[auto-updater] ${name}`);
 }
 
-async function setupAutoUpdater(mainWindow) {
+// CAR-215 review nit: send to all live windows, not a single captured ref.
+// Original implementation captured `mainWindow` at first `setupAutoUpdater`
+// call, which goes stale on macOS when `app.activate` recreates the window
+// after all closed. Broadcasting matches the autoUpdater singleton's lifecycle.
+function broadcast(channel, payload) {
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (win.isDestroyed() || win.webContents.isDestroyed()) continue;
+    win.webContents.send(channel, payload);
+  }
+}
+
+async function setupAutoUpdater() {
   if (configured) return;
   configured = true;
 
@@ -30,9 +41,7 @@ async function setupAutoUpdater(mainWindow) {
   }));
   autoUpdater.on('update-downloaded', info => {
     logUpdateEvent('update-downloaded', info?.version);
-    if (!mainWindow.isDestroyed() && !mainWindow.webContents.isDestroyed()) {
-      mainWindow.webContents.send('auto-update:downloaded', { version: info?.version ?? null });
-    }
+    broadcast('auto-update:downloaded', { version: info?.version ?? null });
   });
   autoUpdater.on('error', error => logUpdateEvent('error', error?.message ?? String(error)));
 

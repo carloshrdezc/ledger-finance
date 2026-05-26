@@ -392,34 +392,43 @@ function AppShell() {
   // 2. EmptyApp replaces the normal layout when the store is empty.
   // 3. Otherwise the existing MobileApp / DesktopApp.
 
+  // CAR-215 review nit: macOS uses `titleBarStyle: 'hiddenInset'` (see
+  // src/main/index.js), which inlays the traffic-light controls at the
+  // top-left ~78px. Pad the banner left on darwin so DISMISS/RESTART don't
+  // collide with close/minimize/zoom.
+  const isMac = typeof navigator !== 'undefined' && /Mac/i.test(navigator.platform || navigator.userAgent || '');
+  const bannerPaddingLeft = isMac ? 88 : 14;
+
   return (
-    <>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
       {updateReadyVersion && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 1000, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, padding: '10px 14px', borderBottom: '1px solid ' + A.ink, background: A.bg }}>
+        <div style={{ flexShrink: 0, zIndex: 1000, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, padding: `10px 14px 10px ${bannerPaddingLeft}px`, borderBottom: '1px solid ' + A.ink, background: A.bg, WebkitAppRegion: 'drag' }}>
           <div style={{ minWidth: 0 }}>
             <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: 1.1 }}>UPDATE READY — RESTART TO APPLY</div>
             <div style={{ fontSize: 9, color: A.muted, letterSpacing: 1 }}>Version {updateReadyVersion}</div>
           </div>
-          <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+          <div style={{ display: 'flex', gap: 8, flexShrink: 0, WebkitAppRegion: 'no-drag' }}>
             <button onClick={() => setUpdateReadyVersion(null)} style={{ all: 'unset', cursor: 'pointer', fontSize: 9, letterSpacing: 1.1, color: A.muted }}>DISMISS</button>
             <button onClick={() => window.electronAPI?.installUpdate?.()} style={{ all: 'unset', cursor: 'pointer', fontSize: 9, letterSpacing: 1.1, color: A.ink }}>RESTART NOW</button>
           </div>
         </div>
       )}
-      {!onboarded
-        ? (isMobile
-            ? <OnboardingMobile />
-            : <Onboarding />)
-        : (isAppEmpty
-            ? <EmptyApp
-                onAddAccount={() => setPendingAddAccount(true)}
-                onImport={() => setShowImport(true)}
-              />
-            : (isMobile
-                ? <MobileApp t={t} {...tweakProps} />
-                : <DesktopApp t={t} {...tweakProps} />)
-          )
-      }
+      <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
+        {!onboarded
+          ? (isMobile
+              ? <OnboardingMobile />
+              : <Onboarding />)
+          : (isAppEmpty
+              ? <EmptyApp
+                  onAddAccount={() => setPendingAddAccount(true)}
+                  onImport={() => setShowImport(true)}
+                />
+              : (isMobile
+                  ? <MobileApp t={t} {...tweakProps} />
+                  : <DesktopApp t={t} {...tweakProps} />)
+            )
+        }
+      </div>
       {showImport && <ImportExport onClose={() => setShowImport(false)} />}
       {pendingAddAccount && (
         <AccountFromEmpty
@@ -430,7 +439,7 @@ function AppShell() {
       )}
       <UndoToast />
       <SuggestRuleToast />
-    </>
+    </div>
   );
 }
 
