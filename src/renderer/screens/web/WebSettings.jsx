@@ -12,7 +12,8 @@ import { isLiquidAccount } from '../../forecast.mjs';
 const CURRENCIES = ['USD', 'EUR', 'GBP', 'JPY', 'CAD', 'AUD', 'CHF', 'MXN'];
 
 export default function WebSettings({ t, onNavigate, onAdd, setAccent, setDensity, setDecimals, setCurrency, setTheme }) {
-  const { categoryTree, addCategory, renameCategory, removeCategory, budgetStartDay, setBudgetStartDay, reset, loadSampleData, resetAndLoadSampleData, rules, addRule, updateRule, deleteRule, reorderRules, updateTxsIndividually, transactions, accountsWithBalance, forecastLiquidAccountIds, setForecastLiquidAccountIds, forecastThreshold, setForecastThreshold } = useUndoableStore();
+  const { categoryTree, addCategory, renameCategory, removeCategory, budgetStartDay, setBudgetStartDay, reset, loadSampleData, resetAndLoadSampleData, rules, addRule, updateRule, deleteRule, reorderRules, updateTxsIndividually, transactions, accountsWithBalance, forecastLiquidAccountIds, setForecastLiquidAccountIds, forecastThreshold, setForecastThreshold, setOnboarded } = useUndoableStore();
+
   const [expanded, setExpanded] = React.useState({ edu: true, 'edu.school': true, 'edu.school.supplies': true, food: true });
   const [adding, setAdding] = React.useState(null);
   const [renaming, setRenaming] = React.useState(null);
@@ -116,6 +117,10 @@ export default function WebSettings({ t, onNavigate, onAdd, setAccent, setDensit
     // check that would observe stale closure state, and batches the writes.
     resetAndLoadSampleData();
     setShowResetAndLoad(false);
+  };
+
+  const replayOnboarding = () => {
+    setOnboarded(false);
   };
 
   const renderNode = (key, node, path, depth) => {
@@ -426,6 +431,15 @@ export default function WebSettings({ t, onNavigate, onAdd, setAccent, setDensit
                   background: confirmReset ? A.neg : 'transparent',
                 }}>
                   {confirmReset ? 'CLICK AGAIN TO CONFIRM ↩' : 'RESET ALL DATA'}
+                </button>
+              </div>
+              <div style={{ padding: '10px 0', borderBottom: '1px solid ' + A.rule2 }}>
+                <div style={{ fontSize: 9, color: A.muted, letterSpacing: 1, marginBottom: 8 }}>ONBOARDING</div>
+                <button onClick={replayOnboarding} style={{
+                  all: 'unset', cursor: 'pointer', fontSize: 10, letterSpacing: 1.2,
+                  padding: '5px 12px', border: '1px solid ' + A.ink, color: A.ink,
+                }}>
+                  REPLAY ONBOARDING
                 </button>
               </div>
               <div style={{ padding: '10px 0', borderBottom: '1px solid ' + A.rule2 }}>

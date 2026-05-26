@@ -5,7 +5,8 @@ import { UndoProvider, useUndo } from './UndoContext';
 import UndoToast from './components/UndoToast';
 import SuggestRuleToast from './components/SuggestRuleToast';
 import ImportExport from './components/ImportExport';
-import Welcome from './screens/Welcome';
+import Onboarding from './screens/Onboarding';
+import OnboardingMobile from './screens/mobile/OnboardingMobile';
 import EmptyApp from './screens/EmptyApp';
 import AccountFormSheet from './components/AccountFormSheet';
 import AccountFormModal from './components/AccountFormModal';
@@ -310,7 +311,7 @@ function AccountFromEmpty({ onClose, t, isMobile }) {
 
 function AppShell() {
   const {
-    welcomeSeen, isAppEmpty,
+    onboarded, isAppEmpty,
     accent, setAccent,
     density, setDensity,
     decimals, setDecimals,
@@ -318,6 +319,7 @@ function AppShell() {
     theme, setTheme,
     fxAutoFetch, fxLastFetchedAt, refreshRatesNow,
   } = useStore();
+
   const [isMobile, setIsMobile] = React.useState(window.innerWidth < 1024);
   const [showImport, setShowImport] = React.useState(false);
   const [pendingAddAccount, setPendingAddAccount] = React.useState(false);
@@ -376,24 +378,26 @@ function AppShell() {
   const tweakProps = { setAccent, setDensity, setDecimals, setCurrency, setTheme };
 
   // Render priority:
-  // 1. Welcome modal overlays everything when welcomeSeen === false.
-  // 2. EmptyApp replaces the normal layout when isAppEmpty.
+  // 1. Onboarding blocks the app on first run or when replayed from Settings.
+  // 2. EmptyApp replaces the normal layout when the store is empty.
   // 3. Otherwise the existing MobileApp / DesktopApp.
 
   return (
     <>
-      {isAppEmpty
-        ? <EmptyApp
-            onAddAccount={() => setPendingAddAccount(true)}
-            onImport={() => setShowImport(true)}
-          />
-        : (isMobile
-            ? <MobileApp t={t} {...tweakProps} />
-            : <DesktopApp t={t} {...tweakProps} />)
+      {!onboarded
+        ? (isMobile
+            ? <OnboardingMobile />
+            : <Onboarding />)
+        : (isAppEmpty
+            ? <EmptyApp
+                onAddAccount={() => setPendingAddAccount(true)}
+                onImport={() => setShowImport(true)}
+              />
+            : (isMobile
+                ? <MobileApp t={t} {...tweakProps} />
+                : <DesktopApp t={t} {...tweakProps} />)
+          )
       }
-      {!welcomeSeen && (
-        <Welcome onImport={() => setShowImport(true)} />
-      )}
       {showImport && <ImportExport onClose={() => setShowImport(false)} />}
       {pendingAddAccount && (
         <AccountFromEmpty

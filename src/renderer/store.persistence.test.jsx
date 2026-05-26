@@ -77,6 +77,35 @@ describe('store persistence', () => {
     expect(store.currency).toBe('EUR');
   });
 
+  it('persists ledger:onboarded and clears it on reset', async () => {
+    localStorage.setItem('ledger:onboarded', JSON.stringify(true));
+    window.ledgerDB = makeLedgerDB();
+
+    const { StoreProvider, useStore } = await import('./store.jsx');
+    let store;
+
+    function Probe() {
+      store = useStore();
+      return null;
+    }
+
+    render(
+      <StoreProvider>
+        <Probe />
+      </StoreProvider>,
+    );
+
+    await waitFor(() => expect(window.ledgerDB.read).toHaveBeenCalledTimes(1));
+    expect(store.onboarded).toBe(true);
+
+    act(() => {
+      store.reset();
+    });
+
+    expect(store.onboarded).toBe(false);
+    expect(localStorage.getItem('ledger:onboarded')).toBe(JSON.stringify(false));
+  });
+
   // CAR-91 review fix: durability on quit. The disk write is debounced by
   // 250 ms and disk is authoritative on boot, so without a quit-time flush an
   // edit made within the debounce window would be lost forever. The renderer
@@ -170,6 +199,54 @@ describe('store persistence', () => {
   // resolve only after the pending debounced write's IPC has completed.
   // The main-side test would require an Electron harness; here we lock the
   // promise-completion contract with a controllable IPC mock.
+  // PR #62 round-2 fix: hasExistingUserData must consider catTree and rules.
+  // Original first-run-detection logic only looked at tx/accounts/etc. — a
+  // returning user who had customized categories or rules but never added a
+  // transaction would be re-onboarded after the upgrade.
+  describe('boot migration seeds onboarded for returning users', () => {
+    async function bootWith(snapshot) {
+      window.ledgerDB = makeLedgerDB({
+        read: vi.fn().mockResolvedValue(snapshot),
+      });
+      const { StoreProvider, useStore } = await import('./store.jsx');
+      let store;
+      function Probe() { store = useStore(); return null; }
+      render(<StoreProvider><Probe /></StoreProvider>);
+      await waitFor(() => expect(window.ledgerDB.read).toHaveBeenCalled());
+      return () => store;
+    }
+
+    it('seeds onboarded=true for a user with only customized catTree (no transactions/accounts)', async () => {
+      const get = await bootWith({
+        'ledger:_migratedToDisk': true,
+        'ledger:catTree': { food: { dining: {} } },
+      });
+      expect(get().onboarded).toBe(true);
+    });
+
+    it('seeds onboarded=true for a user with only customized rules (no transactions/accounts)', async () => {
+      const get = await bootWith({
+        'ledger:_migratedToDisk': true,
+        'ledger:rules': [{ id: 'r1', match: 'amazon', cat: 'shopping' }],
+      });
+      expect(get().onboarded).toBe(true);
+    });
+
+    it('does not seed onboarded for a fresh install (no existing data)', async () => {
+      const get = await bootWith({ 'ledger:_migratedToDisk': true });
+      expect(get().onboarded).toBe(false);
+    });
+
+    it('preserves an explicit onboarded=false (re-seed via Settings replay)', async () => {
+      const get = await bootWith({
+        'ledger:_migratedToDisk': true,
+        'ledger:onboarded': false,
+        'ledger:accounts': [{ id: 'a1', name: 'CHK' }],
+      });
+      expect(get().onboarded).toBe(false);
+    });
+  });
+
   it('exposes window.__ledgerFlush that resolves only after the pending write IPC completes', async () => {
     let resolveWrite;
     const writePromise = new Promise(resolve => { resolveWrite = resolve; });
