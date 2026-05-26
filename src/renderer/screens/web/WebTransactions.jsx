@@ -7,6 +7,7 @@ import WebAddModal from './WebAddModal';
 import EmptySectionHint from '../../components/EmptySectionHint';
 import TransactionRow from '../../components/TransactionRow';
 import { fmtMoney } from '../../data';
+import { CURRENT_PERIOD_SENTINEL, resolvePeriod } from '../../period.mjs';
 import { useUndoableStore } from '../../useUndoableStore';
 import { exportCSV } from '../../importExport';
 import useKeyboardShortcuts from '../../hooks/useKeyboardShortcuts';
@@ -182,7 +183,7 @@ export default function WebTransactions({ t, onNavigate, onAdd }) {
   const selectedView = React.useMemo(() => txViews.find(view => view.id === selectedViewId) || null, [txViews, selectedViewId]);
   const applySavedView = React.useCallback((view) => {
     if (!view) return;
-    if (view.period) setSelectedPeriod(view.period);
+    if (view.period) setSelectedPeriod(resolvePeriod(view.period));
     setTxFilter(view.txFilter || null);
     if (view.search !== undefined) setSearch(view.search || '');
     setFilter('ALL');
@@ -197,8 +198,9 @@ export default function WebTransactions({ t, onNavigate, onAdd }) {
     if (!raw) return;
     const name = raw.trim();
     if (!name) return;
-    addView({ scope: 'tx', name, period: selectedPeriod, search, txFilter });
-  }, [addView, selectedPeriod, search, txFilter]);
+    const followCurrent = window.confirm('Follow current period?\n\nOK: this view always shows the current month.\nCancel: snapshot this period (' + periodLabel + ').');
+    addView({ scope: 'tx', name, period: followCurrent ? CURRENT_PERIOD_SENTINEL : selectedPeriod, search, txFilter });
+  }, [addView, periodLabel, selectedPeriod, search, txFilter]);
   const renameSelectedView = React.useCallback(() => {
     if (!selectedView) return;
     const raw = window.prompt('Rename view', selectedView.name);

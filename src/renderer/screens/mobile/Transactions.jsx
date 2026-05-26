@@ -3,6 +3,7 @@ import { A } from '../../theme';
 import { ARule, ALabel } from '../../components/Shared';
 import PeriodSwitcher from '../../components/PeriodSwitcher';
 import { fmtMoney, fmtSigned, dayLabel, catGlyph, catBreadcrumb } from '../../data';
+import { CURRENT_PERIOD_SENTINEL, resolvePeriod } from '../../period.mjs';
 import { useUndoableStore } from '../../useUndoableStore';
 import AddSheet from './AddSheet';
 import EmptySectionHint from '../../components/EmptySectionHint';
@@ -43,7 +44,7 @@ export default function Transactions({ t }) {
 
   const applySavedView = React.useCallback((view) => {
     if (!view) return;
-    if (view.period) setSelectedPeriod(view.period);
+    if (view.period) setSelectedPeriod(resolvePeriod(view.period));
     setTxFilter(view.txFilter || null);
     if (view.search !== undefined) setSearch(view.search || '');
     setFilter('ALL');
@@ -60,8 +61,9 @@ export default function Transactions({ t }) {
     if (!raw) return;
     const name = raw.trim();
     if (!name) return;
-    addView({ scope: 'tx', name, period: selectedPeriod, search, txFilter });
-  }, [addView, selectedPeriod, search, txFilter]);
+    const followCurrent = window.confirm('Follow current period?\n\nOK: this view always shows the current month.\nCancel: snapshot this period (' + periodLabel + ').');
+    addView({ scope: 'tx', name, period: followCurrent ? CURRENT_PERIOD_SENTINEL : selectedPeriod, search, txFilter });
+  }, [addView, periodLabel, selectedPeriod, search, txFilter]);
 
   const renameSelectedView = React.useCallback(() => {
     if (!selectedView) return;

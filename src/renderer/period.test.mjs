@@ -1,6 +1,7 @@
 import { test, expect } from 'vitest';
 
 import {
+  CURRENT_PERIOD_SENTINEL,
   addMonths,
   buildBudgetRows,
   filterTransactionsForPeriod,
@@ -9,6 +10,7 @@ import {
   formatShortPeriodLabel,
   getDaysInPeriod,
   monthKey,
+  resolvePeriod,
   resolveRangePreset,
 } from './period.mjs';
 
@@ -24,6 +26,14 @@ const txs = [
 test('monthKey normalizes dates to YYYY-MM', () => {
   expect(monthKey('2026-05-14')).toBe('2026-05');
   expect(monthKey(new Date('2026-04-02T12:00:00Z'))).toBe('2026-04');
+});
+
+test('resolvePeriod resolves the current-period sentinel to the current month', () => {
+  expect(resolvePeriod(CURRENT_PERIOD_SENTINEL)).toBe(monthKey(new Date()));
+});
+
+test('resolvePeriod leaves literal periods unchanged', () => {
+  expect(resolvePeriod('2026-05')).toBe('2026-05');
 });
 
 test('addMonths moves across year boundaries', () => {

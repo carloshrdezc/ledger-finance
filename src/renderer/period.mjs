@@ -1,8 +1,15 @@
 import { toReportingCurrency } from './fx.mjs';
 
+export const CURRENT_PERIOD_SENTINEL = '__current__';
+
 export function monthKey(value = new Date()) {
   if (typeof value === 'string') return value.slice(0, 7);
   return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}`;
+}
+
+export function resolvePeriod(period) {
+  if (period === CURRENT_PERIOD_SENTINEL) return monthKey(new Date());
+  return period;
 }
 
 export function addMonths(period, amount) {

@@ -2,6 +2,7 @@
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { monthKey } from '../../period.mjs';
 
 let store;
 
@@ -91,6 +92,7 @@ describe('WebReports saved views', () => {
   it('prompts for a name and saves the current reports view', async () => {
     await renderScreen();
     vi.spyOn(window, 'prompt').mockReturnValue('Monthly report');
+    vi.spyOn(window, 'confirm').mockReturnValue(false);
 
     fireEvent.click(screen.getByRole('button', { name: /save current view/i }));
 
@@ -98,6 +100,21 @@ describe('WebReports saved views', () => {
       scope: 'reports',
       name: 'Monthly report',
       period: '2026-05',
+      range: { kind: 'preset', preset: 'thisMonth' },
+    }));
+  });
+
+  it('saves with __current__ sentinel when user accepts the follow-current confirm', async () => {
+    await renderScreen();
+    vi.spyOn(window, 'prompt').mockReturnValue('Monthly report');
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+    fireEvent.click(screen.getByRole('button', { name: /save current view/i }));
+
+    expect(store.addView).toHaveBeenCalledWith(expect.objectContaining({
+      scope: 'reports',
+      name: 'Monthly report',
+      period: '__current__',
       range: { kind: 'preset', preset: 'thisMonth' },
     }));
   });
@@ -119,6 +136,24 @@ describe('WebReports saved views', () => {
 
     expect(store.setSelectedPeriod).toHaveBeenCalledWith('2026-04');
     expect(screen.getByTestId('range-state').textContent).toContain('preset:lastMonth');
+  });
+
+  it('applying a __current__ sentinel view sets selectedPeriod to the current month, not the snapshot date', async () => {
+    await renderScreen({
+      savedViews: [
+        {
+          id: 'sv_reports_1',
+          scope: 'reports',
+          name: 'Follow current',
+          period: '__current__',
+          range: { kind: 'preset', preset: 'thisMonth' },
+        },
+      ],
+    });
+
+    fireEvent.change(screen.getByLabelText(/views/i), { target: { value: 'sv_reports_1' } });
+
+    expect(store.setSelectedPeriod).toHaveBeenCalledWith(monthKey(new Date()));
   });
 
   it('renames and deletes the selected reports view', async () => {
