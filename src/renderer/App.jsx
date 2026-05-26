@@ -374,6 +374,16 @@ function AppShell() {
     return () => window.removeEventListener('keydown', onKey);
   }, [undoStack, showImport, pendingAddAccount]);
 
+  const [updateReadyVersion, setUpdateReadyVersion] = React.useState(null);
+
+  React.useEffect(() => {
+    const api = window.electronAPI;
+    if (!api?.onAutoUpdateDownloaded) return undefined;
+    return api.onAutoUpdateDownloaded(({ version } = {}) => {
+      setUpdateReadyVersion(version ?? 'latest');
+    });
+  }, []);
+
   const t = { accent, density, decimals, currency, theme };
   const tweakProps = { setAccent, setDensity, setDecimals, setCurrency, setTheme };
 
@@ -384,6 +394,18 @@ function AppShell() {
 
   return (
     <>
+      {updateReadyVersion && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 1000, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, padding: '10px 14px', borderBottom: '1px solid ' + A.ink, background: A.bg }}>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: 1.1 }}>UPDATE READY — RESTART TO APPLY</div>
+            <div style={{ fontSize: 9, color: A.muted, letterSpacing: 1 }}>Version {updateReadyVersion}</div>
+          </div>
+          <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+            <button onClick={() => setUpdateReadyVersion(null)} style={{ all: 'unset', cursor: 'pointer', fontSize: 9, letterSpacing: 1.1, color: A.muted }}>DISMISS</button>
+            <button onClick={() => window.electronAPI?.installUpdate?.()} style={{ all: 'unset', cursor: 'pointer', fontSize: 9, letterSpacing: 1.1, color: A.ink }}>RESTART NOW</button>
+          </div>
+        </div>
+      )}
       {!onboarded
         ? (isMobile
             ? <OnboardingMobile />

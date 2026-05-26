@@ -1,5 +1,6 @@
 const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
+const { setupAutoUpdater } = require('./auto-updater');
 
 const isDev = !app.isPackaged;
 
@@ -79,7 +80,8 @@ app.whenReady().then(async () => {
     })();
   });
 
-  createWindow();
+  const mainWindow = createWindow();
+  await setupAutoUpdater(mainWindow);
 });
 
 app.on('window-all-closed', () => {

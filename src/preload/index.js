@@ -12,3 +12,12 @@ contextBridge.exposeInMainWorld('ledgerDB', /** @type {LedgerDB} */ ({
   write: state => ipcRenderer.invoke('ledger-db:write', state),
   flush: () => ipcRenderer.invoke('ledger-db:flush'),
 }));
+
+contextBridge.exposeInMainWorld('electronAPI', {
+  onAutoUpdateDownloaded: callback => {
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on('auto-update:downloaded', listener);
+    return () => ipcRenderer.removeListener('auto-update:downloaded', listener);
+  },
+  installUpdate: () => ipcRenderer.invoke('auto-update:install-now'),
+});
