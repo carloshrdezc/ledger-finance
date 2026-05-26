@@ -5,7 +5,7 @@
 export const BACKUP_FORMAT_VERSION = 2;
 export const BACKUP_TYPE = 'ledger-backup';
 
-// 15 user-data slices total: 13 in SLICES + 2 in SCALAR_SLICES.
+// 16 user-data slices total: 14 in SLICES + 2 in SCALAR_SLICES.
 // Excluded (session-ephemera, reset on restore): txFilter, dismissedAlerts,
 // dismissedInsights, welcomeSeen, fxMigrationToastSeen, lastBackupAt,
 // backupReminderInterval, backupReminderSnoozedUntil,
@@ -25,6 +25,7 @@ const SLICES = [
   ['goals',              'goals',            [], 'array'],
   ['goalContributions',  'goalContributions', [], 'array'],
   ['rules',              'rules',            [], 'array'],
+  ['savedViews',         'savedViews',       [], 'array'],
   ['investments',        'investments',      [], 'array'],
   ['trades',             'trades',           [], 'array'],
   ['rates',              'fxRates',          {}, 'object'],

@@ -33,7 +33,7 @@ const MIGRATED_TO_DISK_KEY = 'ledger:_migratedToDisk';
 const ONBOARDED_KEY = 'ledger:onboarded';
 const FIRST_RUN_SLICES = ['ledger:tx', 'ledger:accounts', 'ledger:bills', 'ledger:goals',
                           'ledger:budgets', 'ledger:investments', 'ledger:trades',
-                          'ledger:catTree', 'ledger:rules'];
+                          'ledger:catTree', 'ledger:rules', 'ledger:savedViews'];
 const LEDGER_PREFIX = 'ledger:';
 const PERSIST_DEBOUNCE_MS = 250;
 const PersistenceCtx = React.createContext(null);
@@ -349,6 +349,9 @@ function StoreProviderImpl({ children }) {
   const [goals, setGoals] = useLS('ledger:goals', []);
   const [goalContributions, setGoalContributions] = useLS('ledger:goalContributions', []);
   const [rules, setRules] = useLS('ledger:rules', []);
+  // CAR-83: one persisted slice for both Transactions and Reports saved views.
+  // Simpler than split slices because the only difference is `scope`.
+  const [savedViews, setSavedViews] = useLS('ledger:savedViews', []);
   // CAR-182: per-(merchant,target) re-categorization counter. Used to
   // surface a "Suggest rule" toast after the 3rd identical re-cat.
   // Shape: { '<merchantKeyUC>|<path.joined>': { count, lastAt, lastTxIds[], dismissed } }
@@ -969,6 +972,42 @@ function StoreProviderImpl({ children }) {
 
   const clearTxFilter = React.useCallback(() => setTxFilterRaw(null), [setTxFilterRaw]);
 
+  const addView = React.useCallback((view) => {
+    if (!view || !view.name) return;
+    const name = String(view.name).trim();
+    if (!name) return;
+    const entry = {
+      id: view.id || `sv_${Date.now()}`,
+      scope: view.scope === 'reports' ? 'reports' : 'tx',
+      name,
+      period: view.period,
+      range: view.range,
+      search: view.search,
+      txFilter: view.txFilter ?? null,
+      sortBy: view.sortBy,
+      sortOrder: view.sortOrder,
+    };
+    setSavedViews(prev => [...prev, entry]);
+  }, [setSavedViews]);
+
+  const updateView = React.useCallback((id, patch) => {
+    if (!id) return;
+    setSavedViews(prev => prev.map(view => {
+      if (view.id !== id) return view;
+      const next = { ...view, ...patch };
+      if (next.name !== undefined) next.name = String(next.name).trim();
+      if (!next.name) return view;
+      if (next.scope !== 'reports' && next.scope !== 'tx') next.scope = view.scope;
+      if (next.txFilter === undefined) next.txFilter = view.txFilter ?? null;
+      return next;
+    }));
+  }, [setSavedViews]);
+
+  const deleteView = React.useCallback((id) => {
+    if (!id) return;
+    setSavedViews(prev => prev.filter(view => view.id !== id));
+  }, [setSavedViews]);
+
   const goToPreviousPeriod = React.useCallback(() => {
     setSelectedPeriod(period => addMonths(period, -1));
   }, [setSelectedPeriod]);
@@ -1082,6 +1121,7 @@ function StoreProviderImpl({ children }) {
     setGoals([]);
     setGoalContributions([]);
     setRules([]);
+    setSavedViews([]);
     setRecategorizeStats({});
     setSelectedPeriod(monthKey(new Date()));
     setHidden([]);
@@ -1103,7 +1143,7 @@ function StoreProviderImpl({ children }) {
     setBackupReminderSnoozedUntil(null);
     setBackupReminderIntervalRaw(30);
     _seedSampleData();
-  }, [_seedSampleData, abortFxFetch, setTxs, setCatTree, setBudgets, setAccounts, setBills, setGoals, setGoalContributions, setRules, setSelectedPeriod, setHidden, setBudgetStartDay, setInvestments, setTrades, setDismissedAlertIds, setDismissedInsightIds, setTxFilterRaw, setRates, setRatesUpdated, setFxAutoFetch, setFxLastFetchedAt, setFxLastFetchError, setFxMigrationToastSeen, setWelcomeSeen, setOnboarded, setLastBackupAt, setBackupReminderSnoozedUntil, setBackupReminderIntervalRaw]);
+  }, [_seedSampleData, abortFxFetch, setTxs, setCatTree, setBudgets, setAccounts, setBills, setGoals, setGoalContributions, setRules, setSavedViews, setSelectedPeriod, setHidden, setBudgetStartDay, setInvestments, setTrades, setDismissedAlertIds, setDismissedInsightIds, setTxFilterRaw, setRates, setRatesUpdated, setFxAutoFetch, setFxLastFetchedAt, setFxLastFetchError, setFxMigrationToastSeen, setWelcomeSeen, setOnboarded, setLastBackupAt, setBackupReminderSnoozedUntil, setBackupReminderIntervalRaw]);
 
   React.useEffect(() => () => {
     if (fxFetchAbortRef.current) fxFetchAbortRef.current.abort();
@@ -1164,12 +1204,12 @@ function StoreProviderImpl({ children }) {
   const exportBackup = React.useCallback(() => {
     const obj = buildBackup({
       txs, accounts, catTree, budgets, hidden, bills, goals, goalContributions,
-      investments, trades, rates, ratesUpdated, fxAutoFetch, fxLastFetchedAt, fxLastFetchError,
+      savedViews, investments, trades, rates, ratesUpdated, fxAutoFetch, fxLastFetchedAt, fxLastFetchError,
       selectedPeriod, budgetStartDay,
       settings: { accent, density, decimals, currency, theme, forecastLiquidAccountIds, forecastThreshold },
     });
     return JSON.stringify(obj, null, 2);
-  }, [txs, accounts, catTree, budgets, hidden, bills, goals, goalContributions, investments, trades, rates, ratesUpdated, fxAutoFetch, fxLastFetchedAt, fxLastFetchError, selectedPeriod, budgetStartDay, accent, density, decimals, currency, theme, forecastLiquidAccountIds, forecastThreshold]);
+  }, [txs, accounts, catTree, budgets, hidden, bills, goals, goalContributions, savedViews, investments, trades, rates, ratesUpdated, fxAutoFetch, fxLastFetchedAt, fxLastFetchError, selectedPeriod, budgetStartDay, accent, density, decimals, currency, theme, forecastLiquidAccountIds, forecastThreshold]);
 
   const recordBackupTaken = React.useCallback(() => {
     setLastBackupAt(new Date().toISOString().slice(0, 10));
@@ -1196,6 +1236,7 @@ function StoreProviderImpl({ children }) {
     setGoals(Array.isArray(data.goals) ? data.goals : []);
     setGoalContributions(Array.isArray(data.goalContributions) ? data.goalContributions : []);
     setRules(Array.isArray(data.rules) ? data.rules : []);
+    setSavedViews(Array.isArray(data.savedViews) ? data.savedViews : []);
     // CAR-182: backups don't carry recategorize stats — clear them on restore
     // so the new dataset starts fresh (counters keyed on old tx ids would be stale).
     setRecategorizeStats({});
@@ -1264,6 +1305,7 @@ function StoreProviderImpl({ children }) {
     setGoals([]);
     setGoalContributions([]);
     setRules([]);
+    setSavedViews([]);
     setRecategorizeStats({});
     setSelectedPeriod(monthKey(new Date()));
     setHidden([]);
@@ -1287,7 +1329,7 @@ function StoreProviderImpl({ children }) {
     // CAR-218: clear forecast settings to defaults too.
     setForecastLiquidAccountIds([]);
     setForecastThreshold(0);
-  }, [abortFxFetch, setTxs, setCatTree, setBudgets, setAccounts, setBills, setGoals, setGoalContributions, setRules, setRecategorizeStats, setSelectedPeriod, setHidden, setBudgetStartDay, setInvestments, setTrades, setDismissedAlertIds, setDismissedInsightIds, setTxFilterRaw, setRates, setRatesUpdated, setFxAutoFetch, setFxLastFetchedAt, setFxLastFetchError, setFxMigrationToastSeen, setWelcomeSeen, setOnboarded, setLastBackupAt, setBackupReminderSnoozedUntil, setBackupReminderIntervalRaw, setForecastLiquidAccountIds, setForecastThreshold]);
+  }, [abortFxFetch, setTxs, setCatTree, setBudgets, setAccounts, setBills, setGoals, setGoalContributions, setRules, setSavedViews, setRecategorizeStats, setSelectedPeriod, setHidden, setBudgetStartDay, setInvestments, setTrades, setDismissedAlertIds, setDismissedInsightIds, setTxFilterRaw, setRates, setRatesUpdated, setFxAutoFetch, setFxLastFetchedAt, setFxLastFetchError, setFxMigrationToastSeen, setWelcomeSeen, setOnboarded, setLastBackupAt, setBackupReminderSnoozedUntil, setBackupReminderIntervalRaw, setForecastLiquidAccountIds, setForecastThreshold]);
 
   return (
     <StoreCtx.Provider value={{
@@ -1315,7 +1357,11 @@ function StoreProviderImpl({ children }) {
       updateRule,
       deleteRule,
       reorderRules,
-      // CAR-182 rule-suggestion stats
+      savedViews,
+      addView,
+      updateView,
+      deleteView,
+
       recategorizeStats,
       pendingRuleSuggestion,
       recordRecategorize,
