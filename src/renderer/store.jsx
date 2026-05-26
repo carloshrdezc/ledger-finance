@@ -1013,8 +1013,10 @@ function StoreProviderImpl({ children }) {
       // renaming into an existing (scope, name) collision would
       // leave the dropdown showing two rows with the same label —
       // mirror addView's silent-upsert protection by rejecting it
-      // here too. The UI guards against the only path that can hit
-      // this, so callers don't need to try/catch.
+      // here too. UI callers MUST try/catch LEDGER_DUPLICATE_VIEW_NAME
+      // because users can type a duplicate; the LEDGER_INVALID_VIEW_NAME
+      // throw is a developer-error guardrail (callers trim first, so it
+      // should be unreachable from the UI).
       if (patch && patch.name !== undefined) {
         const nextName = String(patch.name).trim();
         if (!nextName) throw new Error('LEDGER_INVALID_VIEW_NAME');

@@ -144,4 +144,72 @@ describe('WebReports saved views', () => {
     fireEvent.click(screen.getByRole('button', { name: /delete view/i }));
     expect(store.deleteView).toHaveBeenCalledWith('sv_reports_1');
   });
+
+  it('does not call updateView when the rename prompt returns whitespace-only input', async () => {
+    await renderScreen({
+      savedViews: [
+        {
+          id: 'sv_reports_1',
+          scope: 'reports',
+          name: 'Last month',
+          period: '2026-04',
+          range: { kind: 'preset', preset: 'lastMonth' },
+        },
+      ],
+    });
+
+    fireEvent.change(screen.getByLabelText(/views/i), { target: { value: 'sv_reports_1' } });
+    vi.spyOn(window, 'prompt').mockReturnValue('   ');
+
+    // Must not throw and must not call updateView — store.jsx throws on
+    // whitespace-only names; the call site is required to trim.
+    expect(() => {
+      fireEvent.click(screen.getByRole('button', { name: /rename view/i }));
+    }).not.toThrow();
+    expect(store.updateView).not.toHaveBeenCalled();
+  });
+
+  it('does not call addView when the save-current-view prompt returns whitespace-only input', async () => {
+    await renderScreen();
+    vi.spyOn(window, 'prompt').mockReturnValue('   ');
+
+    expect(() => {
+      fireEvent.click(screen.getByRole('button', { name: /save current view/i }));
+    }).not.toThrow();
+    expect(store.addView).not.toHaveBeenCalled();
+  });
+
+  it('alerts the user when renaming would collide with another reports view', async () => {
+    await renderScreen({
+      savedViews: [
+        {
+          id: 'sv_reports_1',
+          scope: 'reports',
+          name: 'Last month',
+          period: '2026-04',
+          range: { kind: 'preset', preset: 'lastMonth' },
+        },
+        {
+          id: 'sv_reports_2',
+          scope: 'reports',
+          name: 'YTD',
+          period: '2026-05',
+          range: { kind: 'preset', preset: 'ytd' },
+        },
+      ],
+      // Real updateView contract: throws on duplicate (scope, name).
+      updateView: vi.fn(() => {
+        throw new Error('LEDGER_DUPLICATE_VIEW_NAME');
+      }),
+    });
+
+    fireEvent.change(screen.getByLabelText(/views/i), { target: { value: 'sv_reports_1' } });
+    vi.spyOn(window, 'prompt').mockReturnValue('YTD');
+    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
+
+    expect(() => {
+      fireEvent.click(screen.getByRole('button', { name: /rename view/i }));
+    }).not.toThrow();
+    expect(alertSpy).toHaveBeenCalledWith(expect.stringContaining('YTD'));
+  });
 });
