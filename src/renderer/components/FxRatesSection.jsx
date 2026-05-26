@@ -1,10 +1,46 @@
 import React from 'react';
 import { A } from '../theme';
+import { ALabel } from './Shared';
 import { useStore } from '../store';
 import { ALL_CURRENCIES, DEFAULT_RATES, formatRate } from '../fx.mjs';
 
+function formatRelativeTime(iso) {
+  if (!iso) return 'never';
+  const ts = Date.parse(iso);
+  if (!Number.isFinite(ts)) return iso;
+  const diff = ts - Date.now();
+  const abs = Math.abs(diff);
+  const units = [
+    ['day', 86400000],
+    ['hour', 3600000],
+    ['minute', 60000],
+    ['second', 1000],
+  ];
+  const rtf = new Intl.RelativeTimeFormat('en', { numeric: 'auto' });
+  for (const [unit, size] of units) {
+    if (abs >= size || unit === 'second') {
+      return rtf.format(Math.round(diff / size), unit);
+    }
+  }
+  return iso;
+}
+
 export default function FxRatesSection() {
-  const { rates, ratesUpdated, setRate, removeRate, resetRates, accounts, allTransactions } = useStore();
+  const {
+    rates,
+    ratesUpdated,
+    fxAutoFetch,
+    fxLastFetchedAt,
+    fxLastFetchError,
+    fxFetchInFlight,
+    setRate,
+    removeRate,
+    resetRates,
+    refreshRatesNow,
+    setFxAutoFetch,
+    accounts,
+    allTransactions,
+  } = useStore();
   const [editing, setEditing] = React.useState(null);
   const [editVal, setEditVal] = React.useState('');
   const [confirmReset, setConfirmReset] = React.useState(false);
@@ -66,6 +102,10 @@ export default function FxRatesSection() {
       resetRates();
       setConfirmReset(false);
     }
+  };
+
+  const handleFetchLatest = () => {
+    void refreshRatesNow();
   };
 
   const candidateCurrencies = ALL_CURRENCIES.filter(c => rates[c] == null);
@@ -149,15 +189,65 @@ export default function FxRatesSection() {
         </div>
       )}
 
-      <div style={{ padding: '10px 0' }}>
+      <div style={{ padding: '12px 0 8px', borderBottom: '1px solid ' + A.rule2 }}>
+        <div style={{ fontFamily: A.font, fontSize: 10, color: A.muted, letterSpacing: 1.2 }}>
+          Last fetched: {fxLastFetchedAt ? `${formatRelativeTime(fxLastFetchedAt)} via frankfurter.app` : 'never'}
+        </div>
+        {fxLastFetchError && (
+          <div style={{
+            marginTop: 6,
+            fontFamily: A.font,
+            fontSize: 10,
+            color: A.neg,
+            letterSpacing: 0.4,
+            whiteSpace: 'pre-wrap',
+          }}>
+            {fxLastFetchError}
+          </div>
+        )}
+      </div>
+
+      <div style={{ padding: '10px 0', display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'end' }}>
+        <button onClick={handleFetchLatest} disabled={fxFetchInFlight} style={{
+          all: 'unset', cursor: fxFetchInFlight ? 'default' : 'pointer', fontSize: 10, letterSpacing: 1.2,
+          padding: '5px 12px', border: '1px solid ' + A.rule2,
+          color: fxFetchInFlight ? A.muted : A.ink,
+          opacity: fxFetchInFlight ? 0.6 : 1,
+          fontFamily: A.font,
+        }}>
+          FETCH LATEST
+        </button>
         <button onClick={handleResetClick} style={{
           all: 'unset', cursor: 'pointer', fontSize: 10, letterSpacing: 1.2,
           padding: '5px 12px', border: '1px solid ' + (confirmReset ? A.neg : A.rule2),
           color: confirmReset ? A.bg : A.ink,
           background: confirmReset ? A.neg : 'transparent',
+          fontFamily: A.font,
         }}>
-          {confirmReset ? 'CLICK AGAIN TO CONFIRM ↩' : 'RESET DEFAULTS'}
+          {confirmReset ? 'CLICK AGAIN TO CONFIRM' : 'RESET DEFAULTS'}
         </button>
+        <div style={{ marginLeft: 'auto', minWidth: 170 }}>
+          <ALabel style={{ marginBottom: 4 }}>AUTO-FETCH</ALabel>
+          <select
+            value={fxAutoFetch}
+            onChange={e => setFxAutoFetch(e.target.value)}
+            style={{
+              width: '100%',
+              fontFamily: A.font,
+              fontSize: 10,
+              letterSpacing: 0.8,
+              color: A.ink,
+              background: A.bg,
+              border: '1px solid ' + A.rule2,
+              padding: '5px 8px',
+              outline: 'none',
+            }}
+          >
+            <option value="off">Off</option>
+            <option value="boot">On boot</option>
+            <option value="daily">Daily</option>
+          </select>
+        </div>
       </div>
     </div>
   );

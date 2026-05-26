@@ -294,6 +294,14 @@ function DesktopApp({ t, setAccent, setDensity, setDecimals, setCurrency, setThe
 
 // ─── Root ──────────────────────────────────────────────────────────────────
 
+const FX_AUTO_FETCH_STALE_MS = 24 * 60 * 60 * 1000;
+
+function isFxAutoFetchStale(iso) {
+  if (!iso) return true;
+  const ts = Date.parse(iso);
+  return !Number.isFinite(ts) || (Date.now() - ts) >= FX_AUTO_FETCH_STALE_MS;
+}
+
 function AccountFromEmpty({ onClose, t, isMobile }) {
   return isMobile
     ? <AccountFormSheet onClose={onClose} t={t} account={null} />
@@ -308,6 +316,7 @@ function AppShell() {
     decimals, setDecimals,
     currency, setCurrency,
     theme, setTheme,
+    fxAutoFetch, fxLastFetchedAt, refreshRatesNow,
   } = useStore();
   const [isMobile, setIsMobile] = React.useState(window.innerWidth < 1024);
   const [showImport, setShowImport] = React.useState(false);
@@ -320,6 +329,16 @@ function AppShell() {
   }, []);
 
   const undoStack = useUndo();
+  const fxAutoFetchBootRef = React.useRef(false);
+
+  React.useEffect(() => {
+    if (fxAutoFetchBootRef.current) return;
+    fxAutoFetchBootRef.current = true;
+    if (fxAutoFetch !== 'off' && (fxAutoFetch === 'boot' || isFxAutoFetchStale(fxLastFetchedAt))) {
+      void refreshRatesNow();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   React.useEffect(() => {
     const onKey = (e) => {
