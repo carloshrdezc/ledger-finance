@@ -1,37 +1,19 @@
 // @vitest-environment jsdom
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 
 let store;
 
 vi.mock('../../useUndoableStore', () => ({
   useUndoableStore: () => store,
 }));
-vi.mock('../../hooks/useKeyboardShortcuts', () => ({ default: () => {} }));
-vi.mock('../../hooks/useBulkSelection', () => ({
-  default: () => ({
-    selectedCount: 0,
-    selectedIds: [],
-    anchorIdx: null,
-    clear: vi.fn(),
-    setAnchor: vi.fn(),
-    toggle: vi.fn(),
-    selectAll: vi.fn(),
-    isSelected: () => false,
-    range: vi.fn(),
-  }),
-}));
-vi.mock('./WebShell', () => ({ default: ({ children }) => <div>{children}</div> }));
-vi.mock('./WebAddModal', () => ({ default: () => null }));
-vi.mock('../../components/EmptySectionHint', () => ({ default: () => <div data-testid="empty-hint" /> }));
-vi.mock('../../components/TransactionRow', () => ({ default: () => <div data-testid="tx-row" /> }));
-vi.mock('../../components/BulkActionBar', () => ({ default: () => null }));
 vi.mock('../../components/PeriodSwitcher', () => ({ default: () => <div data-testid="period-switcher" /> }));
-vi.mock('../../bulkOps.mjs', () => ({ detectTransferPair: () => null }));
+vi.mock('../../components/EmptySectionHint', () => ({ default: () => <div data-testid="empty-hint" /> }));
+vi.mock('./AddSheet', () => ({ default: () => null }));
 
 function makeStore(overrides = {}) {
-  return {
+  const store = {
     transactions: [],
     periodTransactions: [],
     deleteTx: vi.fn(),
@@ -41,30 +23,21 @@ function makeStore(overrides = {}) {
     selectedPeriod: '2026-05',
     txFilter: { category: 'food', type: 'expense' },
     clearTxFilter: vi.fn(),
-    deleteTxs: vi.fn(),
-    hideTxs: vi.fn(),
-    updateTxs: vi.fn(),
-    categoryTree: {},
     savedViews: [],
     addView: vi.fn(),
     updateView: vi.fn(),
     deleteView: vi.fn(),
-    setSelectedPeriod: vi.fn(),
-    setTxFilter: vi.fn(),
-    ...overrides,
   };
+  Object.assign(store, overrides);
+  store.setSelectedPeriod = vi.fn((value) => { store.selectedPeriod = value; });
+  store.setTxFilter = vi.fn((value) => { store.txFilter = value; });
+  return store;
 }
 
 async function renderScreen(overrides = {}) {
   store = makeStore(overrides);
-  const WebTransactions = (await import('./WebTransactions')).default;
-  return render(
-    <WebTransactions
-      t={{ currency: 'USD', accent: '#0f0' }}
-      onNavigate={vi.fn()}
-      onAdd={vi.fn()}
-    />,
-  );
+  const Transactions = (await import('./Transactions')).default;
+  return render(<Transactions t={{ currency: 'USD', accent: '#0f0', decimals: 2 }} />);
 }
 
 beforeEach(() => {
@@ -77,7 +50,7 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-describe('WebTransactions saved views', () => {
+describe('mobile Transactions saved views', () => {
   it('prompts for a name and saves the current tx filters', async () => {
     await renderScreen();
     vi.spyOn(window, 'prompt').mockReturnValue('Coffee run');
@@ -139,7 +112,7 @@ describe('WebTransactions saved views', () => {
     expect(store.updateView).toHaveBeenCalledWith('sv_tx_1', expect.objectContaining({
       period: '2026-05',
       search: 'espresso',
-      txFilter: { category: 'food', type: 'expense' },
+      txFilter: { category: 'dining', type: 'expense' },
     }));
   });
 
@@ -199,40 +172,6 @@ describe('WebTransactions saved views', () => {
     expect(store.addView).not.toHaveBeenCalled();
   });
 
-  it('alerts the user when renaming would collide with another view in the same scope', async () => {
-    await renderScreen({
-      savedViews: [
-        {
-          id: 'sv_tx_1',
-          scope: 'tx',
-          name: 'Food focus',
-          period: '2026-05',
-          txFilter: { category: 'dining', type: 'expense' },
-        },
-        {
-          id: 'sv_tx_2',
-          scope: 'tx',
-          name: 'Travel',
-          period: '2026-05',
-          txFilter: { category: 'travel', type: 'expense' },
-        },
-      ],
-      // Real updateView contract: throws on duplicate (scope, name).
-      updateView: vi.fn(() => {
-        throw new Error('LEDGER_DUPLICATE_VIEW_NAME');
-      }),
-    });
-
-    fireEvent.change(screen.getByLabelText(/views/i), { target: { value: 'sv_tx_1' } });
-    vi.spyOn(window, 'prompt').mockReturnValue('Travel');
-    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
-
-    expect(() => {
-      fireEvent.click(screen.getByRole('button', { name: /rename view/i }));
-    }).not.toThrow();
-    expect(alertSpy).toHaveBeenCalledWith(expect.stringContaining('Travel'));
-  });
-
   it('only shows tx-scoped views in the dropdown', async () => {
     await renderScreen({
       savedViews: [
@@ -256,5 +195,42 @@ describe('WebTransactions saved views', () => {
     const options = Array.from(screen.getByLabelText(/views/i).options).map(o => o.textContent);
     expect(options).toEqual(['Views…', 'Food focus']);
     expect(store.setTxFilter).not.toHaveBeenCalled();
+  });
+
+  it('alerts the user when renaming would collide with another view in the same scope', async () => {
+    await renderScreen({
+      savedViews: [
+        {
+          id: 'sv_tx_1',
+          scope: 'tx',
+          name: 'Food focus',
+          period: '2026-05',
+          txFilter: { category: 'dining', type: 'expense' },
+        },
+        {
+          id: 'sv_tx_2',
+          scope: 'tx',
+          name: 'Travel',
+          period: '2026-05',
+          txFilter: { category: 'travel', type: 'expense' },
+        },
+      ],
+      // Real updateView contract: throws on duplicate (scope, name).
+      // Without the try/catch in renameSelectedView this would surface
+      // as an uncaught exception in a React event handler → renderer
+      // crash. Locking it here keeps mobile parity with web behavior.
+      updateView: vi.fn(() => {
+        throw new Error('LEDGER_DUPLICATE_VIEW_NAME');
+      }),
+    });
+
+    fireEvent.change(screen.getByLabelText(/views/i), { target: { value: 'sv_tx_1' } });
+    vi.spyOn(window, 'prompt').mockReturnValue('Travel');
+    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
+
+    expect(() => {
+      fireEvent.click(screen.getByRole('button', { name: /rename view/i }));
+    }).not.toThrow();
+    expect(alertSpy).toHaveBeenCalledWith(expect.stringContaining('Travel'));
   });
 });
