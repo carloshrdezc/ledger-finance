@@ -490,9 +490,17 @@ Choices the spec deliberately defers to the implementation issue:
 When this spec lands, file:
 
 - **CAR-240 — App security: implementation (PIN, password, passkey, encryption-at-rest).** Implements R1–R8 + I1–I10. Single PR or staged PRs at the implementer's discretion. Acceptance: T1–T15 pass; manual setup → cold-start → idle-lock → recovery-phrase → method-add round-trip verified by hand.
-- **CAR-241 — Encrypt CAR-77 backups under the same format.** CAR-77 currently exports plaintext JSON; aligning with this format (same blob shape, same KDF for backup-time password) closes the obvious leak.
-- **CAR-242 — Settings UX polish for Security section.** Pull the lock-screen and Settings copy through the impeccable / frontend-design pass; v1 of CAR-240 ships functional but plain.
-- **CAR-243 — Optional: panic / wipe shortcut.** Stretch; only file if there's real demand.
+
+  Filed as the umbrella **CAR-240** with four sequential implementation children:
+  - **CAR-241** — Crypto core, on-disk format, migration (no UI).
+  - **CAR-242** — Boot wiring, lock-screen UI, idle-lock.
+  - **CAR-243** — Settings UX (set-up flow, add/remove methods, reveal/rotate recovery phrase).
+  - **CAR-244** — Passkey + OS-keychain escrow on Electron.
+
+  *Note:* the issue numbers CAR-241/242/243 listed below were originally reserved for the follow-up topics (encrypted backups, Settings polish, panic/wipe). Those topics are deferred; if/when filed they will get fresh issue numbers.
+- **Encrypt CAR-77 backups under the same format** (TBD issue). CAR-77 currently exports plaintext JSON; aligning with this format (same blob shape, same KDF for backup-time password) closes the obvious leak.
+- **Settings UX polish for Security section** (TBD issue). Pull the lock-screen and Settings copy through the impeccable / frontend-design pass; v1 of CAR-240 ships functional but plain.
+- **Optional: panic / wipe shortcut** (TBD issue). Stretch; only file if there's real demand.
 
 ## Acceptance criteria
 
