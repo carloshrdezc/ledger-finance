@@ -94,5 +94,5 @@ export function unwrapMasterKey(wrapper, secret) {
     tag: wrapper.tag,
     aad: wrapper.aad || AEAD_AAD_WRAPPER,
   };
-  return aeadDecrypt(blob, wk, blob.aad);
+  return aeadDecrypt(blob, wk, AEAD_AAD_WRAPPER);
 }

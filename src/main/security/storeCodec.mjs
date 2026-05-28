@@ -71,6 +71,12 @@ export function decodeStore(blob, mk) {
  *   - `now()` → ISO timestamp
  */
 export function buildSecurityConfig(methods, opts = {}) {
+  if (!methods || typeof methods !== 'object' || Array.isArray(methods) || Object.keys(methods).length === 0) {
+    const err = new Error('PRIMARY_METHOD_REQUIRED');
+    err.code = 'PRIMARY_METHOD_REQUIRED';
+    throw err;
+  }
+
   const mk = (opts.mkProvider || (() => randBytes(32)))();
   if (!(mk instanceof Uint8Array) || mk.length !== 32) {
     throw new Error('mk provider must yield a 32-byte Uint8Array');

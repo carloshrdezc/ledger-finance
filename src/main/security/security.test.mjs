@@ -75,6 +75,13 @@ describe('T1 — multi-method MK parity (I1)', () => {
   });
 });
 
+describe('I5 — setup requires at least one primary unlock method', () => {
+  it('rejects enabled security config with no primary methods', () => {
+    expect(() => buildSecurityConfig({}, { recoveryKdfParams: FAST_PBKDF2 }))
+      .toThrow(/PRIMARY_METHOD_REQUIRED/);
+  });
+});
+
 // ---------------------------------------------------------------------------
 // T3 — IV uniqueness across many encrypts (I3)
 // 1000 sequential encrypts produce 1000 distinct IVs.
@@ -118,6 +125,23 @@ describe('T4 — tamper detection (I4)', () => {
     const mk = randBytes(32);
     const blob = aeadEncryptString('hi', mk, 'ledger-store-v1');
     expect(() => aeadDecryptString(blob, mk, 'ledger-wrapper-v1')).toThrow(/aad mismatch/);
+  });
+
+  it('wrapper unwrap rejects blobs encrypted with a non-wrapper aad', () => {
+    const mk = randBytes(32);
+    const wk = randBytes(32);
+    const blob = aeadEncrypt(mk, wk, 'ledger-store-v1');
+    const wrapper = {
+      kdf: 'raw',
+      kdfParams: null,
+      salt: null,
+      iv: blob.iv,
+      wrappedMK: blob.ct,
+      tag: blob.tag,
+      aad: blob.aad,
+    };
+
+    expect(() => unwrapMasterKey(wrapper, wk)).toThrow(/aad mismatch/);
   });
 });
 
