@@ -1,12 +1,15 @@
 import React from 'react';
 import { A } from '../../theme';
 import { ARule, ALabel } from '../../components/Shared';
-import { CATEGORIES, CCY_SYM } from '../../data';
-import { useStore } from '../../store';
+import { CCY_SYM } from '../../data';
+import { useUndoableStore } from '../../useUndoableStore';
 import { getDaysInPeriod } from '../../period.mjs';
+import { applyRules } from '../../rules.mjs';
+import AccountFormSheet from '../../components/AccountFormSheet';
+import CategoryPicker from '../../components/CategoryPicker';
 
 export default function AddSheet({ t, onClose, editTx = null }) {
-  const { addTransactions, updateTx, deleteTx, deleteTransfer, createTransfer, updateTransfer, transactions, accountsWithBalance, selectedPeriod } = useStore();
+  const { addTransactions, updateTx, deleteTx, deleteTransfer, createTransfer, updateTransfer, transactions, accountsWithBalance, selectedPeriod, rules, categoryTree } = useUndoableStore();
   const defaultDay = Math.min(new Date().getDate(), getDaysInPeriod(selectedPeriod));
   const defaultDate = `${selectedPeriod}-${String(defaultDay).padStart(2, '0')}`;
 
@@ -26,8 +29,35 @@ export default function AddSheet({ t, onClose, editTx = null }) {
   const [merchant, setMerchant] = React.useState(editTx ? editTx.name : '');
   const [isExpense, setIsExpense] = React.useState(editTx ? editTx.amt < 0 : true);
   const [cat, setCat]           = React.useState(editTx ? (editTx.cat || editTx.path?.[0] || 'dining') : 'dining');
+  const [path, setPath] = React.useState(
+    editTx?.path
+      ? editTx.path
+      : editTx?.cat
+        ? [editTx.cat]
+        : ['dining']
+  );
+  const [catManuallySet, setCatManuallySet] = React.useState(!!editTx);
   const [acct, setAcct]         = React.useState(editTx ? editTx.acct : (accountsWithBalance[0]?.id || 'chk'));
   const [date, setDate]         = React.useState(editTx ? editTx.date : defaultDate);
+
+  // CAR-80: pre-fill the picker when the user types a merchant.
+  React.useEffect(() => {
+    if (catManuallySet) return;
+    if (!merchant.trim()) return;
+    if (!rules || rules.length === 0) return;
+    const candidate = {
+      name: merchant.trim(),
+      amt: isExpense ? -Math.abs(parseFloat(amt) || 0) : Math.abs(parseFloat(amt) || 0),
+      acct,
+      cat: 'other',
+      path: ['other'],
+    };
+    const after = applyRules(candidate, rules);
+    if (after !== candidate && after.path && after.path.length > 0) {
+      setCat(after.cat);
+      setPath(after.path);
+    }
+  }, [merchant, isExpense, amt, acct, rules, catManuallySet]);
 
   const [isTransfer, setIsTransfer] = React.useState(editTx?.cat === 'transfer');
   const [fromAcct, setFromAcct]     = React.useState(transferLegs?.out.acct || editTx?.acct || accountsWithBalance[0]?.id || 'chk');
@@ -39,6 +69,8 @@ export default function AddSheet({ t, onClose, editTx = null }) {
   const [amtFrom, setAmtFrom]       = React.useState(transferLegs ? String(Math.abs(transferLegs.out.amt)) : '');
   const [amtTo, setAmtTo]           = React.useState(transferLegs ? String(Math.abs(transferLegs.in.amt)) : '');
   const [transferNote, setTransferNote] = React.useState(transferLegs?.out.note || '');
+
+  const [showAddAccount, setShowAddAccount] = React.useState(false);
 
   const fromAcctObj = accountsWithBalance.find(a => a.id === fromAcct);
   const toAcctObj   = accountsWithBalance.find(a => a.id === toAcct);
@@ -75,7 +107,7 @@ export default function AddSheet({ t, onClose, editTx = null }) {
       const changes = {
         name: merchant.trim(),
         amt: isExpense ? -Math.abs(parseFloat(amt)) : Math.abs(parseFloat(amt)),
-        date, cat, ccy: editTx?.ccy || 'USD', acct,
+        date, cat, path, ccy: editTx?.ccy || 'USD', acct,
       };
       if (editTx) {
         updateTx(editTx.id, changes);
@@ -95,18 +127,70 @@ export default function AddSheet({ t, onClose, editTx = null }) {
     onClose();
   };
 
+  if (accountsWithBalance.length === 0) {
+    return (
+      <>
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 100,
+          background: 'rgba(0,0,0,0.5)',
+          display: 'flex', alignItems: 'flex-end',
+          fontFamily: A.font,
+        }} onClick={onClose}>
+          <div
+            role="dialog"
+            aria-modal="true"
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: A.bg, width: '100%', borderTop: '2px solid ' + A.ink,
+              padding: '24px 18px',
+            }}
+          >
+            <div style={{ fontSize: 9, color: A.muted, letterSpacing: 1.2 }}>ADD TRANSACTION</div>
+            <div style={{ fontSize: 14, marginTop: 12, lineHeight: 1.5 }}>
+              No accounts yet. Add an account to start tracking transactions.
+            </div>
+            <div style={{ display: 'flex', gap: 8, marginTop: 18 }}>
+              <button onClick={onClose} style={{
+                all: 'unset', cursor: 'pointer', flex: 1, textAlign: 'center',
+                fontSize: 11, letterSpacing: 1.2,
+                padding: '12px 0', border: '1px solid ' + A.rule2, color: A.muted,
+              }}>CANCEL</button>
+              <button onClick={() => setShowAddAccount(true)} style={{
+                all: 'unset', cursor: 'pointer', flex: 2, textAlign: 'center',
+                fontSize: 11, letterSpacing: 1.2,
+                padding: '12px 0', border: '1px solid ' + A.ink, background: A.ink, color: A.bg,
+              }}>+ ADD ACCOUNT</button>
+            </div>
+          </div>
+        </div>
+        {showAddAccount && (
+          <AccountFormSheet
+            account={null}
+            t={t}
+            onClose={() => { setShowAddAccount(false); onClose(); }}
+          />
+        )}
+      </>
+    );
+  }
+
   return (
     <div onClick={onClose} style={{
       position: 'absolute', inset: 0,
       background: 'rgba(20,18,15,0.4)', zIndex: 30,
       animation: 'fadeIn .15s ease-out',
     }}>
-      <div onClick={e => e.stopPropagation()} style={{
-        position: 'absolute', left: 0, right: 0, bottom: 0,
-        background: A.bg, padding: 18,
-        borderTop: '2px solid ' + A.ink,
-        animation: 'slideUp .2s ease-out',
-      }}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        onClick={e => e.stopPropagation()}
+        style={{
+          position: 'absolute', left: 0, right: 0, bottom: 0,
+          background: A.bg, padding: 18,
+          borderTop: '2px solid ' + A.ink,
+          animation: 'slideUp .2s ease-out',
+        }}
+      >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ fontSize: 12, letterSpacing: 2, fontWeight: 700 }}>
             {editTx ? (editTx.cat === 'transfer' ? 'EDIT · TRANSFER' : 'EDIT · TRANSACTION') : 'NEW · TRANSACTION'}
@@ -246,16 +330,23 @@ export default function AddSheet({ t, onClose, editTx = null }) {
 
         <div style={{ padding: '10px 0' }}>
           <ALabel>CATEGORY</ALabel>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
-            {Object.entries(CATEGORIES).slice(0, 8).map(([k, c]) => (
-              <button key={k} onClick={() => setCat(k)} style={{
-                all: 'unset', cursor: 'pointer', padding: '5px 9px',
-                border: '1px solid ' + (cat === k ? A.ink : A.rule2),
-                background: cat === k ? A.ink : 'transparent',
-                color: cat === k ? A.bg : A.ink,
-                fontSize: 10, letterSpacing: 1.2,
-              }}>{c.glyph} {c.label}</button>
-            ))}
+          <div style={{ marginTop: 8 }}>
+            {/* CAR-189: full-tree picker replaces the 8-chip top-level row.
+                A rule pre-fill (CAR-80) can target a leaf path like
+                ['food', 'produce'] — the picker now surfaces the full
+                breadcrumb so the user can see and edit the subcategory
+                before saving. Manual selection still writes the chosen
+                path (top-level OR nested) to the saved tx. */}
+            <CategoryPicker
+              tree={categoryTree}
+              value={path}
+              onChange={(p) => {
+                setPath(p);
+                setCat(p[0]);
+                setCatManuallySet(true);
+              }}
+              placeholder="DINING"
+            />
           </div>
         </div>
         <ARule />

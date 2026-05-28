@@ -2,8 +2,9 @@ import React from 'react';
 import { A } from '../../theme';
 import { AsciiSpark, ALabel } from '../../components/Shared';
 import WebShell from './WebShell';
+import EmptySectionHint from '../../components/EmptySectionHint';
 import { fmtMoney, fmtSigned, fmtPct } from '../../data';
-import { useStore } from '../../store';
+import { useUndoableStore } from '../../useUndoableStore';
 
 const PERIOD_DAYS = { '1D': 1, '1W': 7, '1M': 30, '3M': 90, '1Y': 365, '5Y': 1825 };
 
@@ -82,7 +83,7 @@ function computePerformance(investments, trades, current) {
 }
 
 export default function WebInvestments({ t, onNavigate, onAdd }) {
-  const { investments, trades, addTrade, updateHolding, removeHolding, setInvestments } = useStore();
+  const { investments, trades, addTrade, updateHolding, removeHolding, setInvestments } = useUndoableStore();
   const [period, setPeriod] = React.useState('3M');
   const [sheet, setSheet] = React.useState(null);
 
@@ -145,6 +146,13 @@ export default function WebInvestments({ t, onNavigate, onAdd }) {
               <div style={{ textAlign: 'right' }}>DAY</div>
               <div />
             </div>
+            {investments.length === 0 ? (
+              <EmptySectionHint
+                message="No holdings yet."
+                ctaLabel="ADD HOLDING"
+                onCta={() => setSheet({ mode: 'holding', holding: null })}
+              />
+            ) : null}
             {investments.map(i => (
               <div key={i.ticker}
                 onClick={() => setSheet({ mode: 'holding', holding: i })}

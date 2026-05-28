@@ -1,7 +1,7 @@
 import React from 'react';
 import { A } from '../theme';
 import { ALabel, ARule } from './Shared';
-import { useStore } from '../store';
+import { useUndoableStore } from '../useUndoableStore';
 
 const ACCOUNT_TYPES = [
   { value: 'CHK',  label: 'Checking' },
@@ -20,7 +20,7 @@ function defaultOpeningDate() {
 }
 
 export default function AccountFormModal({ t, onClose, editAccount = null }) {
-  const { addAccount, updateAccount, archiveAccount, deleteAccount, transactions } = useStore();
+  const { addAccount, updateAccount, archiveAccount, deleteAccount, transactions } = useUndoableStore();
 
   const [name, setName]             = React.useState(editAccount?.name ?? '');
   const [type, setType]             = React.useState(editAccount?.type ?? 'CHK');
@@ -88,10 +88,15 @@ export default function AccountFormModal({ t, onClose, editAccount = null }) {
       background: 'rgba(20,18,15,0.5)', zIndex: 2000,
       display: 'flex', alignItems: 'center', justifyContent: 'center',
     }}>
-      <div onClick={e => e.stopPropagation()} style={{
-        background: A.bg, border: '2px solid ' + A.ink,
-        width: 420, padding: 32, fontFamily: A.font,
-      }}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        onClick={e => e.stopPropagation()}
+        style={{
+          background: A.bg, border: '2px solid ' + A.ink,
+          width: 420, padding: 32, fontFamily: A.font,
+        }}
+      >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 20 }}>
           <ALabel>{editAccount ? 'EDIT · ACCOUNT' : 'NEW · ACCOUNT'}</ALabel>
           <button onClick={onClose} style={{ all: 'unset', cursor: 'pointer', fontSize: 10, color: A.muted, letterSpacing: 1 }}>ESC ×</button>

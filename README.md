@@ -1,3 +1,23 @@
+# LEDGER
+
+![CI](https://github.com/carloshrdezc/ledger-finance/actions/workflows/ci.yml/badge.svg)
+
+A personal-finance Electron app (Vite + React renderer, `.mjs` pure-logic modules) for tracking transactions, budgets, recurring bills, goals, and FX-aware reporting.
+
+## Development
+
+```bash
+npm install      # install dependencies
+npm run dev      # Vite + Electron, dev mode
+npm test         # run the Vitest suite once
+npm run test:watch  # Vitest watch mode
+npm run build    # Vite production build + electron-builder → dist-app/
+```
+
+CI runs `npm test` and `npx vite build` on every push and pull request to `dev-master` and `main`. See `AGENTS.md` for the full contributor workflow.
+
+---
+
 # CODING AGENTS: READ THIS FIRST
 
 This is a **handoff bundle** from Claude Design (claude.ai/design).

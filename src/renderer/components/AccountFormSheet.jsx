@@ -1,7 +1,7 @@
 import React from 'react';
 import { A } from '../theme';
 import { ARule } from './Shared';
-import { useStore } from '../store';
+import { useUndoableStore } from '../useUndoableStore';
 
 const ACCOUNT_TYPES = [
   { value: 'CHK',  label: 'Checking' },
@@ -20,7 +20,7 @@ function defaultOpeningDate() {
 }
 
 export default function AccountFormSheet({ t, onClose, editAccount = null }) {
-  const { addAccount, updateAccount, archiveAccount, deleteAccount, transactions } = useStore();
+  const { addAccount, updateAccount, archiveAccount, deleteAccount, transactions } = useUndoableStore();
 
   const [name, setName]             = React.useState(editAccount?.name ?? '');
   const [type, setType]             = React.useState(editAccount?.type ?? 'CHK');
@@ -87,12 +87,17 @@ export default function AccountFormSheet({ t, onClose, editAccount = null }) {
       background: 'rgba(20,18,15,0.4)', zIndex: 30,
       animation: 'fadeIn .15s ease-out',
     }}>
-      <div onClick={e => e.stopPropagation()} style={{
-        position: 'absolute', left: 0, right: 0, bottom: 0,
-        background: A.bg, padding: 18,
-        borderTop: '2px solid ' + A.ink,
-        animation: 'slideUp .2s ease-out',
-      }}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        onClick={e => e.stopPropagation()}
+        style={{
+          position: 'absolute', left: 0, right: 0, bottom: 0,
+          background: A.bg, padding: 18,
+          borderTop: '2px solid ' + A.ink,
+          animation: 'slideUp .2s ease-out',
+        }}
+      >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
           <div style={{ fontSize: 12, letterSpacing: 2, fontWeight: 700 }}>
             {editAccount ? 'EDIT · ACCOUNT' : 'NEW · ACCOUNT'}

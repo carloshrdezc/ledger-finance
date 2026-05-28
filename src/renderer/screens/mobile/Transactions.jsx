@@ -3,14 +3,20 @@ import { A } from '../../theme';
 import { ARule, ALabel } from '../../components/Shared';
 import PeriodSwitcher from '../../components/PeriodSwitcher';
 import { fmtMoney, fmtSigned, dayLabel, catGlyph, catBreadcrumb } from '../../data';
-import { useStore } from '../../store';
+import { CURRENT_PERIOD_SENTINEL, resolvePeriod } from '../../period.mjs';
+import { useUndoableStore } from '../../useUndoableStore';
 import AddSheet from './AddSheet';
+import EmptySectionHint from '../../components/EmptySectionHint';
 
 export default function Transactions({ t }) {
-  const { transactions, periodTransactions, deleteTx, deleteTransfer, accountsWithBalance, periodLabel, txFilter, clearTxFilter } = useStore();
+  const { transactions, periodTransactions, deleteTx, deleteTransfer, accountsWithBalance, periodLabel, selectedPeriod, txFilter, setSelectedPeriod, setTxFilter, clearTxFilter, savedViews, addView, updateView, deleteView } = useUndoableStore();
   const [filter, setFilter] = React.useState('ALL');
   const [search, setSearch] = React.useState('');
   const [editTx, setEditTx] = React.useState(null);
+  const [selectedViewId, setSelectedViewId] = React.useState('');
+  const accountTypeById = React.useMemo(() => new Map((accountsWithBalance || []).map(a => [a.id, a.type])), [accountsWithBalance]);
+  const txViews = React.useMemo(() => (savedViews || []).filter(view => view.scope === 'tx'), [savedViews]);
+  const selectedView = React.useMemo(() => txViews.find(view => view.id === selectedViewId) || null, [txViews, selectedViewId]);
 
   const matchesTxFilter = React.useCallback((tx) => {
     if (!txFilter) return true;
@@ -27,9 +33,66 @@ export default function Transactions({ t }) {
     }
     if (txFilter.type === 'expense' && tx.amt >= 0) return false;
     if (txFilter.type === 'income' && tx.amt < 0) return false;
+    if (txFilter.excludeTransfers && tx.cat === 'transfer') return false;
     if (txFilter.account && tx.acct !== txFilter.account) return false;
+    if (txFilter.accountType) {
+      const wanted = Array.isArray(txFilter.accountType) ? txFilter.accountType : [txFilter.accountType];
+      if (!wanted.includes(accountTypeById.get(tx.acct))) return false;
+    }
     return true;
-  }, [txFilter]);
+  }, [txFilter, accountTypeById]);
+
+  const applySavedView = React.useCallback((view) => {
+    if (!view) return;
+    if (view.period) setSelectedPeriod(resolvePeriod(view.period));
+    setTxFilter(view.txFilter || null);
+    if (view.search !== undefined) setSearch(view.search || '');
+    setFilter('ALL');
+  }, [setSelectedPeriod, setTxFilter]);
+
+  const onSavedViewChange = React.useCallback((e) => {
+    const id = e.target.value;
+    setSelectedViewId(id);
+    applySavedView(txViews.find(view => view.id === id));
+  }, [applySavedView, txViews]);
+
+  const saveCurrentView = React.useCallback(() => {
+    const raw = window.prompt('Save current view as');
+    if (!raw) return;
+    const name = raw.trim();
+    if (!name) return;
+    const followCurrent = window.confirm('Follow current period?\n\nOK: this view always shows the current month.\nCancel: snapshot this period (' + periodLabel + ').');
+    addView({ scope: 'tx', name, period: followCurrent ? CURRENT_PERIOD_SENTINEL : selectedPeriod, search, txFilter });
+  }, [addView, periodLabel, selectedPeriod, search, txFilter]);
+
+  const renameSelectedView = React.useCallback(() => {
+    if (!selectedView) return;
+    const raw = window.prompt('Rename view', selectedView.name);
+    if (raw === null) return;
+    const name = raw.trim();
+    if (!name) return;
+    try {
+      updateView(selectedView.id, { name });
+    } catch (err) {
+      if (err && err.message === 'LEDGER_DUPLICATE_VIEW_NAME') {
+        window.alert(`A view named "${name}" already exists.`);
+        return;
+      }
+      throw err;
+    }
+  }, [selectedView, updateView]);
+
+  const updateSelectedView = React.useCallback(() => {
+    if (!selectedView) return;
+    updateView(selectedView.id, { period: selectedPeriod, search, txFilter });
+  }, [selectedView, selectedPeriod, search, txFilter, updateView]);
+
+  const deleteSelectedView = React.useCallback(() => {
+    if (!selectedView) return;
+    if (!window.confirm(`Delete view "${selectedView.name}"?`)) return;
+    deleteView(selectedView.id);
+    setSelectedViewId('');
+  }, [deleteView, selectedView]);
 
   const sourceTxs = txFilter && txFilter.date ? transactions : periodTransactions;
 
@@ -55,6 +118,11 @@ export default function Transactions({ t }) {
     if (txFilter.date) parts.push(txFilter.date);
     if (txFilter.weekday != null) parts.push(['MON','TUE','WED','THU','FRI','SAT','SUN'][txFilter.weekday]);
     if (txFilter.type) parts.push(txFilter.type.toUpperCase());
+    if (txFilter.accountType) {
+      const wanted = Array.isArray(txFilter.accountType) ? txFilter.accountType : [txFilter.accountType];
+      parts.push('TYPE · ' + wanted.join('+'));
+    }
+    if (txFilter.excludeTransfers) parts.push('NO XFERS');
     return parts.join(' · ');
   }, [txFilter]);
 
@@ -78,6 +146,7 @@ export default function Transactions({ t }) {
       <div style={{ padding: '10px 0 4px' }}>
         <input
           value={search} onChange={e => setSearch(e.target.value)}
+          aria-label="Search"
           placeholder="SEARCH…"
           style={{
             all: 'unset', display: 'block', width: '100%', boxSizing: 'border-box',
@@ -106,6 +175,48 @@ export default function Transactions({ t }) {
           }}>{filterChipLabel} · ✕</button>
         )}
       </div>
+
+      <div style={{ padding: '8px 0 2px' }}>
+        <div style={{ marginBottom: 6 }}><ALabel>[00] SAVED · VIEWS</ALabel></div>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+          <select aria-label="Views" value={selectedViewId} onChange={onSavedViewChange} style={{
+            fontFamily: A.font, fontSize: 11, padding: '6px 10px', border: '1px solid ' + A.rule2,
+            background: A.bg, color: A.ink, letterSpacing: 1, minWidth: 132,
+          }}>
+            <option value="">Views…</option>
+            {txViews.map(view => <option key={view.id} value={view.id}>{view.name}</option>)}
+          </select>
+          <button onClick={saveCurrentView} style={{
+            all: 'unset', cursor: 'pointer', fontSize: 10, letterSpacing: 1.2,
+            padding: '6px 12px', border: '1px solid ' + A.ink, background: A.ink, color: A.bg,
+          }}>SAVE CURRENT VIEW</button>
+        </div>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
+          <button onClick={renameSelectedView} disabled={!selectedView} style={{
+            all: 'unset', cursor: selectedView ? 'pointer' : 'not-allowed', fontSize: 10, letterSpacing: 1.2,
+            padding: '6px 12px', border: '1px solid ' + (selectedView ? A.rule2 : A.rule3),
+            color: selectedView ? A.ink : A.muted,
+          }}>RENAME VIEW</button>
+          <button onClick={updateSelectedView} disabled={!selectedView} style={{
+            all: 'unset', cursor: selectedView ? 'pointer' : 'not-allowed', fontSize: 10, letterSpacing: 1.2,
+            padding: '6px 12px', border: '1px solid ' + (selectedView ? A.rule2 : A.rule3),
+            color: selectedView ? A.ink : A.muted,
+          }}>UPDATE FROM CURRENT FILTERS</button>
+          <button onClick={deleteSelectedView} disabled={!selectedView} style={{
+            all: 'unset', cursor: selectedView ? 'pointer' : 'not-allowed', fontSize: 10, letterSpacing: 1.2,
+            padding: '6px 12px', border: '1px solid ' + (selectedView ? A.neg : A.rule3),
+            color: selectedView ? A.neg : A.muted,
+          }}>DELETE VIEW</button>
+        </div>
+      </div>
+
+      {visible.length === 0 ? (
+        <EmptySectionHint
+          message={transactions.length === 0
+            ? "No transactions yet. Add one with the + button."
+            : "No transactions match the current filter."}
+        />
+      ) : null}
 
       {dates.map(date => (
         <div key={date}>

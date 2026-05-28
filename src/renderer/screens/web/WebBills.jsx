@@ -2,7 +2,8 @@ import React from 'react';
 import { A } from '../../theme';
 import { ALabel, ARule } from '../../components/Shared';
 import WebShell from './WebShell';
-import { useStore } from '../../store';
+import EmptySectionHint from '../../components/EmptySectionHint';
+import { useUndoableStore } from '../../useUndoableStore';
 import { CATEGORIES, fmtMoney } from '../../data';
 
 const STATUS_LABELS = { paid: 'PAID', due: 'DUE TODAY', overdue: 'OVERDUE', upcoming: 'UPCOMING' };
@@ -178,7 +179,7 @@ function RecurringPanel({ t, editRule, onClose, onSave, onDelete, accountsWithBa
 }
 
 export default function WebBills({ t, onNavigate, onAdd }) {
-  const { accountsWithBalance, billRows, markRecurringPaid, addRecurring, updateRecurring, deleteRecurring, bills, periodLabel } = useStore();
+  const { accountsWithBalance, billRows, markRecurringPaid, addRecurring, updateRecurring, deleteRecurring, bills, periodLabel } = useUndoableStore();
 
   const [showPanel, setShowPanel] = React.useState(false);
   const [editRule, setEditRule]   = React.useState(null);
@@ -252,6 +253,13 @@ export default function WebBills({ t, onNavigate, onAdd }) {
         <div style={{ display: 'grid', gridTemplateColumns: '86px 1fr 70px 80px 90px 90px 86px', padding: '8px 0', fontSize: 9, color: A.muted, letterSpacing: 1.2, borderBottom: '1px solid ' + A.rule2 }}>
           <div>STATUS</div><div>NAME</div><div>ACCT</div><div>FREQ</div><div>CATEGORY</div><div style={{ textAlign: 'right' }}>AMOUNT</div><div style={{ textAlign: 'right' }}>ACTION</div>
         </div>
+        {billRows.length === 0 ? (
+          <EmptySectionHint
+            message="No bills yet."
+            ctaLabel="ADD BILL"
+            onCta={openAdd}
+          />
+        ) : null}
         {billRows.map(b => {
           const acct = accountsWithBalance.find(a => a.id === b.acct);
           const cat = CATEGORIES[b.cat];

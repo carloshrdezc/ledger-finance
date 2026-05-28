@@ -4,9 +4,11 @@ import { ALabel, CategoryTrendChart, IncomeExpenseChart, LineChart } from '../..
 import PeriodSwitcher from '../../components/PeriodSwitcher';
 import RangeSelector from '../../components/RangeSelector';
 import WebShell from './WebShell';
+import EmptySectionHint from '../../components/EmptySectionHint';
 import { fmtMoney, fmtSigned } from '../../data';
 import { useStore } from '../../store';
-import { addMonths, filterTransactionsForPeriod, filterTransactionsForRange, formatShortPeriodLabel, getDaysInPeriod, resolveRangePreset } from '../../period.mjs';
+import { useFx } from '../../useFx';
+import { CURRENT_PERIOD_SENTINEL, addMonths, filterTransactionsForPeriod, filterTransactionsForRange, formatShortPeriodLabel, getDaysInPeriod, getPeriodBoundaries, resolvePeriod, resolveRangePreset } from '../../period.mjs';
 import {
   buildCategoryTrend,
   buildIncomeExpenseSeries,
@@ -14,27 +16,16 @@ import {
   getRecentPeriods,
 } from '../../charts.mjs';
 import { exportReportCSV } from '../../importExport';
-
-function spendAmount(tx) {
-  return Math.abs(tx.ccy === 'USD' ? tx.amt : tx.amt * 1.08);
-}
-
-function spendTotal(transactions) {
-  return transactions.filter(x => x.amt < 0).reduce((s, x) => s + spendAmount(x), 0);
-}
-
-function downloadFile(name, content, mime = 'text/csv') {
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([content], { type: mime }));
-  a.download = name;
-  a.click();
-  URL.revokeObjectURL(a.href);
-}
+import { downloadFile } from '../../download.mjs';
+import NetWorthAttributionBreakdown from '../../components/NetWorthAttributionBreakdown';
+import { attributeNetWorthChange, buildNetWorthAttributionFilter } from '../../netWorthAttribution.mjs';
 
 export default function WebReports({ t, onNavigate, onAdd }) {
-  const { transactions, periodTransactions, categoryTree, selectedPeriod, periodLabel, accounts, setTxFilter } = useStore();
+  const { transactions, periodTransactions, categoryTree, selectedPeriod, setSelectedPeriod, periodLabel, accounts, budgetStartDay, txFilter, setTxFilter, rates, savedViews, addView, updateView, deleteView } = useStore();
+  const { toReporting } = useFx(t.currency || 'USD');
 
   const [range, setRange] = React.useState({ kind: 'preset', preset: 'thisMonth' });
+  const [selectedViewId, setSelectedViewId] = React.useState('');
   const isMonthRange = range.kind === 'preset' && (range.preset === 'thisMonth' || range.preset === 'lastMonth');
   const resolved = range.kind === 'custom' ? { start: range.start, end: range.end, label: `${range.start} → ${range.end}` } : resolveRangePreset(range.preset);
   const useRange = range.kind === 'custom' || (range.preset !== 'thisMonth' && range.preset !== 'lastMonth');
@@ -48,23 +39,89 @@ export default function WebReports({ t, onNavigate, onAdd }) {
   const reportTxs = useRange ? rangeTxs : periodTransactions;
   const heroLabel = useRange ? (resolved?.label || 'CUSTOM') : periodLabel;
 
-  const total = spendTotal(reportTxs);
+  const sumExpense = (txs) => txs.filter(x => x.amt < 0).reduce((s, x) => s + Math.abs(toReporting(x.amt, x.ccy, x.date)), 0);
+  const total = sumExpense(reportTxs);
   const previousPeriod = addMonths(selectedPeriod, -1);
-  const previousTotal = spendTotal(filterTransactionsForPeriod(transactions, previousPeriod));
+  const previousTotal = sumExpense(filterTransactionsForPeriod(transactions, previousPeriod));
   const trendPeriods = getRecentPeriods(selectedPeriod, 6);
-  const incomeExpense = buildIncomeExpenseSeries(transactions, trendPeriods);
-  const netWorthTrend = buildNetWorthTrend(accounts, transactions, trendPeriods);
-  const categoryTrend = buildCategoryTrend(transactions, trendPeriods, 5);
+  const incomeExpense = buildIncomeExpenseSeries(transactions, trendPeriods, rates);
+  const netWorthTrend = buildNetWorthTrend(accounts, transactions, trendPeriods, rates);
+  const categoryTrend = buildCategoryTrend(transactions, trendPeriods, 5, rates);
+  const attributionRange = useRange
+    ? resolved
+    : getPeriodBoundaries(selectedPeriod, budgetStartDay);
+  const netWorthAttribution = React.useMemo(() => attributeNetWorthChange(
+    accounts,
+    transactions,
+    attributionRange?.start,
+    attributionRange?.end,
+    rates,
+    t.currency || 'USD',
+  ), [accounts, transactions, attributionRange?.start, attributionRange?.end, rates, t.currency]);
+  const drillNetWorthBucket = React.useCallback((bucket) => {
+    const filter = buildNetWorthAttributionFilter(bucket);
+    if (!filter) return;
+    setTxFilter(filter);
+    onNavigate('tx');
+  }, [setTxFilter, onNavigate]);
 
   const drillTo = React.useCallback((filter) => {
     setTxFilter(filter || null);
     onNavigate('tx');
   }, [setTxFilter, onNavigate]);
 
+  const txViews = React.useMemo(() => savedViews.filter(view => view.scope === 'reports'), [savedViews]);
+  const selectedView = React.useMemo(() => txViews.find(view => view.id === selectedViewId) || null, [txViews, selectedViewId]);
+  const applySavedView = React.useCallback((view) => {
+    if (!view) return;
+    if (view.period) setSelectedPeriod(resolvePeriod(view.period));
+    if (view.range) setRange(view.range);
+    setTxFilter(view.txFilter || null);
+  }, [setSelectedPeriod, setTxFilter]);
+  const onSavedViewChange = React.useCallback((e) => {
+    const id = e.target.value;
+    setSelectedViewId(id);
+    applySavedView(txViews.find(view => view.id === id));
+  }, [applySavedView, txViews]);
+  const saveCurrentView = React.useCallback(() => {
+    const raw = window.prompt('Save current view as');
+    if (!raw) return;
+    const name = raw.trim();
+    if (!name) return;
+    const followCurrent = window.confirm('Follow current period?\n\nOK: this view always shows the current month.\nCancel: snapshot this period (' + periodLabel + ').');
+    addView({ scope: 'reports', name, period: followCurrent ? CURRENT_PERIOD_SENTINEL : selectedPeriod, range, txFilter });
+  }, [addView, periodLabel, selectedPeriod, range, txFilter]);
+  const renameSelectedView = React.useCallback(() => {
+    if (!selectedView) return;
+    const raw = window.prompt('Rename view', selectedView.name);
+    if (raw === null) return;
+    const name = raw.trim();
+    if (!name) return;
+    try {
+      updateView(selectedView.id, { name });
+    } catch (err) {
+      if (err && err.message === 'LEDGER_DUPLICATE_VIEW_NAME') {
+        window.alert(`A view named "${name}" already exists.`);
+        return;
+      }
+      throw err;
+    }
+  }, [selectedView, updateView]);
+  const updateSelectedView = React.useCallback(() => {
+    if (!selectedView) return;
+    updateView(selectedView.id, { period: selectedPeriod, range, txFilter });
+  }, [selectedView, selectedPeriod, range, txFilter, updateView]);
+  const deleteSelectedView = React.useCallback(() => {
+    if (!selectedView) return;
+    if (!window.confirm(`Delete view "${selectedView.name}"?`)) return;
+    deleteView(selectedView.id);
+    setSelectedViewId('');
+  }, [deleteView, selectedView]);
+
   const byCat = {};
   reportTxs.filter(x => x.amt < 0).forEach(x => {
     const k = (x.path || [x.cat])[0];
-    byCat[k] = (byCat[k] || 0) + spendAmount(x);
+    byCat[k] = (byCat[k] || 0) + Math.abs(toReporting(x.amt, x.ccy, x.date));
   });
   const cats = Object.entries(byCat).sort((a, b) => b[1] - a[1]);
   const maxCat = cats[0] ? cats[0][1] : 1;
@@ -74,15 +131,15 @@ export default function WebReports({ t, onNavigate, onAdd }) {
     const day = String(i + 1).padStart(2, '0');
     return periodTransactions
       .filter(x => x.date === `${selectedPeriod}-${day}` && x.amt < 0)
-      .reduce((s, x) => s + spendAmount(x), 0);
+      .reduce((s, x) => s + Math.abs(toReporting(x.amt, x.ccy, x.date)), 0);
   });
   const cellMax = Math.max(...cells, 1);
 
   const merchantMap = {};
   reportTxs.filter(x => x.amt < 0).forEach(tx => {
-    const key = tx.name.split(' · ')[0];
+    const key = (tx.name || '').split(' · ')[0] || 'UNNAMED';
     const curr = merchantMap[key] || { name: key, amt: 0, n: 0 };
-    curr.amt += spendAmount(tx);
+    curr.amt += Math.abs(toReporting(tx.amt, tx.ccy, tx.date));
     curr.n += 1;
     merchantMap[key] = curr;
   });
@@ -99,7 +156,7 @@ export default function WebReports({ t, onNavigate, onAdd }) {
       topMerchants: merchants,
     });
     const stamp = new Date().toISOString().slice(0, 10);
-    downloadFile(`ledger-report-${stamp}.csv`, csv);
+    downloadFile(`ledger-report-${stamp}.csv`, csv, 'text/csv');
   };
 
   return (
@@ -134,6 +191,16 @@ export default function WebReports({ t, onNavigate, onAdd }) {
           </div>
           <RangeSelector range={range} onChange={setRange} t={t} />
           {isMonthRange && range.preset === 'thisMonth' && <PeriodSwitcher />}
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+            <select aria-label="Views" value={selectedViewId} onChange={onSavedViewChange} style={{ fontFamily: A.font, fontSize: 11, padding: '6px 10px', border: '1px solid ' + A.rule2, background: A.bg, color: A.ink, letterSpacing: 1, minWidth: 160 }}>
+              <option value="">Views…</option>
+              {txViews.map(view => <option key={view.id} value={view.id}>{view.name}</option>)}
+            </select>
+            <button onClick={saveCurrentView} style={{ all: 'unset', cursor: 'pointer', fontSize: 10, letterSpacing: 1.2, padding: '5px 12px', border: '1px solid ' + A.ink, color: A.ink }}>SAVE CURRENT VIEW</button>
+            <button onClick={renameSelectedView} disabled={!selectedView} style={{ all: 'unset', cursor: selectedView ? 'pointer' : 'not-allowed', fontSize: 10, letterSpacing: 1.2, padding: '5px 12px', border: '1px solid ' + (selectedView ? A.rule2 : A.rule3), color: selectedView ? A.ink : A.muted }}>RENAME VIEW</button>
+            <button onClick={updateSelectedView} disabled={!selectedView} style={{ all: 'unset', cursor: selectedView ? 'pointer' : 'not-allowed', fontSize: 10, letterSpacing: 1.2, padding: '5px 12px', border: '1px solid ' + (selectedView ? A.rule2 : A.rule3), color: selectedView ? A.ink : A.muted }}>UPDATE FROM CURRENT FILTERS</button>
+            <button onClick={deleteSelectedView} disabled={!selectedView} style={{ all: 'unset', cursor: selectedView ? 'pointer' : 'not-allowed', fontSize: 10, letterSpacing: 1.2, padding: '5px 12px', border: '1px solid ' + (selectedView ? A.neg : A.rule3), color: selectedView ? A.neg : A.muted }}>DELETE VIEW</button>
+          </div>
         </div>
       </div>
 
@@ -154,6 +221,9 @@ export default function WebReports({ t, onNavigate, onAdd }) {
             <CategoryTrendChart rows={categoryTrend} periods={trendPeriods} accent={t.accent} categoryTree={categoryTree} />
           </div>
           <div style={{ marginTop: 12, borderTop: '1px solid ' + A.rule2 }}>
+            {reportTxs.length === 0 ? (
+              <EmptySectionHint message="No spending data for this period." />
+            ) : null}
             {cats.map(([k, v]) => {
               const c = categoryTree[k] || { label: k, glyph: '·' };
               return (
@@ -188,40 +258,50 @@ export default function WebReports({ t, onNavigate, onAdd }) {
             </div>
           </div>
 
-          <ALabel style={{ marginTop: 28 }}>[05] CALENDAR · {periodLabel}</ALabel>
+          <div style={{ marginTop: 28 }}>
+            <NetWorthAttributionBreakdown
+              t={t}
+              buckets={netWorthAttribution}
+              onBucketClick={drillNetWorthBucket}
+              label="[05] NET WORTH · ATTRIBUTION"
+              compact
+            />
+          </div>
+
+          <ALabel style={{ marginTop: 28 }}>[06] CALENDAR · {periodLabel}</ALabel>
           {useRange ? (
             <div style={{ marginTop: 12, padding: '14px 0', fontSize: 10, color: A.muted, letterSpacing: 1, borderTop: '2px solid ' + A.ink }}>
               CALENDAR HEATMAP IS PER-MONTH · SWITCH TO 'THIS MONTH' OR 'LAST MONTH' TO VIEW
             </div>
           ) : (
-          <div style={{ marginTop: 12, borderTop: '2px solid ' + A.ink, paddingTop: 16 }}>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4 }}>
-              {['S','M','T','W','T','F','S'].map((d, i) => (
-                <div key={i} style={{ fontSize: 9, color: A.muted, letterSpacing: 1, textAlign: 'center', paddingBottom: 4 }}>{d}</div>
-              ))}
-              {cells.map((v, i) => {
-                const intensity = v / cellMax;
-                const day = String(i + 1).padStart(2, '0');
-                const dateIso = `${selectedPeriod}-${day}`;
-                return (
-                  <button key={i}
-                    onClick={() => drillTo({ date: dateIso })}
-                    title={`${dateIso} · ${fmtMoney(v, t.currency, false)}`}
-                    style={{
-                      all: 'unset', cursor: 'pointer',
-                      aspectRatio: '1.2',
-                      background: v === 0 ? A.rule2 : `color-mix(in oklch, ${t.accent} ${Math.max(15, intensity * 100)}%, ${A.bg})`,
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    }}>
-                    <span style={{ fontSize: 10, color: intensity > 0.5 ? A.bg : A.ink2, fontVariantNumeric: 'tabular-nums' }}>{i + 1}</span>
-                  </button>
-                );
-              })}
+            <div style={{ marginTop: 12, borderTop: '2px solid ' + A.ink, paddingTop: 16 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4 }}>
+                {['S','M','T','W','T','F','S'].map((d, i) => (
+                  <div key={i} style={{ fontSize: 9, color: A.muted, letterSpacing: 1, textAlign: 'center', paddingBottom: 4 }}>{d}</div>
+                ))}
+                {cells.map((v, i) => {
+                  const intensity = v / cellMax;
+                  const day = String(i + 1).padStart(2, '0');
+                  const dateIso = `${selectedPeriod}-${day}`;
+                  return (
+                    <button key={i}
+                      onClick={() => drillTo({ date: dateIso })}
+                      title={`${dateIso} · ${fmtMoney(v, t.currency, false)}`}
+                      style={{
+                        all: 'unset', cursor: 'pointer',
+                        aspectRatio: '1.2',
+                        background: v === 0 ? A.rule2 : `color-mix(in oklch, ${t.accent} ${Math.max(15, intensity * 100)}%, ${A.bg})`,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      }}>
+                      <span style={{ fontSize: 10, color: intensity > 0.5 ? A.bg : A.ink2, fontVariantNumeric: 'tabular-nums' }}>{i + 1}</span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-          </div>
           )}
 
-          <ALabel style={{ marginTop: 28 }}>[06] DETECTED · INSIGHTS</ALabel>
+          <ALabel style={{ marginTop: 28 }}>[07] DETECTED · INSIGHTS</ALabel>
           <div style={{ marginTop: 8, borderTop: '2px solid ' + A.ink }}>
             {[['SPEND', `${periodTransactions.length} TXS · ${fmtMoney(total, t.currency, false)}`],['BUDGET', 'ROLLOVER ACTIVE'],['PERIOD', periodLabel],['COMPARE', `${formatShortPeriodLabel(previousPeriod)} · ${fmtMoney(previousTotal, t.currency, false)}`]].map(([k, v], i) => (
               <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid ' + A.rule2, fontSize: 11 }}>

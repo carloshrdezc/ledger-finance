@@ -3,16 +3,20 @@ import { A } from '../../theme';
 import { ARule, ALabel, ADetailCell } from '../../components/Shared';
 import { fmtMoney, fmtSigned, dayLabel, catBreadcrumb } from '../../data';
 import { useStore } from '../../store';
+import { useFx } from '../../useFx';
 import AccountFormSheet from '../../components/AccountFormSheet';
+import EmptySectionHint from '../../components/EmptySectionHint';
 
 export function Accounts({ t, onAcct }) {
   const { accountsWithBalance, accountsIncludedInTotals, allAccountsWithBalance, reorderAccounts } = useStore();
+  const { toReporting } = useFx(t.currency || 'USD');
   const [sheetAccount, setSheetAccount] = React.useState(undefined); // undefined=closed, null=new, obj=edit
   const [reorderMode, setReorderMode]   = React.useState(false);
   const [showArchived, setShowArchived] = React.useState(false);
 
+  // Account balances are current valuation; do not thread transaction dates here.
   const NET_WORTH = accountsIncludedInTotals.reduce(
-    (s, a) => s + (a.ccy === 'USD' ? a.balance : a.balance * 1.08), 0
+    (s, a) => s + toReporting(a.balance, a.ccy), 0
   );
 
   const flatSorted = React.useMemo(
@@ -98,11 +102,18 @@ export function Accounts({ t, onAcct }) {
       ) : (
         /* ── Normal grouped view ── */
         <>
+          {accountsWithBalance.length === 0 ? (
+            <EmptySectionHint
+              message="No accounts yet."
+              ctaLabel="ADD ACCOUNT"
+              onCta={() => setSheetAccount(null)}
+            />
+          ) : null}
           {groups.map(([title, rows]) => (
             <div key={title}>
               <div style={{ padding: '12px 0 8px', display: 'flex', justifyContent: 'space-between' }}>
                 <ALabel>{title}</ALabel>
-                <ALabel>{fmtMoney(rows.filter(a => a.includeInTotals !== false).reduce((s, a) => s + (a.ccy === 'USD' ? a.balance : a.balance * 1.08), 0), t.currency, t.decimals)}</ALabel>
+                <ALabel>{fmtMoney(rows.filter(a => a.includeInTotals !== false).reduce((s, a) => s + toReporting(a.balance, a.ccy), 0), t.currency, t.decimals)}</ALabel>
               </div>
               {rows.map(a => (
                 <div key={a.id} style={{ display: 'flex', alignItems: 'center', borderBottom: '1px solid ' + A.rule2 }}>

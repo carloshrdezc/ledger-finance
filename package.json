@@ -5,8 +5,15 @@
   "main": "src/main/index.js",
   "scripts": {
     "dev": "concurrently \"vite\" \"wait-on tcp:5173 && electron .\"",
-    "build": "vite build && electron-builder",
-    "preview": "vite preview"
+    "build": "vite build",
+    "build:full": "vite build && electron-builder",
+    "package": "vite build && electron-builder",
+    "package:win": "vite build && electron-builder --win",
+    "package:mac": "vite build && electron-builder --mac",
+    "package:linux": "vite build && electron-builder --linux",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "keywords": [],
   "author": "",
@@ -15,30 +22,76 @@
     "appId": "com.ledger.finance",
     "productName": "LEDGER",
     "directories": {
-      "output": "dist-app"
+      "output": "dist-app",
+      "buildResources": "build"
     },
     "files": [
       "dist/**/*",
-      "src/main/**/*"
+      "src/main/**/*",
+      "package.json"
+    ],
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "carloshrdezc",
+        "repo": "ledger-finance"
+      }
     ],
     "win": {
-      "target": "nsis"
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "${productName}-Setup-${version}.${ext}",
+      "signtoolOptions": {
+        "publisherName": "LEDGER",
+        "signingHashAlgorithms": [
+          "sha256"
+        ]
+      }
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "perMachine": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "LEDGER"
     },
     "mac": {
-      "target": "dmg"
+      "target": "dmg",
+      "category": "public.app-category.finance"
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "category": "Office"
     }
   },
   "devDependencies": {
+    "@testing-library/react": "^16.3.2",
     "@vitejs/plugin-react": "^6.0.1",
     "concurrently": "^9.2.1",
     "electron": "^42.0.1",
     "electron-builder": "^26.8.1",
+    "jsdom": "^29.1.1",
     "vite": "^8.0.13",
+    "vitest": "^4.1.7",
     "wait-on": "^9.0.10"
   },
   "dependencies": {
+    "@noble/ciphers": "^1.0.0",
+    "@noble/hashes": "^1.5.0",
+    "@scure/bip39": "^1.4.0",
+    "electron-updater": "^6.8.3",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
-    "sql.js": "^1.14.1"
+    "sql.js": "^1.14.1",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   }
 }

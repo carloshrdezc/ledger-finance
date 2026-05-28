@@ -8,6 +8,12 @@ import {
 } from '../../data';
 import { useStore } from '../../store';
 import { buildNetWorthDailyTrend } from '../../charts.mjs';
+import { useFx } from '../../useFx';
+import EmptySectionHint from '../../components/EmptySectionHint';
+import { applyInsightDrillDown } from '../../insightNav';
+import CashFlowForecastWidget from '../../components/CashFlowForecastWidget';
+import NetWorthAttributionBreakdown from '../../components/NetWorthAttributionBreakdown';
+import { attributeNetWorthChange, buildNetWorthAttributionFilter } from '../../netWorthAttribution.mjs';
 
 const PERIOD_DAYS  = { '1D': 1, '1W': 7, '1M': 30, '3M': 90, '1Y': 365 };
 const PERIOD_LABEL = { '1D': '1D', '1W': '7D', '1M': '30D', '3M': '90D', '1Y': '1Y', 'MAX': 'ALL' };
@@ -20,28 +26,51 @@ function windowStart(period) {
 }
 
 export default function Dashboard({ t, onNavigate, onAdd }) {
-  const { transactions, budgetRows, accounts, accountsWithBalance, accountsIncludedInTotals, periodLabel, billRows, goals, alertRows } = useStore();
+  const { transactions, budgetRows, accounts, accountsWithBalance, accountsIncludedInTotals, periodLabel, billRows, goals, alertRows, insightRows, dismissInsight, setTxFilter, rates } = useStore();
+  const { toReporting } = useFx(t.currency || 'USD');
   const [scrub, setScrub] = React.useState(null);
   const [period, setPeriod] = React.useState('1M');
 
+  // CAR-217: navigate to the right surface for an insight, applying the
+  // tx-filter drill-down when the route is `transactions`. Mirrors the
+  // pattern WebReports uses (setTxFilter + onNavigate('tx')). The actual
+  // resolution lives in insightNav.js so all 3 surfaces stay in lockstep.
+  const goToInsight = React.useCallback((insight) => {
+    applyInsightDrillDown(insight, { setTxFilter, navigate: onNavigate });
+  }, [setTxFilter, onNavigate]);
+
   const now = new Date();
-  const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-  const NET_WORTH  = accountsIncludedInTotals.reduce((s, a) => s + (a.ccy === 'USD' ? a.balance : a.balance * 1.08), 0);
-  const NW_DELTA   = accountsIncludedInTotals.reduce((s, a) => s + (a.ccy === 'USD' ? a.delta  : a.delta  * 1.08), 0);
+  // Account balances are current valuation; only transaction aggregates thread tx.date.
+  const NET_WORTH  = accountsIncludedInTotals.reduce((s, a) => s + toReporting(a.balance, a.ccy), 0);
+  const NW_DELTA   = accountsIncludedInTotals.reduce((s, a) => s + toReporting(a.delta,   a.ccy), 0);
   const NW_PCT     = NET_WORTH ? (NW_DELTA / Math.abs(NET_WORTH - NW_DELTA)) * 100 : 0;
   const todayLabel = now.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }).toUpperCase();
   const todayIso = now.toISOString().slice(0, 10);
 
   const netWorthTrend = React.useMemo(() => {
     const days = period === 'MAX' ? 365 : PERIOD_DAYS[period];
-    return buildNetWorthDailyTrend(accountsIncludedInTotals, transactions, todayIso, days);
-  }, [accountsIncludedInTotals, transactions, todayIso, period]);
+    return buildNetWorthDailyTrend(accountsIncludedInTotals, transactions, todayIso, days, rates);
+  }, [accountsIncludedInTotals, transactions, todayIso, period, rates]);
   const netWorthSpark = netWorthTrend.map(point => point.value);
   const chartTicks = React.useMemo(() => {
     if (netWorthTrend.length <= 5) return netWorthTrend;
     const indexes = [0, 0.25, 0.5, 0.75, 1].map(x => Math.round(x * (netWorthTrend.length - 1)));
     return indexes.map(i => netWorthTrend[i]);
   }, [netWorthTrend]);
+  const attribution = React.useMemo(() => attributeNetWorthChange(
+    accountsIncludedInTotals,
+    transactions,
+    windowStart(period),
+    todayIso,
+    rates,
+    t.currency || 'USD',
+  ), [accountsIncludedInTotals, transactions, period, todayIso, rates, t.currency]);
+  const drillNetWorthBucket = React.useCallback((bucket) => {
+    const filter = buildNetWorthAttributionFilter(bucket);
+    if (!filter) return;
+    setTxFilter(filter);
+    onNavigate('tx');
+  }, [setTxFilter, onNavigate]);
 
   const { inflow, outflow, net, deltaByAcct } = React.useMemo(() => {
     const cutoff = windowStart(period);
@@ -49,13 +78,13 @@ export default function Dashboard({ t, onNavigate, onAdd }) {
     let inflow = 0, outflow = 0;
     const deltaByAcct = new Map();
     for (const tx of filtered) {
-      const usd = tx.ccy === 'USD' ? tx.amt : tx.amt * 1.08;
+      const usd = toReporting(tx.amt, tx.ccy, tx.date);
       if (usd > 0) inflow += usd;
       else outflow += usd;
       deltaByAcct.set(tx.acct, (deltaByAcct.get(tx.acct) ?? 0) + usd);
     }
     return { inflow, outflow, net: inflow + outflow, deltaByAcct };
-  }, [period, transactions]);
+  }, [period, transactions, toReporting]);
 
   const scrubIdx = scrub != null ? Math.max(0, Math.min(netWorthSpark.length - 1, scrub)) : null;
   const heroVal = scrubIdx != null ? netWorthSpark[scrubIdx] : NET_WORTH;
@@ -63,38 +92,65 @@ export default function Dashboard({ t, onNavigate, onAdd }) {
   return (
     <WebShell active="dashboard" t={t} onNavigate={onNavigate} onAdd={onAdd}>
       {/* Hero */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+      {accountsIncludedInTotals.length === 0 ? (
         <div>
-          <ALabel>[01] NET WORTH · {todayLabel}</ALabel>
-          <div style={{ fontSize: 64, letterSpacing: -2, fontVariantNumeric: 'tabular-nums', lineHeight: 1, marginTop: 8 }}>
-            {fmtMoney(heroVal, t.currency, t.decimals)}
+          <ALabel>[01] NET WORTH</ALabel>
+          <EmptySectionHint
+            message="Add your first account to see your net worth."
+            ctaLabel="ADD ACCOUNT"
+            onCta={onAdd}
+          />
+        </div>
+      ) : (
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+          <div>
+            <ALabel>[01] NET WORTH · {todayLabel}</ALabel>
+            <div style={{ fontSize: 64, letterSpacing: -2, fontVariantNumeric: 'tabular-nums', lineHeight: 1, marginTop: 8 }}>
+              {fmtMoney(heroVal, t.currency, t.decimals)}
+            </div>
+            <div style={{ fontSize: 12, marginTop: 6 }}>
+              <span style={{ color: t.accent }}>{fmtSigned(NW_DELTA, t.currency, t.decimals)} · {fmtPct(NW_PCT)}</span>
+              <span style={{ color: A.muted, marginLeft: 12 }}>{PERIOD_LABEL[period]}</span>
+            </div>
           </div>
-          <div style={{ fontSize: 12, marginTop: 6 }}>
-            <span style={{ color: t.accent }}>{fmtSigned(NW_DELTA, t.currency, t.decimals)} · {fmtPct(NW_PCT)}</span>
-            <span style={{ color: A.muted, marginLeft: 12 }}>{PERIOD_LABEL[period]}</span>
+          <div style={{ display: 'flex', gap: 6 }}>
+            {['1D','1W','1M','3M','1Y','MAX'].map(p => (
+              <span key={p} onClick={() => setPeriod(p)} style={{
+                fontSize: 10, letterSpacing: 1.2, padding: '5px 10px',
+                border: '1px solid ' + (period === p ? A.ink : A.rule2),
+                background: period === p ? A.ink : 'transparent',
+                color: period === p ? A.bg : A.ink, cursor: 'pointer',
+              }}>{p}</span>
+            ))}
           </div>
         </div>
-        <div style={{ display: 'flex', gap: 6 }}>
-          {['1D','1W','1M','3M','1Y','MAX'].map(p => (
-            <span key={p} onClick={() => setPeriod(p)} style={{
-              fontSize: 10, letterSpacing: 1.2, padding: '5px 10px',
-              border: '1px solid ' + (period === p ? A.ink : A.rule2),
-              background: period === p ? A.ink : 'transparent',
-              color: period === p ? A.bg : A.ink, cursor: 'pointer',
-            }}>{p}</span>
-          ))}
-        </div>
-      </div>
+      )}
 
       {/* Sparkline */}
-      <div style={{ marginTop: 18, borderTop: '2px solid ' + A.ink, borderBottom: '1px solid ' + A.rule2, paddingTop: 18 }}>
-        <AsciiSpark data={netWorthSpark} width={780} height={160} stroke={t.accent} hover={scrubIdx} onScrub={setScrub} />
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 9, color: A.muted, marginTop: 6 }}>
-          {chartTicks.map(point => (
-            <span key={point.date}>{dayLabel(point.date)}</span>
-          ))}
+      {transactions.length > 0 && (
+        <div style={{ marginTop: 18, borderTop: '2px solid ' + A.ink, borderBottom: '1px solid ' + A.rule2, paddingTop: 18 }}>
+          <AsciiSpark data={netWorthSpark} width={780} height={160} stroke={t.accent} hover={scrubIdx} onScrub={setScrub} />
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 9, color: A.muted, marginTop: 6 }}>
+            {chartTicks.map(point => (
+              <span key={point.date}>{dayLabel(point.date)}</span>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
+
+      {transactions.length > 0 && (
+        <div style={{ marginTop: 18 }}>
+          <NetWorthAttributionBreakdown
+            t={t}
+            buckets={attribution}
+            onBucketClick={drillNetWorthBucket}
+            label={`[02] NET WORTH · ATTRIBUTION · LAST ${PERIOD_LABEL[period]}`}
+          />
+        </div>
+      )}
+
+      {/* CAR-218: Cash-flow forecast widget */}
+      <CashFlowForecastWidget t={t} />
 
       {/* Alerts */}
       <div style={{ marginTop: 20, marginBottom: 8 }}>
@@ -121,23 +177,60 @@ export default function Dashboard({ t, onNavigate, onAdd }) {
         </div>
       </div>
 
+      {/* CAR-217: Weekly insights — surface the top 3 detector rows. Each row
+          drills via goToInsight (tx-filter for category/merchant routes). */}
+      {insightRows.length > 0 && (
+        <div style={{ marginTop: 20, marginBottom: 8 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+            <ALabel>[03B] WEEKLY INSIGHTS</ALabel>
+            <span style={{ fontSize: 9, color: A.muted, letterSpacing: 1.2 }}>{insightRows.length} TOTAL</span>
+          </div>
+          <div style={{ marginTop: 8, borderTop: '2px solid ' + A.ink }}>
+            {insightRows.slice(0, 3).map(insight => (
+              <div key={insight.id} style={{ display: 'grid', gridTemplateColumns: '86px 1fr 80px 64px 64px', gap: 16, width: '100%', padding: '9px 0', borderBottom: '1px solid ' + A.rule2, alignItems: 'center' }}>
+                <div style={{ fontSize: 9, letterSpacing: 1, color: insight.severity === 'high' ? A.neg : insight.severity === 'medium' ? t.accent : A.muted }}>{insight.severity.toUpperCase()}</div>
+                <button onClick={() => goToInsight(insight)} style={{ all: 'unset', cursor: 'pointer', minWidth: 0 }}>
+                  <div style={{ fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{insight.title}</div>
+                  <div style={{ fontSize: 10, color: A.muted, letterSpacing: 0.8, marginTop: 2 }}>{insight.detail}</div>
+                </button>
+                <div style={{ textAlign: 'right', fontSize: 11, color: t.accent, letterSpacing: 1, fontVariantNumeric: 'tabular-nums' }}>
+                  {insight.metric}
+                </div>
+                <div style={{ textAlign: 'right', fontSize: 9, letterSpacing: 1.2, color: t.accent }} aria-hidden="true">
+                  {insight.action}
+                </div>
+                <button onClick={() => dismissInsight(insight.id)} style={{ all: 'unset', cursor: 'pointer', textAlign: 'right', fontSize: 9, letterSpacing: 1.2, color: A.muted }}>DISMISS</button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Cash flow */}
       <div style={{ marginTop: 20, marginBottom: 8 }}>
         <ALabel>[04] {PERIOD_LABEL[period]} · CASH FLOW</ALabel>
-        <div style={{ marginTop: 8, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 1, background: A.rule2, border: '1px solid ' + A.rule2 }}>
-          {[
-            { l: 'IN',  v: inflow,  c: t.accent },
-            { l: 'OUT', v: outflow, c: A.neg    },
-            { l: 'NET', v: net,     c: A.ink    },
-          ].map(x => (
-            <div key={x.l} style={{ background: A.bg, padding: '14px 16px' }}>
-              <div style={{ fontSize: 9, color: A.muted, letterSpacing: 1.2 }}>{x.l}</div>
-              <div style={{ fontSize: 18, fontVariantNumeric: 'tabular-nums', color: x.c, marginTop: 6 }}>
-                {fmtSigned(x.v, t.currency, t.decimals)}
+        {transactions.length === 0 ? (
+          <EmptySectionHint
+            message="Cash flow appears once you have transactions."
+            ctaLabel="ADD TRANSACTION"
+            onCta={onAdd}
+          />
+        ) : (
+          <div style={{ marginTop: 8, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 1, background: A.rule2, border: '1px solid ' + A.rule2 }}>
+            {[
+              { l: 'IN',  v: inflow,  c: t.accent },
+              { l: 'OUT', v: outflow, c: A.neg    },
+              { l: 'NET', v: net,     c: A.ink    },
+            ].map(x => (
+              <div key={x.l} style={{ background: A.bg, padding: '14px 16px' }}>
+                <div style={{ fontSize: 9, color: A.muted, letterSpacing: 1.2 }}>{x.l}</div>
+                <div style={{ fontSize: 18, fontVariantNumeric: 'tabular-nums', color: x.c, marginTop: 6 }}>
+                  {fmtSigned(x.v, t.currency, t.decimals)}
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Two columns */}
@@ -229,15 +322,21 @@ export default function Dashboard({ t, onNavigate, onAdd }) {
       <div style={{ marginTop: 28 }}>
         <ALabel>[08] RECENT · TRANSACTIONS</ALabel>
         <div style={{ marginTop: 8, borderTop: '2px solid ' + A.ink }}>
-          {transactions.slice(0, 8).map(tx => (
-            <div key={tx.id} style={{ display: 'grid', gridTemplateColumns: '80px 16px 1fr 100px 100px', padding: t.density === 'compact' ? '7px 0' : '9px 0', fontSize: 11, borderBottom: '1px solid ' + A.rule2, alignItems: 'center' }}>
-              <div style={{ fontSize: 9, color: A.muted, letterSpacing: 1 }}>{dayLabel(tx.date)}</div>
-              <div>{catGlyph(tx.path || [tx.cat])}</div>
-              <div>{tx.name}<span style={{ color: A.muted, marginLeft: 8, fontSize: 10 }}>{CATEGORIES[tx.cat]?.label}</span></div>
-              <div style={{ color: A.muted, fontSize: 10 }}>{accountsWithBalance.find(a => a.id === tx.acct)?.code}</div>
-              <div style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: tx.amt >= 0 ? t.accent : A.ink }}>{fmtSigned(tx.amt, tx.ccy, t.decimals)}</div>
+          {transactions.length === 0 ? (
+            <div style={{ padding: '12px 0', fontSize: 11, color: A.muted, letterSpacing: 1 }}>
+              NO TRANSACTIONS YET
             </div>
-          ))}
+          ) : (
+            transactions.slice(0, 8).map(tx => (
+              <div key={tx.id} style={{ display: 'grid', gridTemplateColumns: '80px 16px 1fr 100px 100px', padding: t.density === 'compact' ? '7px 0' : '9px 0', fontSize: 11, borderBottom: '1px solid ' + A.rule2, alignItems: 'center' }}>
+                <div style={{ fontSize: 9, color: A.muted, letterSpacing: 1 }}>{dayLabel(tx.date)}</div>
+                <div>{catGlyph(tx.path || [tx.cat])}</div>
+                <div>{tx.name}<span style={{ color: A.muted, marginLeft: 8, fontSize: 10 }}>{CATEGORIES[tx.cat]?.label}</span></div>
+                <div style={{ color: A.muted, fontSize: 10 }}>{accountsWithBalance.find(a => a.id === tx.acct)?.code}</div>
+                <div style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: tx.amt >= 0 ? t.accent : A.ink }}>{fmtSigned(tx.amt, tx.ccy, t.decimals)}</div>
+              </div>
+            ))
+          )}
         </div>
       </div>
     </WebShell>

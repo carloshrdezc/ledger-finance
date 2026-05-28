@@ -2,6 +2,8 @@ import React from 'react';
 import { A } from '../theme';
 import { ALabel } from './Shared';
 import { useStore } from '../store';
+import { applyRulesToBatch } from '../rules.mjs';
+import { parseBackup } from '../backup.mjs';
 import { parseQIF, parseCSV, parseXLSX, parseMMBAK, exportQIF, exportCSV, exportXLSX, exportMMBAK } from '../importExport';
 
 function download(name, content, mime = 'text/plain') {
@@ -16,8 +18,14 @@ const ts = () => new Date().toISOString().slice(0, 10);
 
 export default function ImportExport({ onClose }) {
   const store = useStore();
+  const { rules } = store;
   const [status, setStatus] = React.useState(null);
   const inputRef = React.useRef();
+
+  const importTxs = React.useCallback((txs) => {
+    const withRules = applyRulesToBatch(txs, rules);
+    store.addTransactions(withRules);
+  }, [store, rules]);
 
   const handleFile = async file => {
     if (!file) return;
@@ -30,18 +38,18 @@ export default function ImportExport({ onClose }) {
 
       if (ext === 'qif') {
         const txs = parseQIF(text);
-        store.addTransactions(txs);
+        importTxs(txs);
         setStatus({ ok: true, msg: `Imported ${txs.length} transactions from QIF` });
       } else if (ext === 'csv') {
         const txs = parseCSV(text);
-        store.addTransactions(txs);
+        importTxs(txs);
         setStatus({ ok: true, msg: `Imported ${txs.length} transactions from CSV` });
       } else if (ext === 'xlsx') {
         const data = parseXLSX(buffer);
         if (data.accounts?.length) store.setAccounts(data.accounts);
         if (data.categoryTree && Object.keys(data.categoryTree).length) store.setCategoryTree(data.categoryTree);
         if (data.bills?.length) store.setBills(data.bills);
-        store.addTransactions(data.transactions);
+        importTxs(data.transactions);
         const acctNote = data.accounts?.length ? ` · ${data.accounts.length} accounts` : '';
         const catNote = data.categoryTree && Object.keys(data.categoryTree).length ? ' · categories' : '';
         const billNote = data.bills?.length ? ` · ${data.bills.length} recurring rules` : '';
@@ -49,19 +57,30 @@ export default function ImportExport({ onClose }) {
       } else if (ext === 'mmbak') {
         const data = await parseMMBAK(text, buffer);
         if (data.isLedgerBackup) {
-          if (data.accounts?.length) store.setAccounts(data.accounts);
-          if (data.transactions) store.setTransactions(data.transactions);
-          if (data.categoryTree) store.setCategoryTree(data.categoryTree);
-          if (data.budgets) store.setBudgets(data.budgets);
-          if (data.bills) store.setBills(data.bills);
-          if (data.goals) store.setGoals(data.goals);
-          if (data.goalContributions) store.setGoalContributions(data.goalContributions);
-          setStatus({ ok: true, msg: `Backup restored · ${data.transactions?.length ?? 0} transactions` });
+          // CAR-188: full-restore must cover every v2 slice — rules,
+          // investments, trades, FX rates, hidden, settings, etc. Delegate
+          // to the canonical pipeline (parseBackup → store.restoreBackup)
+          // so this path stays in sync with the JSON restore in
+          // BackupSection.jsx. parseBackup re-validates `_type`/`version`
+          // and skips malformed slices safely.
+          const result = parseBackup(text);
+          if (!result.ok) {
+            setStatus({ ok: false, msg: result.error });
+            return;
+          }
+          store.restoreBackup(result.data);
+          setStatus({ ok: true, msg: `Backup restored · ${result.summary?.transactions ?? 0} transactions` });
         } else {
+          // NOTE: This branch handles MoneyMoney mmbak SQLite IMPORT (not
+          // a Ledger restore). It intentionally only touches accounts /
+          // categoryTree / bills / transactions because that's all the
+          // foreign format carries. Do NOT "fix" this to cover all v2
+          // slices like the Ledger branch above — there's nothing to
+          // restore for rules / investments / trades / fxRates / settings.
           if (data.accounts?.length) store.setAccounts(data.accounts);
           if (data.categoryTree && Object.keys(data.categoryTree).length) store.setCategoryTree(data.categoryTree);
           if (data.bills?.length) store.setBills(data.bills);
-          store.addTransactions(data.transactions);
+          importTxs(data.transactions);
           const acctNote = data.accounts?.length ? ` · ${data.accounts.length} accounts` : '';
           const catNote = data.categoryTree && Object.keys(data.categoryTree).length ? ` · categories` : '';
           const billNote = data.bills?.length ? ` · ${data.bills.length} recurring rules` : '';
@@ -87,7 +106,12 @@ export default function ImportExport({ onClose }) {
       style={{ position: 'fixed', inset: 0, background: 'rgba(21,19,15,0.55)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
       onClick={onClose}
     >
-      <div onClick={e => e.stopPropagation()} style={{ background: A.bg, border: '2px solid ' + A.ink, width: 460, padding: 32, fontFamily: A.font }}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        onClick={e => e.stopPropagation()}
+        style={{ background: A.bg, border: '2px solid ' + A.ink, width: 460, padding: 32, fontFamily: A.font }}
+      >
 
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 24 }}>
           <ALabel>IMPORT · EXPORT</ALabel>
@@ -126,7 +150,7 @@ export default function ImportExport({ onClose }) {
         <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid ' + A.rule2, display: 'flex', alignItems: 'center', fontSize: 9, color: A.muted, letterSpacing: 1 }}>
           <span>{store.transactions.length} TRANSACTIONS · STORED LOCALLY</span>
           <button
-            onClick={() => { store.reset(); setStatus({ ok: true, msg: 'Reset to sample data' }); }}
+            onClick={() => { store.reset(); setStatus({ ok: true, msg: 'Reset to empty' }); }}
             style={{ all: 'unset', cursor: 'pointer', marginLeft: 'auto', fontSize: 9, letterSpacing: 1, color: A.neg }}
           >
             RESET TO DEFAULTS

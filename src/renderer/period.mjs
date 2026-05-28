@@ -1,8 +1,15 @@
-const EUR_TO_USD = 1.08;
+import { toReportingCurrency } from './fx.mjs';
+
+export const CURRENT_PERIOD_SENTINEL = '__current__';
 
 export function monthKey(value = new Date()) {
   if (typeof value === 'string') return value.slice(0, 7);
   return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}`;
+}
+
+export function resolvePeriod(period) {
+  if (period === CURRENT_PERIOD_SENTINEL) return monthKey(new Date());
+  return period;
 }
 
 export function addMonths(period, amount) {
@@ -44,6 +51,23 @@ export function filterTransactionsForPeriod(transactions, period, startDay = 1) 
   const nextPeriod = monthKey(new Date(year, month, 1));
   const end = `${nextPeriod}-${String(startDay - 1).padStart(2, '0')}`;
   return transactions.filter(tx => tx.date >= start && tx.date <= end);
+}
+
+// Compute the inclusive [start, end] ISO boundaries that filterTransactionsForPeriod
+// uses for a given period + budgetStartDay. Useful when an analytic helper needs
+// the explicit window (e.g. net-worth attribution) rather than the filtered list.
+export function getPeriodBoundaries(period, startDay = 1) {
+  if (startDay <= 1) {
+    return {
+      start: `${period}-01`,
+      end: `${period}-${String(getDaysInPeriod(period)).padStart(2, '0')}`,
+    };
+  }
+  const [year, month] = period.split('-').map(Number);
+  const start = `${period}-${String(startDay).padStart(2, '0')}`;
+  const nextPeriod = monthKey(new Date(year, month, 1));
+  const end = `${nextPeriod}-${String(startDay - 1).padStart(2, '0')}`;
+  return { start, end };
 }
 
 // Filter transactions to an inclusive [startIso, endIso] range. Both sides
@@ -102,18 +126,14 @@ export function resolveRangePreset(preset, today = new Date()) {
   }
 }
 
-function toUsd(amount, ccy = 'USD') {
-  return ccy === 'USD' ? amount : amount * EUR_TO_USD;
-}
-
 function txBudgetCategory(tx) {
   return (tx.path || [tx.cat])[0];
 }
 
-function spentByCategory(transactions, period, cat) {
+function spentByCategory(transactions, period, cat, rates) {
   return transactions
     .filter(tx => tx.amt < 0 && tx.date?.startsWith(period) && txBudgetCategory(tx) === cat)
-    .reduce((sum, tx) => sum + Math.abs(toUsd(tx.amt, tx.ccy)), 0);
+    .reduce((sum, tx) => sum + Math.abs(toReportingCurrency(tx.amt, tx.ccy, rates, 'USD', tx.date)), 0);
 }
 
 function roundCents(value) {
@@ -127,15 +147,15 @@ function priorPeriods(transactions, selectedPeriod) {
   return periods;
 }
 
-export function buildBudgetRows(budgets, transactions, selectedPeriod) {
+export function buildBudgetRows(budgets, transactions, selectedPeriod, rates = { USD: 1 }) {
   transactions = transactions.filter(tx => tx.cat !== 'transfer');
   const periods = priorPeriods(transactions, selectedPeriod);
   return budgets.map(budget => {
     const rollover = periods.reduce((sum, period) => {
-      const spent = spentByCategory(transactions, period, budget.cat);
+      const spent = spentByCategory(transactions, period, budget.cat, rates);
       return sum + budget.limit - spent;
     }, 0);
-    const spent = spentByCategory(transactions, selectedPeriod, budget.cat);
+    const spent = spentByCategory(transactions, selectedPeriod, budget.cat, rates);
     const available = budget.limit + rollover;
     const left = available - spent;
     return {

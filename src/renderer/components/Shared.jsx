@@ -2,13 +2,18 @@ import React from 'react';
 import { A } from '../theme';
 import { svgLinePath } from '../charts.mjs';
 
-export function AsciiSpark({ data, width = 280, height = 56, stroke = A.ink, hover = null, onScrub }) {
+export function scaleSparkPoints(data, width = 280, height = 56) {
+  if (!data.length) return [];
   const min = Math.min(...data), max = Math.max(...data);
   const range = max - min || 1;
-  const pts = data.map((v, i) => [
-    data.length === 1 ? width / 2 : i * (width / (data.length - 1)),
-    height - ((v - min) / range) * height,
-  ]);
+  return data.map((v, i) => ({
+    x: data.length === 1 ? width / 2 : i * (width / (data.length - 1)),
+    y: height - ((v - min) / range) * height,
+  }));
+}
+
+export function AsciiSpark({ data, width = 280, height = 56, stroke = A.ink, hover = null, onScrub }) {
+  const pts = scaleSparkPoints(data, width, height);
   const d = svgLinePath(data, width, height);
   const hi = hover != null ? Math.max(0, Math.min(data.length - 1, hover)) : null;
 
@@ -24,9 +29,9 @@ export function AsciiSpark({ data, width = 280, height = 56, stroke = A.ink, hov
       <path d={d} fill="none" stroke={stroke} strokeWidth="1.5" />
       {hi != null && (
         <>
-          <line x1={pts[hi][0]} y1={0} x2={pts[hi][0]} y2={height}
+          <line x1={pts[hi].x} y1={0} x2={pts[hi].x} y2={height}
             stroke={stroke} strokeWidth="0.6" strokeDasharray="2 2" />
-          <circle cx={pts[hi][0]} cy={pts[hi][1]} r="3"
+          <circle cx={pts[hi].x} cy={pts[hi].y} r="3"
             fill={A.bg} stroke={stroke} strokeWidth="1.5" />
         </>
       )}
@@ -44,6 +49,44 @@ export function ALabel({ children, style }) {
       fontSize: 10, letterSpacing: 1.4, color: A.ink2,
       textTransform: 'uppercase', ...style,
     }}>{children}</div>
+  );
+}
+
+export function Checkbox({ checked, indeterminate = false, onChange, ariaLabel, onMouseDown }) {
+  const filled = checked || indeterminate;
+  const glyph = indeterminate ? '−' : (checked ? '✓' : '');
+  return (
+    <span
+      role="checkbox"
+      aria-checked={indeterminate ? 'mixed' : checked}
+      aria-label={ariaLabel}
+      tabIndex={0}
+      onMouseDown={onMouseDown}
+      onClick={onChange}
+      onKeyDown={(e) => {
+        if (e.key === ' ' || e.key === 'Enter') {
+          e.preventDefault();
+          onChange?.(e);
+        }
+      }}
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        width: 14,
+        height: 14,
+        border: '1px solid ' + (filled ? A.ink : A.rule2),
+        background: filled ? A.ink : 'transparent',
+        color: A.bg,
+        fontSize: 10,
+        lineHeight: 1,
+        cursor: 'pointer',
+        userSelect: 'none',
+        flexShrink: 0,
+      }}
+    >
+      {glyph}
+    </span>
   );
 }
 

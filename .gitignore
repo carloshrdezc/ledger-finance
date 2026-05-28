@@ -3,3 +3,7 @@ dist/
 dist-app/
 *.log
 .DS_Store
+
+# Superpowers brainstorm session artifacts
+.superpowers/
+
