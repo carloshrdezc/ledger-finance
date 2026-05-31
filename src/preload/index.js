@@ -21,3 +21,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   installUpdate: () => ipcRenderer.invoke('auto-update:install-now'),
 });
+
+// CAR-242: security bridge. The MK NEVER crosses this boundary — only public
+// state and unlock results.
+contextBridge.exposeInMainWorld('ledgerSecurity', {
+  getState: () => ipcRenderer.invoke('security:get-state'),
+  unlockPin: pin => ipcRenderer.invoke('security:unlock-pin', pin),
+  lockNow: () => ipcRenderer.invoke('security:lock-now'),
+  onStateChanged: callback => {
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on('security:state-changed', listener);
+    return () => ipcRenderer.removeListener('security:state-changed', listener);
+  },
+  // Dev-only — main only registers this handler when !app.isPackaged.
+  // In production the invoke will reject; the dev scaffold UI is the only
+  // caller and is itself dev-gated.
+  runSetupDev: pin => ipcRenderer.invoke('security:run-setup-dev', pin),
+});
