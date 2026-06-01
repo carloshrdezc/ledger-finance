@@ -158,3 +158,64 @@ describe('CAR-243 round-3 (I8) — error sanitization', () => {
     expect(r).toEqual({ ok: false, error: 'METHOD_EXISTS' });
   });
 });
+
+// CAR-243 round-4 (I8 tighter sanitizer): the round-3 sanitizer accepted
+// any UPPER_SNAKE string matching `/^[A-Z0-9_]{2,40}$/`, which let Node fs
+// error codes (ENOENT/EBUSY/EPERM/EACCES) leak filesystem state to the
+// renderer and would have echoed any future regression `throw new
+// Error('PATH_C_USERS_…')`. The round-4 sanitizer uses an explicit
+// allow-list of expected runtime codes; everything else collapses to the
+// channel-specific fallback.
+describe('CAR-243 round-4 (I8 tighter sanitizer) — non-allowlisted codes drop to fallback', () => {
+  it('Node fs ENOENT err.code is NOT echoed', async () => {
+    const ipc = makeIpcMainShim();
+    const runtime = makeStubRuntime({
+      addMethod: async () => {
+        const err = new Error('ENOENT: no such file or directory');
+        err.code = 'ENOENT';
+        throw err;
+      },
+    });
+    registerSecurityIpc({ ipcMain: ipc, runtime, webContents: () => null });
+    const r = await ipc.invoke('security:add-method', { name: 'pin', secret: '4729' });
+    expect(r).toEqual({ ok: false, error: 'ADD_FAILED' });
+  });
+
+  it('Node fs EBUSY err.code is NOT echoed', async () => {
+    const ipc = makeIpcMainShim();
+    const runtime = makeStubRuntime({
+      removeMethod: async () => {
+        const err = new Error('resource busy or locked');
+        err.code = 'EBUSY';
+        throw err;
+      },
+    });
+    registerSecurityIpc({ ipcMain: ipc, runtime, webContents: () => null });
+    const r = await ipc.invoke('security:remove-method', 'pin');
+    expect(r).toEqual({ ok: false, error: 'REMOVE_FAILED' });
+  });
+
+  it('arbitrary UPPER_SNAKE message that looks like a path leak is NOT echoed', async () => {
+    const ipc = makeIpcMainShim();
+    const runtime = makeStubRuntime({
+      addMethod: async () => { throw new Error('PATH_C_USERS_HERNAJIC_LEAK'); },
+    });
+    registerSecurityIpc({ ipcMain: ipc, runtime, webContents: () => null });
+    const r = await ipc.invoke('security:add-method', { name: 'pin', secret: '4729' });
+    expect(r).toEqual({ ok: false, error: 'ADD_FAILED' });
+  });
+
+  it('every allow-listed code from the runtime/storeCodec API is preserved', async () => {
+    // Spot-check the common runtime codes survive the tighter filter.
+    const codes = ['NOT_UNLOCKED', 'METHOD_EXISTS', 'UNKNOWN_METHOD', 'LAST_METHOD', 'NOT_ENABLED'];
+    for (const code of codes) {
+      const ipc = makeIpcMainShim();
+      const runtime = makeStubRuntime({
+        addMethod: async () => { const e = new Error('msg'); e.code = code; throw e; },
+      });
+      registerSecurityIpc({ ipcMain: ipc, runtime, webContents: () => null });
+      const r = await ipc.invoke('security:add-method', { name: 'pin', secret: '4729' });
+      expect(r).toEqual({ ok: false, error: code });
+    }
+  });
+});

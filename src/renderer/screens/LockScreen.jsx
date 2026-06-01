@@ -77,6 +77,20 @@ export function LockScreen() {
   }, [methods, methodsDetail]);
 
   const [active, setActive] = React.useState(() => usableMethods[0]?.name || 'pin');
+  // CAR-243 round-4 (I4 focus management): per-tab refs + effect so arrow-
+  // key navigation moves keyboard focus alongside aria-selected. Without
+  // this the previously-focused tab gets tabIndex=-1 on re-render and
+  // focus drops to <body>, leaving the user with no visible focus ring.
+  // Per WAI-ARIA tabs pattern: arrow keys must move BOTH selection AND
+  // focus. https://www.w3.org/WAI/ARIA/apg/patterns/tabs/
+  const tabRefs = React.useRef({});
+  const arrowMovedRef = React.useRef(false);
+  React.useEffect(() => {
+    if (!arrowMovedRef.current) return;
+    arrowMovedRef.current = false;
+    const node = tabRefs.current[active];
+    if (node && typeof node.focus === 'function') node.focus();
+  }, [active]);
   React.useEffect(() => {
     if (!usableMethods.find(m => m.name === active) && usableMethods[0]) {
       setActive(usableMethods[0].name);
@@ -177,10 +191,11 @@ export function LockScreen() {
         <ALabel>LEDGER · LOCKED</ALabel>
 
         {usableMethods.length > 1 && (
-          // CAR-243 round-3 (I4): WAI-ARIA tabs pattern — roving tabindex,
-          // arrow-key navigation, aria-controls wiring the tab to its panel.
-          // Without this the tablist is announced but only mouse-clickable;
-          // keyboard users can't move between methods.
+          // CAR-243 round-3/4 (I4): WAI-ARIA tabs pattern — roving tabindex,
+          // arrow-key navigation moving BOTH selection AND focus, aria-controls
+          // wiring the tab to its panel. Round-4 fixes: focus now follows
+          // arrow-key selection (was dropping to <body>), and the `tabpanel`
+          // role is gated so `aria-labelledby` only points at a rendered id.
           <div role="tablist" aria-label="Unlock methods" style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}
             onKeyDown={(e) => {
               if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight' && e.key !== 'Home' && e.key !== 'End') return;
@@ -191,12 +206,14 @@ export function LockScreen() {
               if (e.key === 'ArrowRight') nextIdx = (idx + 1) % usableMethods.length;
               if (e.key === 'Home')       nextIdx = 0;
               if (e.key === 'End')        nextIdx = usableMethods.length - 1;
+              arrowMovedRef.current = true;
               setActive(usableMethods[nextIdx].name);
             }}
           >
             {usableMethods.map(m => (
               <button
                 key={m.name}
+                ref={el => { if (el) tabRefs.current[m.name] = el; }}
                 type="button"
                 role="tab"
                 id={`unlock-tab-${m.name}`}
@@ -222,76 +239,82 @@ export function LockScreen() {
           </div>
         )}
 
+        {/* CAR-243 round-4 (I4b): only attach tabpanel semantics when there
+            are real tabs to label this panel. Otherwise `aria-labelledby`
+            would point at a non-existent id (broken aria reference) and
+            screen readers would announce an empty accessible name. The
+            children are identical between the two branches; only the
+            outer wrapper's a11y attributes differ. */}
         <div
-          id="unlock-tabpanel"
-          role="tabpanel"
-          aria-labelledby={`unlock-tab-${active}`}
+          {...(usableMethods.length > 1
+            ? { id: 'unlock-tabpanel', role: 'tabpanel', 'aria-labelledby': `unlock-tab-${active}` }
+            : {})}
           style={{ display: 'flex', flexDirection: 'column', gap: 16 }}
         >
-        <div style={{ fontSize: 14, color: A.ink }}>
-          {active === 'passkey'
-            ? 'PRESS UNLOCK AND APPROVE ON YOUR AUTHENTICATOR'
-            : `ENTER ${active.toUpperCase()} TO UNLOCK`}
-        </div>
+          <div style={{ fontSize: 14, color: A.ink }}>
+            {active === 'passkey'
+              ? 'PRESS UNLOCK AND APPROVE ON YOUR AUTHENTICATOR'
+              : `ENTER ${active.toUpperCase()} TO UNLOCK`}
+          </div>
 
-        {active !== 'passkey' && (
-          <input
-            type={active === 'recovery' ? 'text' : 'password'}
-            inputMode={active === 'pin' ? 'numeric' : 'text'}
-            autoFocus
-            value={secret}
-            onChange={e => setSecret(e.target.value)}
-            aria-label={TAB_LABELS[active] || active}
-            disabled={working || lockedOut}
+          {active !== 'passkey' && (
+            <input
+              type={active === 'recovery' ? 'text' : 'password'}
+              inputMode={active === 'pin' ? 'numeric' : 'text'}
+              autoFocus
+              value={secret}
+              onChange={e => setSecret(e.target.value)}
+              aria-label={TAB_LABELS[active] || active}
+              disabled={working || lockedOut}
+              style={{
+                fontFamily: A.font,
+                fontSize: active === 'pin' ? 18 : 14,
+                letterSpacing: active === 'pin' ? 4 : 1,
+                padding: '8px 10px',
+                background: A.bg,
+                color: A.ink,
+                border: `1px solid ${A.rule}`,
+                outline: 'none',
+              }}
+            />
+          )}
+
+          {error && (
+            <div role="alert" style={{ fontSize: 11, letterSpacing: 1.2, color: A.neg, textTransform: 'uppercase' }}>
+              {error}
+            </div>
+          )}
+
+          {lockedOut && (
+            <div role="status" style={{ fontSize: 11, letterSpacing: 1.2, color: A.muted, textTransform: 'uppercase' }}>
+              LOCKED · {formatRemaining(remainingMs)} REMAINING
+            </div>
+          )}
+
+          {working && (
+            <div role="status" style={{ fontSize: 11, letterSpacing: 1.2, color: A.muted, textTransform: 'uppercase' }}>
+              WORKING…
+            </div>
+          )}
+
+          <button
+            type="submit"
+            disabled={(active !== 'passkey' && !secret) || working || lockedOut}
             style={{
               fontFamily: A.font,
-              fontSize: active === 'pin' ? 18 : 14,
-              letterSpacing: active === 'pin' ? 4 : 1,
-              padding: '8px 10px',
-              background: A.bg,
-              color: A.ink,
-              border: `1px solid ${A.rule}`,
-              outline: 'none',
+              fontSize: 12,
+              letterSpacing: 1.4,
+              textTransform: 'uppercase',
+              padding: '10px 14px',
+              background: A.ink,
+              color: A.bg,
+              border: `1px solid ${A.ink}`,
+              cursor: ((active !== 'passkey' && !secret) || working || lockedOut) ? 'not-allowed' : 'pointer',
+              opacity: ((active !== 'passkey' && !secret) || working || lockedOut) ? 0.5 : 1,
             }}
-          />
-        )}
-
-        {error && (
-          <div role="alert" style={{ fontSize: 11, letterSpacing: 1.2, color: A.neg, textTransform: 'uppercase' }}>
-            {error}
-          </div>
-        )}
-
-        {lockedOut && (
-          <div role="status" style={{ fontSize: 11, letterSpacing: 1.2, color: A.muted, textTransform: 'uppercase' }}>
-            LOCKED · {formatRemaining(remainingMs)} REMAINING
-          </div>
-        )}
-
-        {working && (
-          <div role="status" style={{ fontSize: 11, letterSpacing: 1.2, color: A.muted, textTransform: 'uppercase' }}>
-            WORKING…
-          </div>
-        )}
-
-        <button
-          type="submit"
-          disabled={(active !== 'passkey' && !secret) || working || lockedOut}
-          style={{
-            fontFamily: A.font,
-            fontSize: 12,
-            letterSpacing: 1.4,
-            textTransform: 'uppercase',
-            padding: '10px 14px',
-            background: A.ink,
-            color: A.bg,
-            border: `1px solid ${A.ink}`,
-            cursor: ((active !== 'passkey' && !secret) || working || lockedOut) ? 'not-allowed' : 'pointer',
-            opacity: ((active !== 'passkey' && !secret) || working || lockedOut) ? 0.5 : 1,
-          }}
-        >
-          {working ? 'UNLOCKING…' : 'UNLOCK'}
-        </button>
+          >
+            {working ? 'UNLOCKING…' : 'UNLOCK'}
+          </button>
         </div>
       </form>
     </div>

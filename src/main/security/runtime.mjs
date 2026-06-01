@@ -409,12 +409,21 @@ export function createRuntime({ io, now = () => Date.now() }) {
         await disableIo.decryptToPlaintext(mk);
       }
       // Phase 2: drop wrappers + remove encrypted store + security file.
-      // If this throws, the staged .tmp is discarded by Phase 3 not
-      // running; the user retains their encrypted store and is asked to
-      // retry. The worst outcome is "disable failed, security still on" —
-      // never "disabled with plaintext leaked alongside ciphertext".
+      // If this throws, we explicitly discard the staged plaintext via
+      // disableIo.discardStagedPlaintext (CAR-243 round-4) so the `.tmp`
+      // doesn't linger as plaintext-on-disk. The user retains their
+      // encrypted store and is asked to retry. The worst outcome is
+      // "disable failed, security still on" — never "disabled with
+      // plaintext leaked alongside ciphertext" and never "leftover .tmp".
       if (disableIo && typeof disableIo.wipeSecurity === 'function') {
-        await disableIo.wipeSecurity();
+        try {
+          await disableIo.wipeSecurity();
+        } catch (wipeErr) {
+          if (staged && disableIo && typeof disableIo.discardStagedPlaintext === 'function') {
+            try { await disableIo.discardStagedPlaintext(); } catch { /* best effort */ }
+          }
+          throw wipeErr;
+        }
       }
       // Phase 3: atomically rename the staged plaintext into place.
       if (staged && disableIo && typeof disableIo.commitPlaintext === 'function') {

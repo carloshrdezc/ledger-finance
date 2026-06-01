@@ -188,6 +188,87 @@ describe('CAR-243 — disableSecurity tears down wrappers + plaintext fallback',
     expect(r.ok).toBe(true);
     expect(order).toEqual(['stage', 'wipe', 'commit']);
   });
+
+  // CAR-243 round-4 (C2 production-cleanup gap from independent re-review):
+  // when wipeSecurity throws, the runtime must invoke
+  // disableIo.discardStagedPlaintext so the orphan `.tmp` is unlinked and
+  // plaintext never lingers on disk between retries.
+  it('C2 round-4: wipe throw triggers discardStagedPlaintext (orphan-tmp cleanup)', async () => {
+    const { runtime } = await setupRuntimeWith({ pin: { secret: '4729', kdfParams: FAST_PIN_ARGON } });
+    await runtime.unlockPin('4729');
+    const calls = { staged: 0, wiped: 0, committed: 0, discarded: 0 };
+    const disableIo = {
+      async stagePlaintext() { calls.staged++; },
+      async wipeSecurity() { calls.wiped++; throw new Error('EBUSY'); },
+      async commitPlaintext() { calls.committed++; },
+      async discardStagedPlaintext() { calls.discarded++; },
+    };
+    let threw = null;
+    try { await runtime.disableSecurity({ disableIo }); }
+    catch (e) { threw = e; }
+    expect(threw && threw.message).toMatch(/EBUSY/);
+    expect(calls.staged).toBe(1);
+    expect(calls.wiped).toBe(1);
+    expect(calls.committed).toBe(0);     // never commits on wipe throw
+    expect(calls.discarded).toBe(1);     // CRITICAL: cleanup invoked
+    expect(runtime.getMk()).toBe(null);  // round-2 invariant still holds
+  });
+
+  // CAR-243 round-4: end-to-end real-fs assertion that the orphan-`.tmp`
+  // does not survive a Phase-2 throw. We simulate the production wiring
+  // (the actual `disableIo` shape from src/main/index.js) and verify the
+  // file system has no `.tmp` after the failed disable.
+  it('C2 round-4: real-fs orphan `.tmp` is unlinked when wipe throws', async () => {
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+    const os = await import('node:os');
+
+    const dir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'car243-c2-'));
+    const ledgerPath = path.join(dir, 'ledger.json');
+    const tmpPath = `${ledgerPath}.tmp`;
+    try {
+      // Mimic the production stage step: write some bytes to the .tmp path.
+      let pendingTmp = null;
+      const disableIo = {
+        async stagePlaintext() {
+          await fs.promises.writeFile(tmpPath, '{"plain":"data"}');
+          pendingTmp = tmpPath;
+        },
+        async wipeSecurity() { throw new Error('EBUSY'); },
+        async commitPlaintext() {
+          if (!pendingTmp) return;
+          const t = pendingTmp; pendingTmp = null;
+          await fs.promises.rename(t, ledgerPath);
+        },
+        async discardStagedPlaintext() {
+          if (!pendingTmp) return;
+          const t = pendingTmp; pendingTmp = null;
+          try { await fs.promises.unlink(t); }
+          catch (err) { if (err && err.code !== 'ENOENT') throw err; }
+        },
+      };
+
+      const { runtime } = await setupRuntimeWith({ pin: { secret: '4729', kdfParams: FAST_PIN_ARGON } });
+      await runtime.unlockPin('4729');
+
+      let threw = null;
+      try { await runtime.disableSecurity({ disableIo }); }
+      catch (e) { threw = e; }
+      expect(threw).not.toBe(null);
+      // The .tmp file MUST NOT exist after a failed wipe.
+      let tmpExists = true;
+      try { await fs.promises.access(tmpPath); }
+      catch (err) { if (err && err.code === 'ENOENT') tmpExists = false; }
+      expect(tmpExists).toBe(false);
+      // The decrypted ledger MUST NOT exist either (no commit happened).
+      let ledgerExists = true;
+      try { await fs.promises.access(ledgerPath); }
+      catch (err) { if (err && err.code === 'ENOENT') ledgerExists = false; }
+      expect(ledgerExists).toBe(false);
+    } finally {
+      await fs.promises.rm(dir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe('CAR-243 — passkey unlock via raw WK', () => {

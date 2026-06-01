@@ -142,25 +142,31 @@ export function SecuritySetupWizard({ onDone, onCancel, isElectron = (typeof win
     if (typeof onDone === 'function') onDone(captured);
   }
 
-  // CAR-243 round-3 (I2 UX hint): if the user enrolled a passkey then
-  // backs out before commit, the WebAuthn credential exists at the OS but
-  // is orphaned (we never persisted the wrapped key alongside it). We
-  // can't programmatically revoke it (browsers don't expose that API), so
-  // we surface a one-line hint pointing the user at their OS settings.
+  // CAR-243 round-3/4 (I2): if the user enrolled a passkey then bails out
+  // before commit, the WebAuthn credential exists at the OS but is
+  // orphaned (we never persisted the wrapped key alongside it). We can't
+  // programmatically revoke it (browsers don't expose that API), so we
+  // surface a one-line in-app hint pointing the user at their OS settings.
+  // Round-4 fixes the hint to be inline UI instead of `window.alert`
+  // (alert blocks the renderer, can't be styled, looks like a system
+  // error in Electron) and gates a confirmation step so the user reads
+  // it before the wizard tears down.
+  const [pendingOrphanCancel, setPendingOrphanCancel] = React.useState(false);
   function cancelWithHint() {
-    if (passkey && typeof onCancel === 'function') {
-      // Best-effort warning; non-blocking.
-      try {
-        if (typeof window !== 'undefined' && typeof window.alert === 'function') {
-          window.alert(
-            'A passkey was enrolled at your OS / browser before you cancelled. ' +
-            'No data is at risk, but you may want to delete the orphaned credential ' +
-            'from your OS keychain or browser passkey manager.'
-          );
-        }
-      } catch { /* alert blocked — that's fine */ }
+    if (passkey) {
+      // Show the inline notice; the actual cancel only fires when the
+      // user acknowledges via the confirm button below.
+      setPendingOrphanCancel(true);
+      return;
     }
     if (typeof onCancel === 'function') onCancel();
+  }
+  function confirmOrphanCancel() {
+    setPendingOrphanCancel(false);
+    if (typeof onCancel === 'function') onCancel();
+  }
+  function dismissOrphanCancel() {
+    setPendingOrphanCancel(false);
   }
 
   return (
@@ -175,6 +181,33 @@ export function SecuritySetupWizard({ onDone, onCancel, isElectron = (typeof win
       }}>
         <ALabel>SECURE YOUR DATA · STEP {step} OF 3</ALabel>
         <ARule />
+
+        {/* CAR-243 round-4 (I2): inline orphan-passkey acknowledgement. Replaces
+            the round-3 `window.alert` — styled, non-blocking, and the user
+            must explicitly confirm before the wizard tears down. */}
+        {pendingOrphanCancel && (
+          <div
+            role="alertdialog"
+            aria-label="Orphan passkey warning"
+            style={{
+              display: 'flex', flexDirection: 'column', gap: 10,
+              padding: 12, border: `1px solid ${A.neg}`, background: A.bg,
+              fontSize: 12, color: A.ink, letterSpacing: 1.2,
+            }}
+          >
+            <ALabel>ORPHAN PASSKEY · CONFIRM CANCEL</ALabel>
+            <div style={{ fontSize: 12, lineHeight: 1.5, color: A.muted, letterSpacing: 0 }}>
+              A passkey was enrolled at your OS or browser before you cancelled.
+              No data is at risk, but the credential is now orphaned. You may
+              want to delete it from your OS keychain or browser passkey
+              manager.
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button type="button" onClick={dismissOrphanCancel} style={btn(false)}>KEEP EDITING</button>
+              <button type="button" onClick={confirmOrphanCancel} style={btn(true)}>CANCEL ANYWAY</button>
+            </div>
+          </div>
+        )}
 
 
         {step === 1 && (
@@ -252,6 +285,9 @@ export function SecuritySetupWizard({ onDone, onCancel, isElectron = (typeof win
             {error && <div role="alert" style={{ fontSize: 11, color: A.neg, letterSpacing: 1.2 }}>{error}</div>}
             <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
               <button type="button" onClick={() => setStep(1)} style={btn(false)}>BACK</button>
+              {/* CAR-243 round-4 (I2): Step 2 also gets a CANCEL so the
+                  orphan-passkey hint fires without forcing Back→Cancel. */}
+              <button type="button" onClick={cancelWithHint} style={btn(false)}>CANCEL</button>
               <button
                 type="button"
                 disabled={!step2Valid() || working}

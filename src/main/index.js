@@ -167,6 +167,21 @@ app.whenReady().then(async () => {
       pendingPlaintextTmp = null;
       await fs.promises.rename(tmp, ledgerPath);
     },
+    // CAR-243 round-4: explicit cleanup for the orphan-`.tmp` case. Called
+    // from disableSecurity when Phase 2 (wipeSecurity) throws, so the
+    // staged plaintext doesn't linger on disk. Idempotent + ENOENT-tolerant
+    // because Phase 1 may not have run, the unlink may race with retries,
+    // and a Windows file-lock turns into ENOENT after a previous unlink.
+    async discardStagedPlaintext() {
+      if (!pendingPlaintextTmp) return;
+      const tmp = pendingPlaintextTmp;
+      pendingPlaintextTmp = null;
+      try {
+        await fs.promises.unlink(tmp);
+      } catch (err) {
+        if (err && err.code !== 'ENOENT') throw err;
+      }
+    },
     async wipeSecurity() {
       for (const p of [securityPath, encryptedPath]) {
         try { await fs.promises.unlink(p); }

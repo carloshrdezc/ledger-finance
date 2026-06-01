@@ -17,12 +17,46 @@ import { runSetupMigration } from './storeCodec.mjs';
 // against before the runtime touches them. Sanitize errors so we never
 // echo stack traces or absolute file paths back to the renderer.
 const ALLOWED_METHOD_NAMES = new Set(['pin', 'password', 'passkey']);
+// CAR-243 round-3/4 (I8): only surface error codes from this explicit
+// allow-list. Round-3 used a broad `/^[A-Z0-9_]{2,40}$/` regex; the
+// re-reviewer pointed out it would happily echo any UPPER_SNAKE
+// `err.code` (incl. Node fs codes like ENOENT/EBUSY/EPERM/EACCES that
+// leak filesystem state to the renderer, and any future
+// `throw new Error('PATH_C_USERS_…')` regression). The tighter list
+// below covers every code intentionally surfaced by the runtime, the
+// validator, and the wrappers; everything else collapses to the
+// channel-specific fallback (`SETUP_FAILED` / `ADD_FAILED` / etc.).
+const SAFE_ERROR_CODES = new Set([
+  // Validation (this file)
+  'PAYLOAD_REQUIRED',
+  'INVALID_METHOD_NAME',
+  'INVALID_PIN',
+  'INVALID_PASSWORD',
+  'INVALID_PASSKEY_KDF',
+  'INVALID_PASSKEY_WK',
+  // Runtime / state (security/runtime.mjs + storeCodec.mjs)
+  'NOT_UNLOCKED',
+  'NOT_ENABLED',
+  'METHOD_EXISTS',
+  'UNKNOWN_METHOD',
+  'LAST_METHOD',
+  'LOCKED',
+  'STORE_INCONSISTENT',
+  'BAD_SECRET',
+  'WRONG_KEY',
+  'NEEDS_RECOVERY',
+]);
+// Retained for shape validation only (defense against future codes that
+// don't even look like UPPER_SNAKE — those should never be surfaced).
 const SAFE_ERROR_RE = /^[A-Z0-9_]{2,40}$/;
 
 function sanitizeError(err, fallback) {
-  // Prefer machine-readable codes (UPPER_SNAKE) over freeform messages.
-  const code = err && (err.code || (typeof err.message === 'string' && SAFE_ERROR_RE.test(err.message) ? err.message : null));
-  if (code && SAFE_ERROR_RE.test(code)) return code;
+  if (!err) return fallback;
+  // Prefer explicit codes; reject anything not in the allow-list.
+  const candidate = err.code || (typeof err.message === 'string' ? err.message : null);
+  if (typeof candidate === 'string' && SAFE_ERROR_RE.test(candidate) && SAFE_ERROR_CODES.has(candidate)) {
+    return candidate;
+  }
   return fallback;
 }
 
