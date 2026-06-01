@@ -11,6 +11,38 @@
 
 import { runSetupMigration } from './storeCodec.mjs';
 
+// CAR-243 round-3 (I8): centralized payload validation + error sanitization
+// for the Settings-management IPC handlers. Renderer passes user-shaped
+// payloads (typed PINs, passwords, passkey blobs) which we must defend
+// against before the runtime touches them. Sanitize errors so we never
+// echo stack traces or absolute file paths back to the renderer.
+const ALLOWED_METHOD_NAMES = new Set(['pin', 'password', 'passkey']);
+const SAFE_ERROR_RE = /^[A-Z0-9_]{2,40}$/;
+
+function sanitizeError(err, fallback) {
+  // Prefer machine-readable codes (UPPER_SNAKE) over freeform messages.
+  const code = err && (err.code || (typeof err.message === 'string' && SAFE_ERROR_RE.test(err.message) ? err.message : null));
+  if (code && SAFE_ERROR_RE.test(code)) return code;
+  return fallback;
+}
+
+function validateAddMethod(payload) {
+  if (!payload || typeof payload !== 'object') return 'PAYLOAD_REQUIRED';
+  const { name, secret, kdf } = payload;
+  if (!ALLOWED_METHOD_NAMES.has(name)) return 'INVALID_METHOD_NAME';
+  // pin/password expect a typed string secret; passkey-raw expects bytes.
+  if (name === 'pin') {
+    if (typeof secret !== 'string' || !/^[0-9]{4,6}$/.test(secret)) return 'INVALID_PIN';
+  } else if (name === 'password') {
+    if (typeof secret !== 'string' || secret.length < 8 || secret.length > 1024) return 'INVALID_PASSWORD';
+  } else if (name === 'passkey') {
+    if (kdf !== 'raw') return 'INVALID_PASSKEY_KDF';
+    const bytes = secret instanceof Uint8Array ? secret : (Array.isArray(secret) ? Uint8Array.from(secret) : null);
+    if (!bytes || bytes.length !== 32) return 'INVALID_PASSKEY_WK';
+  }
+  return null;
+}
+
 export function registerSecurityIpc({
   ipcMain,
   runtime,
@@ -107,24 +139,37 @@ export function registerSecurityIpc({
       emitState();
       return { ok: true, recoveryPhrase: out.recoveryPhrase };
     } catch (err) {
-      return { ok: false, error: err && err.message || 'SETUP_FAILED' };
+      // CAR-243 round-3 (I8): sanitize so a stack trace / fs path can't leak.
+      return { ok: false, error: sanitizeError(err, 'SETUP_FAILED') };
     }
   });
 
   ipcMain.handle('security:add-method', async (_event, payload) => {
+    // CAR-243 round-3 (I8): validate before touching runtime so a malformed
+    // payload from a compromised renderer can't reach Argon2id / KDF code.
+    const invalid = validateAddMethod(payload);
+    if (invalid) return { ok: false, error: invalid };
     try {
       const r = await runtime.addMethod(payload || {});
       emitState();
       return r;
     } catch (err) {
-      return { ok: false, error: err && err.code || err && err.message || 'ADD_FAILED' };
+      // Never echo err.message verbatim — could leak path or stack hints.
+      return { ok: false, error: sanitizeError(err, 'ADD_FAILED') };
     }
   });
 
   ipcMain.handle('security:remove-method', async (_event, methodName) => {
-    const r = await runtime.removeMethod(methodName);
-    emitState();
-    return r;
+    if (typeof methodName !== 'string' || !ALLOWED_METHOD_NAMES.has(methodName)) {
+      return { ok: false, error: 'INVALID_METHOD_NAME' };
+    }
+    try {
+      const r = await runtime.removeMethod(methodName);
+      emitState();
+      return r;
+    } catch (err) {
+      return { ok: false, error: sanitizeError(err, 'REMOVE_FAILED') };
+    }
   });
 
   ipcMain.handle('security:reveal-recovery', async (_event, payload) => {

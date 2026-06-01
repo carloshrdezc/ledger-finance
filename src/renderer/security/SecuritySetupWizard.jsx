@@ -57,7 +57,14 @@ export function SecuritySetupWizard({ onDone, onCancel, isElectron = (typeof win
   const [passkey, setPasskey] = React.useState(null); // {credentialId, rpId, salt, prfPath, wk, userHandle}
   const [phrase, setPhrase] = React.useState(null);
   const [phraseAck, setPhraseAck] = React.useState(false);
+  const [phraseHidden, setPhraseHidden] = React.useState(false);
   const [error, setError] = React.useState(null);
+
+  // CAR-243 round-3 (I5): unconditionally drop the recovery phrase from
+  // memory on unmount. Even if the parent forgets to clear it, we don't
+  // want it lingering in the React tree if the wizard is teared down for
+  // any reason (route change, error boundary, app reload).
+  React.useEffect(() => () => { setPhrase(null); }, []);
 
   const anyChosen = chosen.pin || chosen.password || chosen.passkey;
 
@@ -104,19 +111,56 @@ export function SecuritySetupWizard({ onDone, onCancel, isElectron = (typeof win
         userHandle: passkey.userHandle ? Array.from(passkey.userHandle) : null,
       };
     }
-    // I9: OS escrow defaults ON in Electron, OFF in browser. The toggle
-    // lives in Settings post-setup; we just seed the safer default here.
-    const result = await setup({ methods, osEscrow: !!isElectron });
-    if (!result || !result.ok) {
-      setError((result && result.error) || 'SETUP FAILED');
-      return;
+    // CAR-243 round-3 (I1): wrap the commit in try/catch. setup() can
+    // reject from IPC failures (main process crashed, channel torn down,
+    // schema-validation errors thrown after the round-2 hardening). A
+    // bare await would let the rejection bubble to the React tree as an
+    // unhandled error; we want a clean inline alert instead.
+    try {
+      // I9: OS escrow defaults ON in Electron, OFF in browser. The toggle
+      // lives in Settings post-setup; we just seed the safer default here.
+      const result = await setup({ methods, osEscrow: !!isElectron });
+      if (!result || !result.ok) {
+        setError((result && result.error) || 'SETUP FAILED');
+        return;
+      }
+      setPhrase(result.recoveryPhrase);
+      setStep(3);
+    } catch (err) {
+      // Surface a redacted message — never leak err.stack into the UI.
+      setError((err && err.message) || 'SETUP FAILED');
     }
-    setPhrase(result.recoveryPhrase);
-    setStep(3);
   }
 
   function finish() {
-    if (typeof onDone === 'function') onDone(phrase);
+    // CAR-243 round-3 (I5): drop the phrase from state immediately on
+    // confirm so it does not linger in the React tree after the wizard
+    // closes. The parent gets a single ref via onDone; we hand it off and
+    // forget it.
+    const captured = phrase;
+    setPhrase(null);
+    if (typeof onDone === 'function') onDone(captured);
+  }
+
+  // CAR-243 round-3 (I2 UX hint): if the user enrolled a passkey then
+  // backs out before commit, the WebAuthn credential exists at the OS but
+  // is orphaned (we never persisted the wrapped key alongside it). We
+  // can't programmatically revoke it (browsers don't expose that API), so
+  // we surface a one-line hint pointing the user at their OS settings.
+  function cancelWithHint() {
+    if (passkey && typeof onCancel === 'function') {
+      // Best-effort warning; non-blocking.
+      try {
+        if (typeof window !== 'undefined' && typeof window.alert === 'function') {
+          window.alert(
+            'A passkey was enrolled at your OS / browser before you cancelled. ' +
+            'No data is at risk, but you may want to delete the orphaned credential ' +
+            'from your OS keychain or browser passkey manager.'
+          );
+        }
+      } catch { /* alert blocked — that's fine */ }
+    }
+    if (typeof onCancel === 'function') onCancel();
   }
 
   return (
@@ -150,7 +194,7 @@ export function SecuritySetupWizard({ onDone, onCancel, isElectron = (typeof win
               </label>
             ))}
             <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-              <button type="button" onClick={onCancel} style={btn(false)}>CANCEL</button>
+              <button type="button" onClick={cancelWithHint} style={btn(false)}>CANCEL</button>
               <button
                 type="button"
                 disabled={!step1Valid()}
@@ -227,14 +271,30 @@ export function SecuritySetupWizard({ onDone, onCancel, isElectron = (typeof win
             </div>
             <pre
               aria-label="recovery-phrase"
+              data-hidden={phraseHidden ? 'true' : 'false'}
               style={{
                 fontFamily: A.font, fontSize: 14, letterSpacing: 1, lineHeight: 1.6,
                 padding: 12, background: A.bg, border: `1px solid ${A.rule}`, color: A.ink,
                 whiteSpace: 'pre-wrap', wordBreak: 'break-word', margin: 0,
+                filter: phraseHidden ? 'blur(8px)' : 'none',
+                userSelect: phraseHidden ? 'none' : 'auto',
               }}
             >
-              {phrase}
+              {phraseHidden ? '••• ••• ••• ••• ••• ••• ••• ••• ••• ••• ••• •••' : phrase}
             </pre>
+            <div style={{ display: 'flex', gap: 8 }}>
+              {/* CAR-243 round-3 (I5): give the user a way to mask the phrase
+                  before stepping away from the screen. State is local — we
+                  never round-trip through the bridge or storage. */}
+              <button
+                type="button"
+                onClick={() => setPhraseHidden(h => !h)}
+                style={btn(false)}
+                aria-label={phraseHidden ? 'show-phrase' : 'hide-phrase'}
+              >
+                {phraseHidden ? 'SHOW' : 'HIDE'}
+              </button>
+            </div>
             <label style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13 }}>
               <input
                 type="checkbox" checked={phraseAck}

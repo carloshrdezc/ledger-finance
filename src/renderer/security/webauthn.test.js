@@ -29,6 +29,14 @@ describe('passkeyMatchesOrigin', () => {
   it('returns false for empty rpId', () => {
     expect(passkeyMatchesOrigin('', 'example.com')).toBe(false);
   });
+  // CAR-243 round-3 (I3): hostnames are case-insensitive per RFC 1035.
+  // A stored mixed-case rpId must still match the runtime origin.
+  it('matches case-insensitively when stored rpId has mixed case', () => {
+    expect(passkeyMatchesOrigin('Example.COM', 'example.com')).toBe(true);
+  });
+  it('matches case-insensitively when origin has mixed case', () => {
+    expect(passkeyMatchesOrigin('example.com', 'APP.Example.com')).toBe(true);
+  });
 });
 
 describe('createPasskey + getPasskeyWk', () => {

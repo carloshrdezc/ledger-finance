@@ -91,6 +91,13 @@ export function SecuritySettings({ isElectron = detectIsElectron() }) {
   const [error, setError] = React.useState(null);
   const [info, setInfo] = React.useState(null);
 
+  // CAR-243 round-3 (I5): always drop the revealed/rotated recovery phrase
+  // from local state when SecuritySettings unmounts (route change, tab
+  // switch, app close). Without this the phrase outlives the visible UI
+  // and could be retained by React devtools or memory dumps. Cheap
+  // belt-and-braces — the bridge already controls IPC-level lifetime.
+  React.useEffect(() => () => { setPhrase(null); }, []);
+
   const usableMethodNames = (methods || []).filter(name => {
     if (name !== 'passkey') return true;
     const detail = (methodsDetail || []).find(m => m.name === 'passkey');
@@ -308,16 +315,31 @@ export function SecuritySettings({ isElectron = detectIsElectron() }) {
       {error && <div role="alert" style={{ fontSize: 11, color: A.neg, letterSpacing: 1.2, textTransform: 'uppercase' }}>{error}</div>}
       {info && <div role="status" style={{ fontSize: 11, color: A.muted, letterSpacing: 1.2, textTransform: 'uppercase' }}>{info}</div>}
       {phrase && (
-        <pre
-          aria-label="recovery-phrase"
-          style={{
-            fontFamily: A.font, fontSize: 13, padding: 10,
-            border: `1px solid ${A.rule}`, background: A.bg, color: A.ink,
-            whiteSpace: 'pre-wrap', wordBreak: 'break-word', margin: 0,
-          }}
-        >
-          {phrase}
-        </pre>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <pre
+            aria-label="recovery-phrase"
+            style={{
+              fontFamily: A.font, fontSize: 13, padding: 10,
+              border: `1px solid ${A.rule}`, background: A.bg, color: A.ink,
+              whiteSpace: 'pre-wrap', wordBreak: 'break-word', margin: 0,
+            }}
+          >
+            {phrase}
+          </pre>
+          {/* CAR-243 round-3 (I5): explicit user-driven dismissal of the
+              phrase. Beats waiting for the unmount effect when the user
+              just wants the secret off-screen. */}
+          <div>
+            <button
+              type="button"
+              onClick={() => setPhrase(null)}
+              aria-label="hide-phrase"
+              style={btn(false)}
+            >
+              HIDE
+            </button>
+          </div>
+        </div>
       )}
 
       {pending && pending.kind === 'add' && (
@@ -330,7 +352,12 @@ export function SecuritySettings({ isElectron = detectIsElectron() }) {
       )}
       {pending && pending.kind === 'reveal' && (
         <ReauthForm
-          methods={usableMethodNames}
+          // CAR-243 round-3 (I6): passkey isn't a secret-based ReauthForm
+          // path — the form prompts for a typed secret which passkey can't
+          // satisfy. Filter it out so the user only sees pin/password/recovery.
+          // The bridge's revealRecovery still understands passkey method via
+          // a separate flow if/when we add an inline ceremony button here.
+          methods={usableMethodNames.filter(n => n !== 'passkey')}
           label="REVEAL"
           onSubmit={commitReveal}
           onCancel={() => setPending(null)}

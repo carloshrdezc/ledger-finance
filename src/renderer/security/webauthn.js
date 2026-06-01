@@ -144,9 +144,17 @@ export async function getPasskeyWk({
 
 // Spec edge-case row 4: hide passkey methods whose RP ID doesn't match the
 // current origin. Used by LockScreen + SecuritySettings on the browser path.
+//
+// CAR-243 round-3 (I3): RFC 1035 hostnames are case-insensitive. Browsers
+// already normalize the runtime origin to lowercase, but a stored rpId
+// could have been persisted with mixed case (manual seed, schema import,
+// migrated config). Lowercase both sides before comparing so a stored
+// `Localhost` does not silently fail to match a runtime `localhost`.
 export function passkeyMatchesOrigin(rpId, origin = (typeof window !== 'undefined' ? window.location?.hostname : '')) {
   if (!rpId) return false;
   if (!origin) return true; // no origin context (e.g. tests) — defer to caller.
+  const a = String(rpId).toLowerCase();
+  const b = String(origin).toLowerCase();
   // Permissive match: rpId can be a registrable domain suffix of origin.
-  return origin === rpId || origin.endsWith('.' + rpId);
+  return b === a || b.endsWith('.' + a);
 }

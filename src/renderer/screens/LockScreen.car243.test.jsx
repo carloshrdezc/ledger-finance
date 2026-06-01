@@ -46,8 +46,11 @@ describe('LockScreen — multi-method (CAR-243)', () => {
     );
     await waitFor(() => expect(getByRole('tab', { name: /PASSWORD/ })).toBeTruthy());
     fireEvent.click(getByRole('tab', { name: /PASSWORD/ }));
-    await waitFor(() => expect(getByLabelText('PASSWORD')).toBeTruthy());
-    fireEvent.change(getByLabelText('PASSWORD'), { target: { value: 'fishfish' } });
+    // CAR-243 round-3 (I4): the tabpanel is now aria-labelledby its active
+    // tab, so the accessible name "PASSWORD" applies to BOTH the input
+    // (aria-label) and the tabpanel <div>. Scope to <input> to disambiguate.
+    await waitFor(() => expect(getByLabelText('PASSWORD', { selector: 'input' })).toBeTruthy());
+    fireEvent.change(getByLabelText('PASSWORD', { selector: 'input' }), { target: { value: 'fishfish' } });
     fireEvent.click(getByRole('button', { name: /UNLOCK/ }));
     await waitFor(() => expect(bridge.unlockPassword).toHaveBeenCalledWith('fishfish'));
   });

@@ -127,21 +127,29 @@ app.whenReady().then(async () => {
   ipcMain.handle('ledger-db:flush', () => ledgerStore.flush());
 
   // CAR-243: disableIo for "turn security off" (R7 final paragraph).
-  // decryptToPlaintext reads the encrypted blob, decrypts it under the
-  // current MK, and atomically writes it back as ledger-state.json.
-  // wipeSecurity removes both the security config and the encrypted blob,
-  // leaving the user back on today's plaintext flow.
+  // CAR-243 round-3 (C2): split into stage / wipe / commit so a wipe failure
+  // can never leave plaintext on disk alongside an encrypted store. Phase 1
+  // writes plaintext to a `.tmp` sibling. Phase 2 unlinks the encrypted
+  // store + security config. Phase 3 renames the `.tmp` into place. Phase 3
+  // only runs if Phase 2 succeeded; a Phase 2 throw aborts the disable
+  // with the encrypted store intact and no plaintext on disk.
+  let pendingPlaintextTmp = null;
   const disableIo = {
-    async decryptToPlaintext(mk) {
+    async stagePlaintext(mk) {
       const { aeadDecryptString, AEAD_AAD_STORE } = await import('./security/index.mjs');
       let blob;
       try {
         const raw = await fs.promises.readFile(encryptedPath, 'utf8');
         blob = JSON.parse(raw);
       } catch (err) {
-        // No encrypted store yet (setup-then-disable race). Treat as empty.
+        // No encrypted store yet (setup-then-disable race). Stage an empty
+        // object so commitPlaintext can write `{}` deterministically.
         if (err && err.code === 'ENOENT') {
-          await fs.promises.writeFile(ledgerPath, '{}');
+          const dir = path.dirname(ledgerPath);
+          await fs.promises.mkdir(dir, { recursive: true });
+          const tmp = `${ledgerPath}.tmp`;
+          await fs.promises.writeFile(tmp, '{}');
+          pendingPlaintextTmp = tmp;
           return;
         }
         throw err;
@@ -151,6 +159,12 @@ app.whenReady().then(async () => {
       await fs.promises.mkdir(dir, { recursive: true });
       const tmp = `${ledgerPath}.tmp`;
       await fs.promises.writeFile(tmp, json);
+      pendingPlaintextTmp = tmp;
+    },
+    async commitPlaintext() {
+      if (!pendingPlaintextTmp) return;
+      const tmp = pendingPlaintextTmp;
+      pendingPlaintextTmp = null;
       await fs.promises.rename(tmp, ledgerPath);
     },
     async wipeSecurity() {

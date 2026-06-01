@@ -177,13 +177,32 @@ export function LockScreen() {
         <ALabel>LEDGER · LOCKED</ALabel>
 
         {usableMethods.length > 1 && (
-          <div role="tablist" aria-label="Unlock methods" style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+          // CAR-243 round-3 (I4): WAI-ARIA tabs pattern — roving tabindex,
+          // arrow-key navigation, aria-controls wiring the tab to its panel.
+          // Without this the tablist is announced but only mouse-clickable;
+          // keyboard users can't move between methods.
+          <div role="tablist" aria-label="Unlock methods" style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}
+            onKeyDown={(e) => {
+              if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight' && e.key !== 'Home' && e.key !== 'End') return;
+              e.preventDefault();
+              const idx = usableMethods.findIndex(m => m.name === active);
+              let nextIdx = idx;
+              if (e.key === 'ArrowLeft')  nextIdx = (idx - 1 + usableMethods.length) % usableMethods.length;
+              if (e.key === 'ArrowRight') nextIdx = (idx + 1) % usableMethods.length;
+              if (e.key === 'Home')       nextIdx = 0;
+              if (e.key === 'End')        nextIdx = usableMethods.length - 1;
+              setActive(usableMethods[nextIdx].name);
+            }}
+          >
             {usableMethods.map(m => (
               <button
                 key={m.name}
                 type="button"
                 role="tab"
+                id={`unlock-tab-${m.name}`}
                 aria-selected={active === m.name}
+                aria-controls="unlock-tabpanel"
+                tabIndex={active === m.name ? 0 : -1}
                 onClick={() => setActive(m.name)}
                 style={{
                   fontFamily: A.font,
@@ -203,6 +222,12 @@ export function LockScreen() {
           </div>
         )}
 
+        <div
+          id="unlock-tabpanel"
+          role="tabpanel"
+          aria-labelledby={`unlock-tab-${active}`}
+          style={{ display: 'flex', flexDirection: 'column', gap: 16 }}
+        >
         <div style={{ fontSize: 14, color: A.ink }}>
           {active === 'passkey'
             ? 'PRESS UNLOCK AND APPROVE ON YOUR AUTHENTICATOR'
@@ -267,6 +292,7 @@ export function LockScreen() {
         >
           {working ? 'UNLOCKING…' : 'UNLOCK'}
         </button>
+        </div>
       </form>
     </div>
   );

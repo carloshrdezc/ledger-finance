@@ -149,6 +149,45 @@ describe('CAR-243 — disableSecurity tears down wrappers + plaintext fallback',
     expect(runtime.isEnabled()).toBe(false);
     expect(runtime.getMk()).toBe(null);
   });
+
+  // CAR-243 round-3 (C2 lock-in): the disable path must never leave the
+  // staged plaintext committed if wipeSecurity throws. The contract is:
+  // stagePlaintext (writes .tmp) → wipeSecurity (atomic) → commitPlaintext
+  // (renames .tmp into place). A wipeSecurity throw must skip
+  // commitPlaintext so no plaintext rename ever happens.
+  it('C2: wipeSecurity throw aborts before commitPlaintext (no plaintext leak)', async () => {
+    const { runtime } = await setupRuntimeWith({ pin: { secret: '4729', kdfParams: FAST_PIN_ARGON } });
+    await runtime.unlockPin('4729');
+    const calls = { staged: 0, wiped: 0, committed: 0 };
+    const disableIo = {
+      async stagePlaintext() { calls.staged++; },
+      async wipeSecurity() { calls.wiped++; throw new Error('EBUSY: file locked'); },
+      async commitPlaintext() { calls.committed++; },
+    };
+    let threw = null;
+    try { await runtime.disableSecurity({ disableIo }); }
+    catch (e) { threw = e; }
+    expect(threw && threw.message).toMatch(/EBUSY/);
+    expect(calls.staged).toBe(1);          // staging happened
+    expect(calls.wiped).toBe(1);           // wipe was attempted
+    expect(calls.committed).toBe(0);       // CRITICAL: rename never happened
+    // MK is still cleared (round-2 try/finally invariant).
+    expect(runtime.getMk()).toBe(null);
+  });
+
+  it('C2: full happy path runs stage → wipe → commit in order', async () => {
+    const { runtime } = await setupRuntimeWith({ pin: { secret: '4729', kdfParams: FAST_PIN_ARGON } });
+    await runtime.unlockPin('4729');
+    const order = [];
+    const disableIo = {
+      async stagePlaintext() { order.push('stage'); },
+      async wipeSecurity() { order.push('wipe'); },
+      async commitPlaintext() { order.push('commit'); },
+    };
+    const r = await runtime.disableSecurity({ disableIo });
+    expect(r.ok).toBe(true);
+    expect(order).toEqual(['stage', 'wipe', 'commit']);
+  });
 });
 
 describe('CAR-243 — passkey unlock via raw WK', () => {

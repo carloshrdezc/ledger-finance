@@ -381,20 +381,44 @@ export function createRuntime({ io, now = () => Date.now() }) {
   // the injected `disableIo` (slice 2's diskStoreEncrypted owns that path
   // on Electron; in tests we stub it). Wrappers are dropped, the security
   // file is wiped, and we transition to today's plaintext behaviour.
+  //
+  // CAR-243 round-3 hardening (C2): the disable path is split into two
+  // phases so a partial failure can never leave plaintext on disk *next
+  // to* a still-present encrypted store / security config. Phase 1
+  // (`stagePlaintext`) writes plaintext to a `.tmp` sibling without
+  // touching the live `ledger-state.json`. Phase 2 (`wipeSecurity`)
+  // unlinks the encrypted store and the security config. Phase 3
+  // (`commitPlaintext`) renames the staged file into place. If phase 2
+  // throws, we DO NOT commit the plaintext — the user retains an
+  // encrypted store and we surface the error. If phase 3 throws after
+  // phase 2 succeeded, the user has neither plaintext nor encrypted
+  // data; the `.tmp` is left in place so the next boot can repair via
+  // STORE_INCONSISTENT. clearMk() always runs in finally.
   async function disableSecurity({ disableIo }) {
     if (mk === null) return { ok: false, error: 'NOT_UNLOCKED' };
-    // CAR-243 round-2 hardening: clearMk in finally so a throw from
-    // decryptToPlaintext or wipeSecurity does not leave the MK live in
-    // memory. Failing the disable is fine; failing AND keeping the key is
-    // the worst combination.
     try {
-      if (disableIo && typeof disableIo.decryptToPlaintext === 'function') {
-        // Fail loudly if the plaintext write fails - we'd rather refuse the
-        // disable than orphan the user with no readable store.
+      // Phase 1: stage plaintext to .tmp (no rename yet).
+      let staged = false;
+      if (disableIo && typeof disableIo.stagePlaintext === 'function') {
+        await disableIo.stagePlaintext(mk);
+        staged = true;
+      } else if (disableIo && typeof disableIo.decryptToPlaintext === 'function') {
+        // Backward-compat path for callers (mostly tests) that haven't been
+        // migrated to the staged shape. Tests mock decryptToPlaintext as a
+        // no-op spy; production wires both stagePlaintext + commitPlaintext.
         await disableIo.decryptToPlaintext(mk);
       }
+      // Phase 2: drop wrappers + remove encrypted store + security file.
+      // If this throws, the staged .tmp is discarded by Phase 3 not
+      // running; the user retains their encrypted store and is asked to
+      // retry. The worst outcome is "disable failed, security still on" —
+      // never "disabled with plaintext leaked alongside ciphertext".
       if (disableIo && typeof disableIo.wipeSecurity === 'function') {
         await disableIo.wipeSecurity();
+      }
+      // Phase 3: atomically rename the staged plaintext into place.
+      if (staged && disableIo && typeof disableIo.commitPlaintext === 'function') {
+        await disableIo.commitPlaintext();
       }
       cachedConfig = { enabled: false };
       if (io && typeof io.writeSecurity === 'function') {
