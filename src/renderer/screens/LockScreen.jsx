@@ -1,14 +1,20 @@
-// CAR-242: Cold-start / locked-state UI.
+// CAR-242 + CAR-243: Cold-start / locked-state UI.
 //
-// PIN-only this slice (CAR-243 adds password/passkey/recovery). Theme
-// tokens via `A`; all-caps labels via `<ALabel>`; IBM Plex Mono only.
-// The KDF runs in main — Argon2id can hit ~1s on weak hardware so we
-// show a spinner via `working` while the unlock IPC is in flight.
+// Slice 2 was PIN-only. Slice 3 adds password, passkey, and recovery as
+// alternate unlock paths. Method tabs render only when the method is
+// `enabled` in main's state, and the browser path additionally hides
+// passkeys whose RP ID doesn't match the current origin
+// (METHOD_UNAVAILABLE_ON_ORIGIN, spec edge-case row 4).
+//
+// Theme tokens via `A`; all-caps labels via `<ALabel>`; IBM Plex Mono only.
+// The KDF runs in main — Argon2id can hit ~1s on weak hardware so we show
+// a spinner via `working` while the unlock IPC is in flight.
 
 import React from 'react';
 import { A } from '../theme';
 import { ALabel } from '../components/Shared';
 import { useMK } from '../security/useMK';
+import { getPasskeyWk, passkeyMatchesOrigin } from '../security/webauthn';
 
 function formatRemaining(ms) {
   if (ms <= 0) return '0S';
@@ -33,9 +39,51 @@ function useCountdown(lockedUntil) {
   return Math.max(0, target - now);
 }
 
+function classifyError(error) {
+  switch (error) {
+    case 'LOCKED_OUT': return 'TOO MANY ATTEMPTS — TRY AGAIN LATER';
+    case 'METHOD_AUTO_DISABLED': return 'PIN DISABLED — USE ANOTHER METHOD';
+    case 'BAD_SECRET': return 'INCORRECT';
+    case 'NOT_ENABLED': return 'METHOD NOT ENABLED';
+    case 'PHRASE_DECRYPT_FAILED': return 'BAD PHRASE';
+    default: return 'UNLOCK FAILED';
+  }
+}
+
+const TAB_LABELS = {
+  pin: 'PIN',
+  password: 'PASSWORD',
+  passkey: 'PASSKEY',
+  recovery: 'RECOVERY',
+};
+
 export function LockScreen() {
-  const { unlockPin, lockedUntil, working } = useMK();
-  const [pin, setPin] = React.useState('');
+  const mk = useMK();
+  const {
+    unlockPin, unlockPassword, unlockPasskey, unlockRecovery,
+    methods, methodsDetail, lockedUntil, working,
+  } = mk;
+  // Available methods = enabled methods (from main) minus origin-mismatched
+  // passkeys (browser-only filter; Electron passes through).
+  const usableMethods = React.useMemo(() => {
+    const detail = (methodsDetail && methodsDetail.length) ? methodsDetail
+      : (methods || []).map(name => ({ name }));
+    return detail.filter(m => {
+      if (m.name !== 'passkey') return true;
+      // Skip the filter when window.location is unavailable (Electron + tests).
+      if (typeof window === 'undefined' || !window.location) return true;
+      return passkeyMatchesOrigin(m.rpId);
+    });
+  }, [methods, methodsDetail]);
+
+  const [active, setActive] = React.useState(() => usableMethods[0]?.name || 'pin');
+  React.useEffect(() => {
+    if (!usableMethods.find(m => m.name === active) && usableMethods[0]) {
+      setActive(usableMethods[0].name);
+    }
+  }, [usableMethods, active]);
+
+  const [secret, setSecret] = React.useState('');
   const [error, setError] = React.useState(null);
   const [localLockedUntil, setLocalLockedUntil] = React.useState(lockedUntil);
 
@@ -43,29 +91,60 @@ export function LockScreen() {
     setLocalLockedUntil(lockedUntil);
   }, [lockedUntil]);
 
+  React.useEffect(() => {
+    setSecret('');
+    setError(null);
+  }, [active]);
+
   const remainingMs = useCountdown(localLockedUntil);
   const lockedOut = remainingMs > 0;
 
-  const onSubmit = React.useCallback(async event => {
-    event.preventDefault();
-    if (!pin || working || lockedOut) return;
+  async function runUnlock() {
     setError(null);
-    const result = await unlockPin(pin);
-    if (result?.success) {
-      setPin('');
+    let result;
+    try {
+      if (active === 'pin') result = await unlockPin(secret);
+      else if (active === 'password') result = await unlockPassword(secret);
+      else if (active === 'recovery') result = await unlockRecovery(secret);
+      else if (active === 'passkey') {
+        const passkeyDetail = usableMethods.find(m => m.name === 'passkey');
+        if (!passkeyDetail) {
+          setError('PASSKEY UNAVAILABLE');
+          return;
+        }
+        const wk = await getPasskeyWk({
+          credentialId: passkeyDetail.credentialId,
+          rpId: passkeyDetail.rpId,
+          salt: passkeyDetail.salt,
+          prfPath: passkeyDetail.prfPath || 'prf',
+          userHandle: passkeyDetail.userHandle,
+        });
+        result = await unlockPasskey(wk);
+      }
+    } catch (err) {
+      setError((err && err.message) || 'UNLOCK FAILED');
       return;
     }
-    if (result?.lockedUntil) setLocalLockedUntil(result.lockedUntil);
-    if (result?.error === 'LOCKED_OUT') {
-      setError('TOO MANY ATTEMPTS — TRY AGAIN LATER');
-    } else if (result?.error === 'METHOD_AUTO_DISABLED') {
-      setError('PIN DISABLED — USE ANOTHER METHOD');
-    } else if (result?.error === 'BAD_SECRET') {
-      setError('INCORRECT PIN');
-    } else {
-      setError('UNLOCK FAILED');
+    if (result && result.success) {
+      setSecret('');
+      return;
     }
-  }, [pin, working, lockedOut, unlockPin]);
+    if (result && result.lockedUntil) setLocalLockedUntil(result.lockedUntil);
+    setError(classifyError(result && result.error));
+  }
+
+  const onSubmit = React.useCallback(async event => {
+    event.preventDefault();
+    if (working || lockedOut) return;
+    if (active !== 'passkey' && !secret) return;
+    await runUnlock();
+  }, [secret, active, working, lockedOut, unlockPin, unlockPassword, unlockPasskey, unlockRecovery, usableMethods]);
+
+  const placeholder = {
+    pin: 'PIN',
+    password: 'PASSWORD',
+    recovery: 'TWELVE-WORD RECOVERY PHRASE',
+  }[active];
 
   return (
     <div
@@ -86,7 +165,7 @@ export function LockScreen() {
       <form
         onSubmit={onSubmit}
         style={{
-          minWidth: 320,
+          minWidth: 360,
           padding: 32,
           border: `1px solid ${A.rule}`,
           background: A.bg2,
@@ -96,29 +175,61 @@ export function LockScreen() {
         }}
       >
         <ALabel>LEDGER · LOCKED</ALabel>
+
+        {usableMethods.length > 1 && (
+          <div role="tablist" aria-label="Unlock methods" style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+            {usableMethods.map(m => (
+              <button
+                key={m.name}
+                type="button"
+                role="tab"
+                aria-selected={active === m.name}
+                onClick={() => setActive(m.name)}
+                style={{
+                  fontFamily: A.font,
+                  fontSize: 11,
+                  letterSpacing: 1.2,
+                  textTransform: 'uppercase',
+                  padding: '4px 10px',
+                  background: active === m.name ? A.ink : A.bg,
+                  color: active === m.name ? A.bg : A.ink,
+                  border: `1px solid ${A.rule}`,
+                  cursor: 'pointer',
+                }}
+              >
+                {TAB_LABELS[m.name] || m.name.toUpperCase()}
+              </button>
+            ))}
+          </div>
+        )}
+
         <div style={{ fontSize: 14, color: A.ink }}>
-          ENTER PIN TO UNLOCK
+          {active === 'passkey'
+            ? 'PRESS UNLOCK AND APPROVE ON YOUR AUTHENTICATOR'
+            : `ENTER ${active.toUpperCase()} TO UNLOCK`}
         </div>
 
-        <input
-          type="password"
-          inputMode="numeric"
-          autoFocus
-          value={pin}
-          onChange={e => setPin(e.target.value)}
-          aria-label="PIN"
-          disabled={working || lockedOut}
-          style={{
-            fontFamily: A.font,
-            fontSize: 18,
-            letterSpacing: 4,
-            padding: '8px 10px',
-            background: A.bg,
-            color: A.ink,
-            border: `1px solid ${A.rule}`,
-            outline: 'none',
-          }}
-        />
+        {active !== 'passkey' && (
+          <input
+            type={active === 'recovery' ? 'text' : 'password'}
+            inputMode={active === 'pin' ? 'numeric' : 'text'}
+            autoFocus
+            value={secret}
+            onChange={e => setSecret(e.target.value)}
+            aria-label={TAB_LABELS[active] || active}
+            disabled={working || lockedOut}
+            style={{
+              fontFamily: A.font,
+              fontSize: active === 'pin' ? 18 : 14,
+              letterSpacing: active === 'pin' ? 4 : 1,
+              padding: '8px 10px',
+              background: A.bg,
+              color: A.ink,
+              border: `1px solid ${A.rule}`,
+              outline: 'none',
+            }}
+          />
+        )}
 
         {error && (
           <div role="alert" style={{ fontSize: 11, letterSpacing: 1.2, color: A.neg, textTransform: 'uppercase' }}>
@@ -140,7 +251,7 @@ export function LockScreen() {
 
         <button
           type="submit"
-          disabled={!pin || working || lockedOut}
+          disabled={(active !== 'passkey' && !secret) || working || lockedOut}
           style={{
             fontFamily: A.font,
             fontSize: 12,
@@ -150,8 +261,8 @@ export function LockScreen() {
             background: A.ink,
             color: A.bg,
             border: `1px solid ${A.ink}`,
-            cursor: (!pin || working || lockedOut) ? 'not-allowed' : 'pointer',
-            opacity: (!pin || working || lockedOut) ? 0.5 : 1,
+            cursor: ((active !== 'passkey' && !secret) || working || lockedOut) ? 'not-allowed' : 'pointer',
+            opacity: ((active !== 'passkey' && !secret) || working || lockedOut) ? 0.5 : 1,
           }}
         >
           {working ? 'UNLOCKING…' : 'UNLOCK'}

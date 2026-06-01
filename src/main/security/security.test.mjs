@@ -235,6 +235,30 @@ describe('T6 — mid-migration crash leaves detectable inconsistent state (I6)',
     });
     expect(order).toEqual(['read', 'writeSec', 'writeEnc', 'wipe']);
   });
+
+  // CAR-243 regression: previously `runSetupMigration` zeroized the MK
+  // before returning, leaving `out.mk === undefined` for the IPC layer.
+  // The bare `try { runtime.setMk(out.mk) } catch {}` in ipc.mjs swallowed
+  // the resulting "32-byte Uint8Array" guard error, so the user landed on
+  // a locked screen right after setup despite the comment claiming
+  // otherwise. We now hand the live MK back so the IPC layer can hold it
+  // until the user explicitly locks; the runtime owns zeroisation.
+  it('CAR-243: returns the live 32-byte MK so ipc.mjs can hold the unlocked state', { timeout: 30_000 }, async () => {
+    const io = {
+      readPlaintext: async () => ({ 'ledger:tx': [] }),
+      writeSecurity: async () => {},
+      writeEncryptedStore: async () => {},
+      wipePlaintext: async () => {},
+    };
+    const out = await runSetupMigration({
+      methods: { pin: { secret: '0000', kdfParams: FAST_ARGON, length: 4 } },
+      io,
+    });
+    expect(out.mk).toBeInstanceOf(Uint8Array);
+    expect(out.mk.length).toBe(32);
+    // It must be a usable, non-zeroized key (any byte non-zero is sufficient).
+    expect(out.mk.some(b => b !== 0)).toBe(true);
+  });
 });
 
 // ---------------------------------------------------------------------------

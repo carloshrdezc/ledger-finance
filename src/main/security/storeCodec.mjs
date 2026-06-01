@@ -122,11 +122,14 @@ export function buildSecurityConfig(methods, opts = {}) {
   }
 
   const nowIso = (opts.now || (() => new Date().toISOString()))();
+  // CAR-243 / I8: store the cleartext phrase encrypted under MK so Settings
+  // can later display it without re-deriving (PBKDF2 is one-way).
+  const phraseCipher = aeadEncryptString(recoveryPhrase, mk, AEAD_AAD_STORE, opts.ivProvider);
   const config = {
     v: SECURITY_FILE_VERSION,
     enabled: true,
     methods: methodEntries,
-    recovery: { wrapper: recoveryWrapper },
+    recovery: { wrapper: recoveryWrapper, phraseCipher, rateLimit: initialRateLimit() },
     osEscrow: { enabled: false, wrapper: null }, // CAR-242 will hydrate on Electron
     idleLockMs: typeof opts.idleLockMs === 'number' ? opts.idleLockMs : 300_000,
     createdAt: nowIso,
@@ -172,10 +175,11 @@ export async function runSetupMigration({ methods, io, opts = {} }) {
     }
   }
 
-  // Zeroise the in-memory MK before returning; the caller never needs the
-  // raw bytes — they unlock fresh from a method secret on the next boot.
-  mk.fill(0);
-  return { config, recoveryPhrase };
+  // CAR-243: hand the MK back to the caller (ipc.mjs) so the user is
+  // unlocked on the next render and can copy the recovery phrase / add
+  // methods without re-typing the secret they just chose. The runtime is
+  // responsible for zeroising on lock; we hold no copy here.
+  return { config, mk, recoveryPhrase };
 }
 
 /**

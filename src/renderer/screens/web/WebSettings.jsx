@@ -7,6 +7,7 @@ import ImportExport from '../../components/ImportExport';
 import FxRatesSection from '../../components/FxRatesSection';
 import BackupSection from '../../components/BackupSection';
 import RulesEditor from '../../components/RulesEditor';
+import { SecuritySettings, SecurityNudge } from '../../components/SecuritySettings';
 import { isLiquidAccount } from '../../forecast.mjs';
 
 const CURRENCIES = ['USD', 'EUR', 'GBP', 'JPY', 'CAD', 'AUD', 'CHF', 'MXN'];
@@ -202,6 +203,15 @@ export default function WebSettings({ t, onNavigate, onAdd, setAccent, setDensit
       </div>
       <div style={{ fontSize: 36, letterSpacing: -1, marginTop: 8, fontWeight: 600 }}>Categories &amp; preferences</div>
       {showIO && <ImportExport onClose={() => setShowIO(false)} />}
+
+      {/* CAR-243: legacy plaintext install nudge — non-blocking, dismissable. */}
+      <div style={{ marginTop: 16 }}>
+        <SecurityNudge onSetup={() => {
+          if (typeof document !== 'undefined') {
+            document.getElementById('settings-security-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }
+        }} />
+      </div>
 
       <div style={{ marginTop: 24, display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: 40 }}>
         {/* Category tree */}
@@ -417,6 +427,11 @@ export default function WebSettings({ t, onNavigate, onAdd, setAccent, setDensit
           {/* BACKUP */}
           <div style={{ marginTop: 20 }}>
             <BackupSection />
+          </div>
+
+          {/* CAR-243: SECURITY */}
+          <div id="settings-security-section" style={{ marginTop: 20 }}>
+            <SecuritySettings />
           </div>
 
           {/* DATA */}

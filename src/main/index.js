@@ -126,6 +126,41 @@ app.whenReady().then(async () => {
   // write is awaited before the page is torn down.
   ipcMain.handle('ledger-db:flush', () => ledgerStore.flush());
 
+  // CAR-243: disableIo for "turn security off" (R7 final paragraph).
+  // decryptToPlaintext reads the encrypted blob, decrypts it under the
+  // current MK, and atomically writes it back as ledger-state.json.
+  // wipeSecurity removes both the security config and the encrypted blob,
+  // leaving the user back on today's plaintext flow.
+  const disableIo = {
+    async decryptToPlaintext(mk) {
+      const { aeadDecryptString, AEAD_AAD_STORE } = await import('./security/index.mjs');
+      let blob;
+      try {
+        const raw = await fs.promises.readFile(encryptedPath, 'utf8');
+        blob = JSON.parse(raw);
+      } catch (err) {
+        // No encrypted store yet (setup-then-disable race). Treat as empty.
+        if (err && err.code === 'ENOENT') {
+          await fs.promises.writeFile(ledgerPath, '{}');
+          return;
+        }
+        throw err;
+      }
+      const json = aeadDecryptString(blob, mk, AEAD_AAD_STORE);
+      const dir = path.dirname(ledgerPath);
+      await fs.promises.mkdir(dir, { recursive: true });
+      const tmp = `${ledgerPath}.tmp`;
+      await fs.promises.writeFile(tmp, json);
+      await fs.promises.rename(tmp, ledgerPath);
+    },
+    async wipeSecurity() {
+      for (const p of [securityPath, encryptedPath]) {
+        try { await fs.promises.unlink(p); }
+        catch (err) { if (err && err.code !== 'ENOENT') throw err; }
+      }
+    },
+  };
+
   let createdWin;
   const wcGetter = () => (createdWin && !createdWin.isDestroyed() ? createdWin.webContents : null);
 
@@ -134,6 +169,7 @@ app.whenReady().then(async () => {
     runtime,
     webContents: wcGetter,
     setupIo,
+    disableIo,
     isDev,
   });
 
