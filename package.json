@@ -28,6 +28,7 @@
     "files": [
       "dist/**/*",
       "src/main/**/*",
+      "src/preload/**/*",
       "package.json"
     ],
     "publish": [
