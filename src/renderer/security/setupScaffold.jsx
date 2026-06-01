@@ -137,6 +137,22 @@ export function SecuritySetupDev({ onClose }) {
             >
               {phrase}
             </div>
+            <div
+              role="note"
+              style={{
+                fontSize: 11,
+                letterSpacing: 1.2,
+                textTransform: 'uppercase',
+                color: A.warn || A.muted,
+                padding: 10,
+                border: `1px dashed ${A.rule}`,
+                background: A.bg,
+              }}
+            >
+              RELOAD REQUIRED · CMD/CTRL-R AFTER CLOSING. THE LIVE SESSION STILL
+              USES THE PLAINTEXT STORE — ANY WRITE BEFORE RELOAD WILL RE-CREATE
+              LEDGER-STATE.JSON.
+            </div>
             <button
               type="button"
               onClick={onClose}
