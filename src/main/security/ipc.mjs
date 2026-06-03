@@ -120,6 +120,12 @@ export function registerSecurityIpc({
 
   // --- slice-3: extra unlock methods --------------------------------------
   ipcMain.handle('security:unlock-password', async (_event, password) => {
+    // CAR-243 (I2): bound input before it reaches Argon2id. A non-string or
+    // oversized value can't be a valid secret; reject without spending KDF
+    // work (and without leaking it into the crypto path).
+    if (typeof password !== 'string' || password.length > 1024) {
+      return { success: false, error: 'BAD_SECRET' };
+    }
     const result = await runtime.unlockPassword(password);
     emitState();
     return result;
@@ -131,12 +137,21 @@ export function registerSecurityIpc({
   // contextBridge.
   ipcMain.handle('security:unlock-passkey', async (_event, wk) => {
     const bytes = wk instanceof Uint8Array ? wk : new Uint8Array(wk || []);
+    // CAR-243 (I2): a WK is exactly 32 bytes; anything else can't unwrap.
+    // Reject early instead of feeding a malformed buffer to the AEAD path.
+    if (bytes.length !== 32) {
+      return { success: false, error: 'BAD_SECRET' };
+    }
     const result = await runtime.unlockPasskey(bytes);
     emitState();
     return result;
   });
 
   ipcMain.handle('security:unlock-recovery', async (_event, phrase) => {
+    // CAR-243 (I2): bound input before it reaches PBKDF2.
+    if (typeof phrase !== 'string' || phrase.length > 512) {
+      return { success: false, error: 'BAD_SECRET' };
+    }
     const result = await runtime.unlockRecovery(phrase);
     emitState();
     return result;
@@ -210,28 +225,47 @@ export function registerSecurityIpc({
     }
   });
 
+  // CAR-243 (I3): these management ops decrypt / write the security file and
+  // so can throw fs errors (EBUSY/ENOENT) or AEAD failures. Wrap + sanitize
+  // like add/remove/setup so a raw stack trace or fs path can never cross IPC.
   ipcMain.handle('security:reveal-recovery', async (_event, payload) => {
-    const r = await runtime.revealRecoveryPhrase(payload || {});
-    emitState();
-    return r;
+    try {
+      const r = await runtime.revealRecoveryPhrase(payload || {});
+      emitState();
+      return r;
+    } catch (err) {
+      return { ok: false, error: sanitizeError(err, 'REVEAL_FAILED') };
+    }
   });
 
   ipcMain.handle('security:rotate-recovery', async () => {
-    const r = await runtime.rotateRecoveryPhrase();
-    emitState();
-    return r;
+    try {
+      const r = await runtime.rotateRecoveryPhrase();
+      emitState();
+      return r;
+    } catch (err) {
+      return { ok: false, error: sanitizeError(err, 'ROTATE_FAILED') };
+    }
   });
 
   ipcMain.handle('security:disable', async () => {
-    const r = await runtime.disableSecurity({ disableIo });
-    emitState();
-    return r;
+    try {
+      const r = await runtime.disableSecurity({ disableIo });
+      emitState();
+      return r;
+    } catch (err) {
+      return { ok: false, error: sanitizeError(err, 'DISABLE_FAILED') };
+    }
   });
 
   ipcMain.handle('security:set-os-escrow', async (_event, enabled) => {
-    const r = await runtime.setOsEscrowEnabled(!!enabled);
-    emitState();
-    return r;
+    try {
+      const r = await runtime.setOsEscrowEnabled(!!enabled);
+      emitState();
+      return r;
+    } catch (err) {
+      return { ok: false, error: sanitizeError(err, 'SET_OS_ESCROW_FAILED') };
+    }
   });
 
   // --- slice-2 dev scaffold (kept until slice 3 wizard fully replaces) ---

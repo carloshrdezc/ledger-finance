@@ -289,4 +289,47 @@ describe('CAR-243 — passkey unlock via raw WK', () => {
     expect(r.success).toBe(true);
     expect(runtime.getMk().length).toBe(32);
   });
+
+  // C1 regression: getState() must surface the passkey replay metadata the
+  // lock screen reads (credentialId/salt/prfPath/userHandle). Previously it
+  // only emitted {name,rpId,lockedUntil,failures}, so LockScreen.getPasskeyWk
+  // received undefined for all four and could never derive the WK.
+  it('getState().methodsDetail surfaces passkey replay metadata', async () => {
+    const { runtime } = await setupRuntimeWith({ pin: { secret: '4729', kdfParams: FAST_PIN_ARGON } });
+    await runtime.unlockPin('4729');
+    const wk = new Uint8Array(32).fill(7);
+    await runtime.addMethod({
+      method: 'passkey',
+      secret: wk,
+      extra: { rpId: 'localhost', credentialId: [1, 2, 3], salt: [4, 5, 6], prfPath: 'prf', userHandle: [9, 9] },
+    });
+    const detail = runtime.getState().methodsDetail.find(m => m.name === 'passkey');
+    expect(detail).toMatchObject({
+      name: 'passkey',
+      rpId: 'localhost',
+      credentialId: [1, 2, 3],
+      salt: [4, 5, 6],
+      prfPath: 'prf',
+      userHandle: [9, 9],
+    });
+    // Non-passkey methods stay lean (no leaked passkey keys).
+    const pinDetail = runtime.getState().methodsDetail.find(m => m.name === 'pin');
+    expect(pinDetail.credentialId).toBeUndefined();
+  });
+
+  // I1 regression: a WK delivered as a plain number[] (post structured-clone)
+  // must coerce to Uint8Array inside addMethod, not throw "raw kdf requires a
+  // 32-byte Uint8Array secret". The validator accepts number[]; the runtime
+  // must agree.
+  it('addMethod coerces a number[] passkey WK and it round-trips', async () => {
+    const { runtime } = await setupRuntimeWith({ pin: { secret: '4729', kdfParams: FAST_PIN_ARGON } });
+    await runtime.unlockPin('4729');
+    const wkArr = Array.from({ length: 32 }, (_, i) => (i + 3) & 0xff);
+    const added = await runtime.addMethod({ method: 'passkey', secret: wkArr });
+    expect(added.ok).toBe(true);
+    runtime.clearMk();
+    const r = await runtime.unlockPasskey(Uint8Array.from(wkArr));
+    expect(r.success).toBe(true);
+    expect(runtime.getMk().length).toBe(32);
+  });
 });

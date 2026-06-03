@@ -248,9 +248,17 @@ export function createRuntime({ io, now = () => Date.now() }) {
     }
     const kdf = kdfForMethod(method);
     const salt = kdf === 'raw' ? null : randBytes(16);
+    // CAR-243: the raw passkey WK crosses contextBridge as a Uint8Array, but a
+    // structured clone (or a renderer that pre-serialises) can deliver a plain
+    // number[]. The IPC validator accepts number[]; coerce here so wrapMasterKey
+    // (which hard-requires a 32-byte Uint8Array for kdf:'raw') and the runtime
+    // stay in agreement. String secrets (argon2id) pass through untouched.
+    const wkSecret = kdf === 'raw' && Array.isArray(secret)
+      ? Uint8Array.from(secret)
+      : secret;
     const wrapper = wrapMasterKey({
       kdf,
-      secret,
+      secret: wkSecret,
       salt,
       mk,
       kdfParams: kdfParams || null,
@@ -474,6 +482,20 @@ export function createRuntime({ io, now = () => Date.now() }) {
         rpId: m.rpId || null,
         lockedUntil: (m.rateLimit && m.rateLimit.lockedUntil) || null,
         failures: (m.rateLimit && m.rateLimit.failures) || 0,
+        // CAR-243: passkey replay metadata. These are public, non-secret
+        // identifiers (NOT key material — the wrapper stays in the config and
+        // never leaves main) that the lock screen needs to reconstruct the
+        // WebAuthn PRF ceremony via getPasskeyWk. Without them, passkey
+        // unlock from the lock screen can't derive the WK. Only emitted for
+        // passkey so other methods keep their lean shape.
+        ...(name === 'passkey'
+          ? {
+            credentialId: m.credentialId ?? null,
+            salt: m.salt ?? null,
+            prfPath: m.prfPath ?? null,
+            userHandle: m.userHandle ?? null,
+          }
+          : {}),
       }));
     const hasRecovery = !!(cfg.recovery && cfg.recovery.wrapper);
     return {

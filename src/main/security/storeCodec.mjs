@@ -118,6 +118,17 @@ export function buildSecurityConfig(methods, opts = {}) {
     if (name === 'pin' && typeof spec.length === 'number') {
       entry.length = spec.length; // public per spec PIN section
     }
+    // CAR-243: persist the passkey replay metadata the lock screen needs to
+    // reconstruct the PRF ceremony. Mirrors runtime.addMethod's allow-list so
+    // wizard-created passkeys (this path) and Settings-added passkeys store the
+    // same public, non-secret fields. Without this a setup-time passkey can
+    // never be unlocked. Allow-listed (not spread) so a malformed spec can't
+    // inject unexpected keys.
+    if (name === 'passkey') {
+      for (const k of ['rpId', 'credentialId', 'salt', 'prfPath', 'userHandle']) {
+        if (k in spec) entry[k] = spec[k];
+      }
+    }
     methodEntries[name] = entry;
   }
 

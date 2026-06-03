@@ -313,3 +313,98 @@ describe('CAR-243 — add-method IPC -> real runtime integration (contract drift
     expect(io.current().methods.password).toBeUndefined();
   });
 });
+
+// CAR-243 (I2): unlock channels bound their input before it reaches the
+// KDF/AEAD path, so a compromised renderer can't feed an oversized string to
+// Argon2id/PBKDF2 or a malformed buffer to the raw-WK unwrap.
+describe('CAR-243 (I2) — unlock input bounds', () => {
+  function mount(overrides = {}) {
+    const ipc = makeIpcMainShim();
+    const calls = { pw: 0, pk: 0, rec: 0 };
+    const runtime = makeStubRuntime({
+      unlockPassword: async () => { calls.pw++; return { success: true }; },
+      unlockPasskey: async () => { calls.pk++; return { success: true }; },
+      unlockRecovery: async () => { calls.rec++; return { success: true }; },
+      ...overrides,
+    });
+    registerSecurityIpc({ ipcMain: ipc, runtime, webContents: () => null });
+    return { ipc, calls };
+  }
+
+  it('rejects an oversized password without invoking the runtime', async () => {
+    const { ipc, calls } = mount();
+    const r = await ipc.invoke('security:unlock-password', 'x'.repeat(1025));
+    expect(r).toEqual({ success: false, error: 'BAD_SECRET' });
+    expect(calls.pw).toBe(0);
+  });
+
+  it('rejects a non-string password', async () => {
+    const { ipc, calls } = mount();
+    const r = await ipc.invoke('security:unlock-password', { evil: true });
+    expect(r).toEqual({ success: false, error: 'BAD_SECRET' });
+    expect(calls.pw).toBe(0);
+  });
+
+  it('forwards a normal password', async () => {
+    const { ipc, calls } = mount();
+    const r = await ipc.invoke('security:unlock-password', 'fishfish');
+    expect(r).toEqual({ success: true });
+    expect(calls.pw).toBe(1);
+  });
+
+  it('rejects a wrong-length passkey WK without invoking the runtime', async () => {
+    const { ipc, calls } = mount();
+    const r = await ipc.invoke('security:unlock-passkey', new Uint8Array(16));
+    expect(r).toEqual({ success: false, error: 'BAD_SECRET' });
+    expect(calls.pk).toBe(0);
+  });
+
+  it('forwards a 32-byte passkey WK', async () => {
+    const { ipc, calls } = mount();
+    const r = await ipc.invoke('security:unlock-passkey', new Uint8Array(32));
+    expect(r).toEqual({ success: true });
+    expect(calls.pk).toBe(1);
+  });
+
+  it('rejects an oversized recovery phrase', async () => {
+    const { ipc, calls } = mount();
+    const r = await ipc.invoke('security:unlock-recovery', 'word '.repeat(200));
+    expect(r).toEqual({ success: false, error: 'BAD_SECRET' });
+    expect(calls.rec).toBe(0);
+  });
+});
+
+// CAR-243 (I3): reveal/rotate/disable/set-os-escrow can throw fs (EBUSY) or
+// AEAD errors; like add/remove/setup they must sanitize so a path/stack can't
+// cross IPC.
+describe('CAR-243 (I3) — reveal/rotate/disable error sanitization', () => {
+  it('sanitizes a thrown fs-path error from reveal-recovery', async () => {
+    const ipc = makeIpcMainShim();
+    const runtime = makeStubRuntime({
+      revealRecoveryPhrase: async () => { throw new Error('EBUSY: /Users/secret/ledger-security.json'); },
+    });
+    registerSecurityIpc({ ipcMain: ipc, runtime, webContents: () => null });
+    const r = await ipc.invoke('security:reveal-recovery', { method: 'pin', secret: '4729' });
+    expect(r).toEqual({ ok: false, error: 'REVEAL_FAILED' });
+  });
+
+  it('sanitizes a thrown error from rotate-recovery but preserves safe codes', async () => {
+    const ipc = makeIpcMainShim();
+    const runtime = makeStubRuntime({
+      rotateRecoveryPhrase: async () => { const e = new Error('boom'); e.code = 'EPERM'; throw e; },
+    });
+    registerSecurityIpc({ ipcMain: ipc, runtime, webContents: () => null });
+    const r = await ipc.invoke('security:rotate-recovery');
+    expect(r).toEqual({ ok: false, error: 'ROTATE_FAILED' });
+  });
+
+  it('sanitizes a thrown error from disable', async () => {
+    const ipc = makeIpcMainShim();
+    const runtime = makeStubRuntime({
+      disableSecurity: async () => { throw new Error('ENOENT: /home/x/.config/ledger'); },
+    });
+    registerSecurityIpc({ ipcMain: ipc, runtime, webContents: () => null });
+    const r = await ipc.invoke('security:disable');
+    expect(r).toEqual({ ok: false, error: 'DISABLE_FAILED' });
+  });
+});

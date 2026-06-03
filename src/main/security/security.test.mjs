@@ -75,6 +75,39 @@ describe('T1 — multi-method MK parity (I1)', () => {
   });
 });
 
+// C2 regression: a passkey enrolled during first-run setup must keep the
+// replay metadata (credentialId/salt/prfPath/userHandle/rpId) on its method
+// entry. buildSecurityConfig previously wrote only {enabled,wrapper,rateLimit}
+// and silently dropped these, so a wizard-created passkey could never be
+// unlocked (the lock screen had nothing to feed getPasskeyWk).
+describe('CAR-243 — buildSecurityConfig persists passkey replay metadata', () => {
+  it('keeps the allow-listed passkey fields on the method entry', { timeout: 30_000 }, () => {
+    const wk = new Uint8Array(32).fill(11);
+    const { config } = buildSecurityConfig({
+      passkey: {
+        kdf: 'raw',
+        secret: wk,
+        rpId: 'localhost',
+        credentialId: [1, 2, 3],
+        salt: [4, 5, 6],
+        prfPath: 'prf',
+        userHandle: [9, 9],
+      },
+    }, { recoveryKdfParams: FAST_PBKDF2 });
+
+    const entry = config.methods.passkey;
+    expect(entry.enabled).toBe(true);
+    expect(entry.wrapper).toBeTruthy();
+    expect(entry.rpId).toBe('localhost');
+    expect(entry.credentialId).toEqual([1, 2, 3]);
+    expect(entry.salt).toEqual([4, 5, 6]);
+    expect(entry.prfPath).toBe('prf');
+    expect(entry.userHandle).toEqual([9, 9]);
+    // The raw WK unwraps the MK (sanity that the wrapper is real).
+    expect(unwrapMasterKey(entry.wrapper, wk).length).toBe(32);
+  });
+});
+
 describe('I5 — setup requires at least one primary unlock method', () => {
   it('rejects enabled security config with no primary methods', () => {
     expect(() => buildSecurityConfig({}, { recoveryKdfParams: FAST_PBKDF2 }))
