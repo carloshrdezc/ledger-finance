@@ -40,7 +40,7 @@ function makeIpcMainShim() {
 function makeStubRuntime(overrides = {}) {
   return {
     getState: () => ({ enabled: false, locked: true }),
-    setMk: () => {},
+    adoptSetupMk: () => true,
     clearMk: () => {},
     loadConfig: async () => {},
     setOsEscrowEnabled: async () => ({ ok: true }),

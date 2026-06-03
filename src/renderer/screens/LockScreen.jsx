@@ -46,6 +46,14 @@ function classifyError(error) {
     case 'BAD_SECRET': return 'INCORRECT';
     case 'NOT_ENABLED': return 'METHOD NOT ENABLED';
     case 'PHRASE_DECRYPT_FAILED': return 'BAD PHRASE';
+    // CAR-243 (M1): curated copy for the passkey-ceremony failure codes
+    // getPasskeyWk throws, so they don't surface as raw UPPER_SNAKE in the UI.
+    case 'PASSKEY_UNSUPPORTED': return 'PASSKEYS NOT SUPPORTED HERE';
+    case 'PRF_UNAVAILABLE':
+    case 'USER_HANDLE_UNAVAILABLE': return 'PASSKEY CANNOT UNLOCK — USE ANOTHER METHOD';
+    case 'PASSKEY_GET_FAILED':
+    case 'PASSKEY_CREATE_FAILED': return 'PASSKEY CEREMONY FAILED';
+    case 'SUBTLE_UNAVAILABLE': return 'PASSKEY CRYPTO UNAVAILABLE';
     default: return 'UNLOCK FAILED';
   }
 }
@@ -136,7 +144,11 @@ export function LockScreen() {
         result = await unlockPasskey(wk);
       }
     } catch (err) {
-      setError((err && err.message) || 'UNLOCK FAILED');
+      // CAR-243 (M1): a user-cancelled WebAuthn ceremony throws a DOMException
+      // (NotAllowedError); everything else routes through classifyError so the
+      // known passkey codes get curated copy instead of a raw message.
+      if (err && err.name === 'NotAllowedError') { setError('PASSKEY CANCELLED'); return; }
+      setError(classifyError(err && err.message));
       return;
     }
     if (result && result.success) {

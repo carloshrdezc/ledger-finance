@@ -73,6 +73,21 @@ export function createRuntime({ io, now = () => Date.now() }) {
     mk = next;
   }
 
+  // CAR-243 (M2): the ONLY sanctioned way to inject an MK from outside an
+  // unlock is the post-setup hand-off. `setMk` stays internal (used by
+  // unlockMethod) and is no longer on the public runtime surface, so a future
+  // IPC handler can't call runtime.setMk(arbitraryBytes). This wrapper takes
+  // the runSetupMigration output and validates its shape/provenance; returns
+  // true when adopted so the caller can decide whether to warn.
+  function adoptSetupMk(setupOut) {
+    const candidate = setupOut && setupOut.mk;
+    if (candidate instanceof Uint8Array && candidate.length === 32) {
+      setMk(candidate);
+      return true;
+    }
+    return false;
+  }
+
   function clearMk() {
     if (mk) {
       try { mk.fill(0); } catch { /* immutable views - ignore */ }
@@ -520,7 +535,7 @@ export function createRuntime({ io, now = () => Date.now() }) {
     isEnabled,
     isLocked,
     getMk,
-    setMk,
+    adoptSetupMk,
     clearMk,
     getLockedUntil,
     recordFailure,

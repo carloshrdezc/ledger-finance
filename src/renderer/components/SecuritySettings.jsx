@@ -116,28 +116,59 @@ export function SecuritySettings({ isElectron = detectIsElectron() }) {
     clearMessages();
     setPending({ kind: 'add', method: 'password' });
   }
+  async function commitPasskey(enrolled) {
+    const r = await addMethod({
+      method: 'passkey',
+      secret: enrolled.wk,
+      kdfParams: null,
+      extra: {
+        rpId: enrolled.rpId,
+        credentialId: Array.from(enrolled.credentialId),
+        salt: Array.from(enrolled.salt),
+        prfPath: enrolled.prfPath,
+        userHandle: enrolled.userHandle ? Array.from(enrolled.userHandle) : null,
+      },
+    });
+    if (!r.ok) setError(r.error || 'ADD_FAILED');
+    else setInfo('PASSKEY ADDED');
+  }
+
   async function handleAddPasskey() {
     clearMessages();
     try {
       const rpId = (typeof window !== 'undefined' && window.location?.hostname) || 'localhost';
       const enrolled = await createPasskey({ rpId });
-      const r = await addMethod({
-        method: 'passkey',
-        secret: enrolled.wk,
-        kdfParams: null,
-        extra: {
-          rpId: enrolled.rpId,
-          credentialId: Array.from(enrolled.credentialId),
-          salt: Array.from(enrolled.salt),
-          prfPath: enrolled.prfPath,
-          userHandle: enrolled.userHandle ? Array.from(enrolled.userHandle) : null,
-        },
-      });
-      if (!r.ok) setError(r.error || 'ADD_FAILED');
-      else setInfo('PASSKEY ADDED');
+      // CAR-243: a passkey enrolled WITHOUT PRF derives its wrapping key from
+      // the (cleartext-stored) userHandle, so it unlocks the app but does NOT
+      // encrypt data at rest. Product decision: keep the fallback but force an
+      // explicit acknowledgement before persisting it.
+      if (enrolled.prfPath !== 'prf') {
+        setPending({ kind: 'passkey-warn', enrolled });
+        return;
+      }
+      await commitPasskey(enrolled);
     } catch (err) {
       setError((err && err.message) || 'PASSKEY_FAILED');
     }
+  }
+
+  async function confirmPasskeyWarn() {
+    const enrolled = pending && pending.enrolled;
+    setPending(null);
+    clearMessages();
+    if (!enrolled) return;
+    try {
+      await commitPasskey(enrolled);
+    } catch (err) {
+      setError((err && err.message) || 'PASSKEY_FAILED');
+    }
+  }
+
+  function cancelPasskeyWarn() {
+    setPending(null);
+    // The credential now lives in the authenticator but we never persisted it;
+    // tell the user so they can clean up the orphan (mirrors the wizard CANCEL).
+    setInfo('PASSKEY NOT ADDED — REMOVE THE UNUSED CREDENTIAL IN YOUR AUTHENTICATOR');
   }
 
   async function handleRemove(name) {
@@ -370,6 +401,23 @@ export function SecuritySettings({ isElectron = detectIsElectron() }) {
           onSubmit={commitDisable}
           onCancel={() => setPending(null)}
         />
+      )}
+      {pending && pending.kind === 'passkey-warn' && (
+        <div
+          role="alertdialog"
+          aria-label="passkey-no-prf-warning"
+          style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: 10, border: `1px solid ${A.neg}`, background: A.bg }}
+        >
+          <ALabel>⚠ PASSKEY WITHOUT PRF</ALabel>
+          <div style={{ fontSize: 13, color: A.ink }}>
+            THIS PASSKEY UNLOCKS THE APP BUT DOES NOT ENCRYPT YOUR DATA AT REST ON
+            THIS DEVICE. FOR AT-REST ENCRYPTION, USE A PIN OR PASSWORD INSTEAD.
+          </div>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button type="button" onClick={cancelPasskeyWarn} style={btn(false)}>CANCEL</button>
+            <button type="button" onClick={confirmPasskeyWarn} style={btn(true)}>ADD ANYWAY</button>
+          </div>
+        </div>
       )}
 
       {showWizard && (

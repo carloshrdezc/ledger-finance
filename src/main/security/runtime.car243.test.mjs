@@ -317,6 +317,21 @@ describe('CAR-243 — passkey unlock via raw WK', () => {
     expect(pinDetail.credentialId).toBeUndefined();
   });
 
+  // M2: setMk is no longer on the public runtime surface; the only sanctioned
+  // injection is adoptSetupMk, which validates the setup output's shape.
+  it('adoptSetupMk adopts a valid 32-byte MK and rejects junk; setMk is not exposed', async () => {
+    const { runtime } = await setupRuntimeWith({ pin: { secret: '4729', kdfParams: FAST_PIN_ARGON } });
+    expect(runtime.setMk).toBeUndefined();
+    expect(runtime.adoptSetupMk({ mk: new Uint8Array(16) })).toBe(false);
+    expect(runtime.adoptSetupMk({})).toBe(false);
+    expect(runtime.adoptSetupMk(null)).toBe(false);
+    expect(runtime.isLocked()).toBe(true);
+    const ok = runtime.adoptSetupMk({ mk: new Uint8Array(32).fill(8) });
+    expect(ok).toBe(true);
+    expect(runtime.isLocked()).toBe(false);
+    expect(runtime.getMk().length).toBe(32);
+  });
+
   // I1 regression: a WK delivered as a plain number[] (post structured-clone)
   // must coerce to Uint8Array inside addMethod, not throw "raw kdf requires a
   // 32-byte Uint8Array secret". The validator accepts number[]; the runtime

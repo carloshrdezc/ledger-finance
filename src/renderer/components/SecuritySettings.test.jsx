@@ -18,6 +18,14 @@ import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/re
 import { MKProvider } from '../security/useMK';
 import { SecuritySettings, SecurityNudge } from './SecuritySettings';
 
+// Control createPasskey (the WebAuthn ceremony) per test; keep the real
+// passkeyMatchesOrigin so the origin filter still exercises real logic.
+const { mockCreatePasskey } = vi.hoisted(() => ({ mockCreatePasskey: vi.fn() }));
+vi.mock('../security/webauthn', async importActual => {
+  const actual = await importActual();
+  return { ...actual, createPasskey: mockCreatePasskey };
+});
+
 function makeBridge(initialState) {
   const listeners = new Set();
   let state = { ...initialState };
@@ -162,6 +170,87 @@ describe('SecuritySettings — enabled, multiple methods', () => {
     const buttons = screen.getAllByText(/REVEAL/);
     fireEvent.click(buttons[buttons.length - 1]);
     await waitFor(() => expect(bridge.revealRecovery).toHaveBeenCalledWith({ method: 'pin', secret: '4729' }));
+  });
+});
+
+// CAR-243: passkey non-PRF "loud warning" flow. A passkey enrolled without
+// PRF derives its key from the cleartext-stored userHandle, so it provides no
+// at-rest encryption. We keep the fallback but force an explicit ack before
+// persisting it.
+describe('SecuritySettings — passkey non-PRF warning', () => {
+  beforeEach(() => { mockCreatePasskey.mockReset(); });
+
+  const enabledNoPasskey = () => makeBridge({
+    enabled: true, locked: false, methods: ['pin'],
+    methodsDetail: [{ name: 'pin' }], hasRecovery: true,
+  });
+
+  async function clickAddPasskey() {
+    // The passkey row's ADD button is the one whose row text says "passkey".
+    const addButtons = screen.getAllByText('ADD');
+    fireEvent.click(addButtons[addButtons.length - 1]); // passkey is last in the list
+  }
+
+  it('shows the warning (not an immediate add) when PRF is unavailable', async () => {
+    const { bridge } = enabledNoPasskey();
+    mockCreatePasskey.mockResolvedValue({
+      prfPath: 'userHandle', wk: new Uint8Array(32).fill(1),
+      rpId: 'localhost', credentialId: new Uint8Array([1]), salt: new Uint8Array([2]),
+      userHandle: new Uint8Array([3]),
+    });
+    render(<MKProvider bridge={bridge}><SecuritySettings isElectron={true} /></MKProvider>);
+    await waitFor(() => expect(screen.getByText(/passkey · OFF/i)).toBeTruthy());
+    await clickAddPasskey();
+    await waitFor(() => expect(screen.getByLabelText('passkey-no-prf-warning')).toBeTruthy());
+    expect(screen.getByText(/DOES NOT ENCRYPT YOUR DATA AT REST/i)).toBeTruthy();
+    // Crucially, nothing was persisted yet.
+    expect(bridge.addMethod).not.toHaveBeenCalled();
+  });
+
+  it('ADD ANYWAY persists the passkey', async () => {
+    const { bridge } = enabledNoPasskey();
+    mockCreatePasskey.mockResolvedValue({
+      prfPath: 'userHandle', wk: new Uint8Array(32).fill(1),
+      rpId: 'localhost', credentialId: new Uint8Array([1]), salt: new Uint8Array([2]),
+      userHandle: new Uint8Array([3]),
+    });
+    render(<MKProvider bridge={bridge}><SecuritySettings isElectron={true} /></MKProvider>);
+    await waitFor(() => expect(screen.getByText(/passkey · OFF/i)).toBeTruthy());
+    await clickAddPasskey();
+    await waitFor(() => expect(screen.getByText(/ADD ANYWAY/i)).toBeTruthy());
+    fireEvent.click(screen.getByText(/ADD ANYWAY/i));
+    await waitFor(() => expect(bridge.addMethod).toHaveBeenCalledTimes(1));
+    expect(bridge.addMethod.mock.calls[0][0]).toMatchObject({ method: 'passkey' });
+  });
+
+  it('CANCEL does not persist and warns about the orphan credential', async () => {
+    const { bridge } = enabledNoPasskey();
+    mockCreatePasskey.mockResolvedValue({
+      prfPath: 'userHandle', wk: new Uint8Array(32).fill(1),
+      rpId: 'localhost', credentialId: new Uint8Array([1]), salt: new Uint8Array([2]),
+      userHandle: new Uint8Array([3]),
+    });
+    render(<MKProvider bridge={bridge}><SecuritySettings isElectron={true} /></MKProvider>);
+    await waitFor(() => expect(screen.getByText(/passkey · OFF/i)).toBeTruthy());
+    await clickAddPasskey();
+    await waitFor(() => expect(screen.getByLabelText('passkey-no-prf-warning')).toBeTruthy());
+    fireEvent.click(screen.getByText('CANCEL'));
+    await waitFor(() => expect(screen.getByText(/REMOVE THE UNUSED CREDENTIAL/i)).toBeTruthy());
+    expect(bridge.addMethod).not.toHaveBeenCalled();
+  });
+
+  it('a PRF passkey is added directly with no warning', async () => {
+    const { bridge } = enabledNoPasskey();
+    mockCreatePasskey.mockResolvedValue({
+      prfPath: 'prf', wk: new Uint8Array(32).fill(1),
+      rpId: 'localhost', credentialId: new Uint8Array([1]), salt: new Uint8Array([2]),
+      userHandle: new Uint8Array([3]),
+    });
+    render(<MKProvider bridge={bridge}><SecuritySettings isElectron={true} /></MKProvider>);
+    await waitFor(() => expect(screen.getByText(/passkey · OFF/i)).toBeTruthy());
+    await clickAddPasskey();
+    await waitFor(() => expect(bridge.addMethod).toHaveBeenCalledTimes(1));
+    expect(screen.queryByLabelText('passkey-no-prf-warning')).toBeNull();
   });
 });
 

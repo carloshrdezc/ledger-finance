@@ -156,5 +156,11 @@ export function passkeyMatchesOrigin(rpId, origin = (typeof window !== 'undefine
   const a = String(rpId).toLowerCase();
   const b = String(origin).toLowerCase();
   // Permissive match: rpId can be a registrable domain suffix of origin.
+  // SECURITY (M3): this suffix match is only safe because `rpId` is
+  // app-controlled — set to `window.location.hostname` at enrolment
+  // (createPasskey / handleAddPasskey) and never sourced from user input. A
+  // user-supplied rpId like 'com' would match 'evil.com' here, so callers MUST
+  // keep rpId provenance app-internal. The authenticator's own RP-ID check is
+  // the real cryptographic boundary; this is only a UI visibility filter.
   return b === a || b.endsWith('.' + a);
 }

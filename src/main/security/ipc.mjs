@@ -181,11 +181,10 @@ export function registerSecurityIpc({
       // CAR-243: previously this called runtime.setMk(out.mk) inside a
       // bare try/catch that swallowed the "32-byte Uint8Array" guard error
       // when storeCodec used to zeroise mk before returning. Now that
-      // runSetupMigration returns the live mk, validate the shape and log
-      // any failure rather than silently leaving the user locked.
-      if (out.mk instanceof Uint8Array && out.mk.length === 32) {
-        runtime.setMk(out.mk);
-      } else {
+      // runSetupMigration returns the live mk, adopt it via the narrowed
+      // adoptSetupMk (M2) which validates shape/provenance; warn instead of
+      // silently leaving the user locked if it couldn't.
+      if (!runtime.adoptSetupMk(out)) {
         // eslint-disable-next-line no-console
         console.warn('security:setup — runSetupMigration returned no usable MK; user will need to unlock manually');
       }

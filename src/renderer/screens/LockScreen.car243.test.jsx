@@ -131,6 +131,45 @@ describe('LockScreen — multi-method (CAR-243)', () => {
     expect(bridge.unlockPasskey.mock.calls[0][0]).toHaveLength(32);
   });
 
+  // M1: a failed passkey ceremony surfaces curated copy, not the raw code.
+  it('curates a PRF_UNAVAILABLE ceremony failure', async () => {
+    getPasskeyWk.mockRejectedValue(new Error('PRF_UNAVAILABLE'));
+    const bridge = makeBridge({
+      getState: vi.fn().mockResolvedValue({
+        enabled: true, locked: true,
+        methods: ['passkey'],
+        methodsDetail: [{ name: 'passkey', rpId: 'localhost', credentialId: [1], salt: [2], prfPath: 'prf' }],
+        lockedUntil: null,
+      }),
+    });
+    const { getByRole, findByText } = render(
+      <MKProvider bridge={bridge}><LockScreen /></MKProvider>
+    );
+    await findByText(/APPROVE ON YOUR AUTHENTICATOR/i);
+    fireEvent.click(getByRole('button', { name: /UNLOCK/ }));
+    await findByText(/PASSKEY CANNOT UNLOCK/i);
+  });
+
+  it('reports a user-cancelled ceremony (NotAllowedError) as cancelled', async () => {
+    const domErr = new Error('user cancelled');
+    domErr.name = 'NotAllowedError';
+    getPasskeyWk.mockRejectedValue(domErr);
+    const bridge = makeBridge({
+      getState: vi.fn().mockResolvedValue({
+        enabled: true, locked: true,
+        methods: ['passkey'],
+        methodsDetail: [{ name: 'passkey', rpId: 'localhost', credentialId: [1], salt: [2], prfPath: 'prf' }],
+        lockedUntil: null,
+      }),
+    });
+    const { getByRole, findByText } = render(
+      <MKProvider bridge={bridge}><LockScreen /></MKProvider>
+    );
+    await findByText(/APPROVE ON YOUR AUTHENTICATOR/i);
+    fireEvent.click(getByRole('button', { name: /UNLOCK/ }));
+    await findByText(/PASSKEY CANCELLED/i);
+  });
+
   it('shows the recovery tab when methods includes recovery', async () => {
     const bridge = makeBridge({
       getState: vi.fn().mockResolvedValue({

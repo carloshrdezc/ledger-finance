@@ -280,6 +280,21 @@ export function SecuritySetupWizard({ onDone, onCancel, isElectron = (typeof win
                 >
                   {passkey ? 'PASSKEY ENROLLED' : 'ENROLL PASSKEY'}
                 </button>
+                {/* CAR-243: loud non-PRF warning. A passkey enrolled without
+                    PRF derives its key from the cleartext-stored userHandle, so
+                    it unlocks but provides no at-rest encryption. The user sees
+                    this before CREATE and can switch to PIN/password. */}
+                {passkey && passkey.prfPath !== 'prf' && (
+                  <div
+                    role="alert"
+                    aria-label="passkey-no-prf-warning"
+                    style={{ fontSize: 12, color: A.neg, padding: 8, border: `1px solid ${A.neg}` }}
+                  >
+                    ⚠ THIS PASSKEY UNLOCKS THE APP BUT DOES NOT ENCRYPT YOUR DATA
+                    AT REST ON THIS DEVICE. FOR AT-REST ENCRYPTION, ADD A PIN OR
+                    PASSWORD INSTEAD.
+                  </div>
+                )}
               </div>
             )}
             {error && <div role="alert" style={{ fontSize: 11, color: A.neg, letterSpacing: 1.2 }}>{error}</div>}
