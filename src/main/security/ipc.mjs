@@ -32,7 +32,6 @@ const SAFE_ERROR_CODES = new Set([
   'INVALID_METHOD_NAME',
   'INVALID_PIN',
   'INVALID_PASSWORD',
-  'INVALID_PASSKEY_KDF',
   'INVALID_PASSKEY_WK',
   // Runtime / state (security/runtime.mjs + storeCodec.mjs)
   'NOT_UNLOCKED',
@@ -62,15 +61,20 @@ function sanitizeError(err, fallback) {
 
 function validateAddMethod(payload) {
   if (!payload || typeof payload !== 'object') return 'PAYLOAD_REQUIRED';
-  const { name, secret, kdf } = payload;
-  if (!ALLOWED_METHOD_NAMES.has(name)) return 'INVALID_METHOD_NAME';
-  // pin/password expect a typed string secret; passkey-raw expects bytes.
-  if (name === 'pin') {
+  // Real contract (see preload + runtime.addMethod): the renderer sends
+  // `{ method, secret, kdfParams?, extra? }`. The KDF is derived in the
+  // runtime by `kdfForMethod(method)` — there is no `kdf` field on the wire,
+  // so we validate the shape from `method` + the secret alone.
+  const { method, secret } = payload;
+  if (!ALLOWED_METHOD_NAMES.has(method)) return 'INVALID_METHOD_NAME';
+  // pin/password expect a typed string secret; passkey expects the raw
+  // 32-byte WK the renderer derived from WebAuthn PRF (Uint8Array or a
+  // plain number[] that survived the contextBridge structured clone).
+  if (method === 'pin') {
     if (typeof secret !== 'string' || !/^[0-9]{4,6}$/.test(secret)) return 'INVALID_PIN';
-  } else if (name === 'password') {
+  } else if (method === 'password') {
     if (typeof secret !== 'string' || secret.length < 8 || secret.length > 1024) return 'INVALID_PASSWORD';
-  } else if (name === 'passkey') {
-    if (kdf !== 'raw') return 'INVALID_PASSKEY_KDF';
+  } else if (method === 'passkey') {
     const bytes = secret instanceof Uint8Array ? secret : (Array.isArray(secret) ? Uint8Array.from(secret) : null);
     if (!bytes || bytes.length !== 32) return 'INVALID_PASSKEY_WK';
   }
