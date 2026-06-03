@@ -1,0 +1,350 @@
+// CAR-243: Runtime tests for slice 3 — multi-method MK parity (T1
+// revisited), add/remove round-trip (T11), PIN auto-disable persisting
+// across runtimes while password remains (T12), recovery rotate (T15).
+//
+// These reuse slice 2's FAST_PIN_ARGON / FAST_RECOVERY trick: production
+// KDF params would push each test to ~10s.
+
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { createRuntime } from './runtime.mjs';
+import { buildSecurityConfig } from './storeCodec.mjs';
+
+vi.setConfig({ testTimeout: 60_000 });
+
+const FAST_PIN_ARGON = { m: 8 * 1024, t: 1, p: 1 };
+const FAST_RECOVERY = { iterations: 1000 };
+
+function makeIo(initialConfig = null) {
+  let stored = initialConfig;
+  return {
+    state: () => stored,
+    readSecurity: async () => stored,
+    writeSecurity: async cfg => { stored = cfg; },
+  };
+}
+
+async function setupRuntimeWith(methods) {
+  const { config } = buildSecurityConfig(methods, { recoveryKdfParams: FAST_RECOVERY });
+  const io = makeIo(config);
+  const runtime = createRuntime({ io });
+  await runtime.loadConfig();
+  return { runtime, io, config };
+}
+
+describe('CAR-243 T1 revisited — PIN + password unwrap to the same MK', () => {
+  it('all configured methods recover the same 32-byte MK', async () => {
+    const methods = {
+      pin: { secret: '4729', kdfParams: FAST_PIN_ARGON },
+      password: { secret: 'correct horse battery staple', kdfParams: FAST_PIN_ARGON },
+    };
+    const { runtime } = await setupRuntimeWith(methods);
+    const a = await runtime.unlockPin('4729');
+    expect(a.success).toBe(true);
+    const mkAfterPin = Buffer.from(runtime.getMk()).toString('hex');
+    runtime.clearMk();
+    const b = await runtime.unlockPassword('correct horse battery staple');
+    expect(b.success).toBe(true);
+    const mkAfterPwd = Buffer.from(runtime.getMk()).toString('hex');
+    expect(mkAfterPin).toBe(mkAfterPwd);
+  });
+});
+
+describe('CAR-243 T11 — setup -> add -> remove -> unlock with the survivor', () => {
+  it('remove the original method, unlock via the added one', async () => {
+    const { runtime } = await setupRuntimeWith({ pin: { secret: '4729', kdfParams: FAST_PIN_ARGON } });
+    expect((await runtime.unlockPin('4729')).success).toBe(true);
+
+    const added = await runtime.addMethod({ method: 'password', secret: 'fishfish', kdfParams: FAST_PIN_ARGON });
+    expect(added.ok).toBe(true);
+
+    // Cannot remove last method while it's the only one — but with two
+    // enabled methods, removing PIN is fine.
+    const removed = await runtime.removeMethod('pin');
+    expect(removed.ok).toBe(true);
+
+    runtime.clearMk();
+    const result = await runtime.unlockPassword('fishfish');
+    expect(result.success).toBe(true);
+    expect(runtime.getMk().length).toBe(32);
+  });
+
+  it('refuses removing the last enabled method (I5 / R7)', async () => {
+    const { runtime } = await setupRuntimeWith({ pin: { secret: '4729', kdfParams: FAST_PIN_ARGON } });
+    await runtime.unlockPin('4729');
+    const r = await runtime.removeMethod('pin');
+    expect(r.ok).toBe(false);
+    expect(r.error).toBe('LAST_METHOD');
+  });
+});
+
+describe('CAR-243 T12 — PIN auto-disable persists across runtime restart', () => {
+  it('PIN flips enabled:false at 10 cumulative failures; password still works', async () => {
+    const methods = {
+      pin: { secret: '4729', kdfParams: FAST_PIN_ARGON },
+      password: { secret: 'fishfish', kdfParams: FAST_PIN_ARGON },
+    };
+    const { runtime, io } = await setupRuntimeWith(methods);
+    // Spec R8 backoff sets `lockedUntil` after 5 failures. We don't want
+    // to wall-clock-wait 24h, so between attempts we forcibly clear the
+    // lock window in the stored config — only the failure counter
+    // matters for auto-disable.
+    for (let i = 0; i < 10; i++) {
+      const r = await runtime.unlockPin('0000');
+      // Force the next attempt past any backoff window.
+      const cfg = io.state();
+      const pin = cfg.methods.pin;
+      if (pin && pin.rateLimit) pin.rateLimit.lockedUntil = null;
+      // If the runtime just auto-disabled the method we're done early.
+      if (r && r.error === 'METHOD_AUTO_DISABLED') break;
+    }
+    // Restart runtime — auto-disable must have persisted to disk.
+    const fresh = createRuntime({ io });
+    await fresh.loadConfig();
+    const state = fresh.getState();
+    expect(state.methods.includes('pin')).toBe(false);
+    expect(state.methods.includes('password')).toBe(true);
+    // Password still unlocks.
+    const r = await fresh.unlockPassword('fishfish');
+    expect(r.success).toBe(true);
+  });
+});
+
+describe('CAR-243 T15 — rotateRecoveryPhrase', () => {
+  it('old phrase fails after rotate; new phrase decrypts', async () => {
+    const { runtime } = await setupRuntimeWith({ pin: { secret: '4729', kdfParams: FAST_PIN_ARGON } });
+    // Unlock to set MK.
+    await runtime.unlockPin('4729');
+    // Discover the original phrase via reveal.
+    const reveal = await runtime.revealRecoveryPhrase({ method: 'pin', secret: '4729' });
+    expect(reveal.ok).toBe(true);
+    const oldPhrase = reveal.phrase;
+    // Rotate.
+    const r = await runtime.rotateRecoveryPhrase();
+    expect(r.ok).toBe(true);
+    expect(typeof r.phrase).toBe('string');
+    expect(r.phrase).not.toBe(oldPhrase);
+    // Old phrase no longer unlocks.
+    runtime.clearMk();
+    const oldAttempt = await runtime.unlockRecovery(oldPhrase);
+    expect(oldAttempt.success).toBe(false);
+    // New phrase does.
+    const newAttempt = await runtime.unlockRecovery(r.phrase);
+    expect(newAttempt.success).toBe(true);
+  });
+});
+
+describe('CAR-243 — disableSecurity tears down wrappers + plaintext fallback', () => {
+  it('invokes disableIo and clears cached config', async () => {
+    const { runtime } = await setupRuntimeWith({ pin: { secret: '4729', kdfParams: FAST_PIN_ARGON } });
+    await runtime.unlockPin('4729');
+    const calls = { decryptToPlaintext: 0, wipeSecurity: 0 };
+    const disableIo = {
+      async decryptToPlaintext() { calls.decryptToPlaintext++; },
+      async wipeSecurity() { calls.wipeSecurity++; },
+    };
+    const r = await runtime.disableSecurity({ disableIo });
+    expect(r.ok).toBe(true);
+    expect(calls.decryptToPlaintext).toBe(1);
+    expect(calls.wipeSecurity).toBe(1);
+    expect(runtime.isEnabled()).toBe(false);
+    expect(runtime.getMk()).toBe(null);
+  });
+
+  // CAR-243 round-3 (C2 lock-in): the disable path must never leave the
+  // staged plaintext committed if wipeSecurity throws. The contract is:
+  // stagePlaintext (writes .tmp) → wipeSecurity (atomic) → commitPlaintext
+  // (renames .tmp into place). A wipeSecurity throw must skip
+  // commitPlaintext so no plaintext rename ever happens.
+  it('C2: wipeSecurity throw aborts before commitPlaintext (no plaintext leak)', async () => {
+    const { runtime } = await setupRuntimeWith({ pin: { secret: '4729', kdfParams: FAST_PIN_ARGON } });
+    await runtime.unlockPin('4729');
+    const calls = { staged: 0, wiped: 0, committed: 0 };
+    const disableIo = {
+      async stagePlaintext() { calls.staged++; },
+      async wipeSecurity() { calls.wiped++; throw new Error('EBUSY: file locked'); },
+      async commitPlaintext() { calls.committed++; },
+    };
+    let threw = null;
+    try { await runtime.disableSecurity({ disableIo }); }
+    catch (e) { threw = e; }
+    expect(threw && threw.message).toMatch(/EBUSY/);
+    expect(calls.staged).toBe(1);          // staging happened
+    expect(calls.wiped).toBe(1);           // wipe was attempted
+    expect(calls.committed).toBe(0);       // CRITICAL: rename never happened
+    // MK is still cleared (round-2 try/finally invariant).
+    expect(runtime.getMk()).toBe(null);
+  });
+
+  it('C2: full happy path runs stage → wipe → commit in order', async () => {
+    const { runtime } = await setupRuntimeWith({ pin: { secret: '4729', kdfParams: FAST_PIN_ARGON } });
+    await runtime.unlockPin('4729');
+    const order = [];
+    const disableIo = {
+      async stagePlaintext() { order.push('stage'); },
+      async wipeSecurity() { order.push('wipe'); },
+      async commitPlaintext() { order.push('commit'); },
+    };
+    const r = await runtime.disableSecurity({ disableIo });
+    expect(r.ok).toBe(true);
+    expect(order).toEqual(['stage', 'wipe', 'commit']);
+  });
+
+  // CAR-243 round-4 (C2 production-cleanup gap from independent re-review):
+  // when wipeSecurity throws, the runtime must invoke
+  // disableIo.discardStagedPlaintext so the orphan `.tmp` is unlinked and
+  // plaintext never lingers on disk between retries.
+  it('C2 round-4: wipe throw triggers discardStagedPlaintext (orphan-tmp cleanup)', async () => {
+    const { runtime } = await setupRuntimeWith({ pin: { secret: '4729', kdfParams: FAST_PIN_ARGON } });
+    await runtime.unlockPin('4729');
+    const calls = { staged: 0, wiped: 0, committed: 0, discarded: 0 };
+    const disableIo = {
+      async stagePlaintext() { calls.staged++; },
+      async wipeSecurity() { calls.wiped++; throw new Error('EBUSY'); },
+      async commitPlaintext() { calls.committed++; },
+      async discardStagedPlaintext() { calls.discarded++; },
+    };
+    let threw = null;
+    try { await runtime.disableSecurity({ disableIo }); }
+    catch (e) { threw = e; }
+    expect(threw && threw.message).toMatch(/EBUSY/);
+    expect(calls.staged).toBe(1);
+    expect(calls.wiped).toBe(1);
+    expect(calls.committed).toBe(0);     // never commits on wipe throw
+    expect(calls.discarded).toBe(1);     // CRITICAL: cleanup invoked
+    expect(runtime.getMk()).toBe(null);  // round-2 invariant still holds
+  });
+
+  // CAR-243 round-4: end-to-end real-fs assertion that the orphan-`.tmp`
+  // does not survive a Phase-2 throw. We simulate the production wiring
+  // (the actual `disableIo` shape from src/main/index.js) and verify the
+  // file system has no `.tmp` after the failed disable.
+  it('C2 round-4: real-fs orphan `.tmp` is unlinked when wipe throws', async () => {
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+    const os = await import('node:os');
+
+    const dir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'car243-c2-'));
+    const ledgerPath = path.join(dir, 'ledger.json');
+    const tmpPath = `${ledgerPath}.tmp`;
+    try {
+      // Mimic the production stage step: write some bytes to the .tmp path.
+      let pendingTmp = null;
+      const disableIo = {
+        async stagePlaintext() {
+          await fs.promises.writeFile(tmpPath, '{"plain":"data"}');
+          pendingTmp = tmpPath;
+        },
+        async wipeSecurity() { throw new Error('EBUSY'); },
+        async commitPlaintext() {
+          if (!pendingTmp) return;
+          const t = pendingTmp; pendingTmp = null;
+          await fs.promises.rename(t, ledgerPath);
+        },
+        async discardStagedPlaintext() {
+          if (!pendingTmp) return;
+          const t = pendingTmp; pendingTmp = null;
+          try { await fs.promises.unlink(t); }
+          catch (err) { if (err && err.code !== 'ENOENT') throw err; }
+        },
+      };
+
+      const { runtime } = await setupRuntimeWith({ pin: { secret: '4729', kdfParams: FAST_PIN_ARGON } });
+      await runtime.unlockPin('4729');
+
+      let threw = null;
+      try { await runtime.disableSecurity({ disableIo }); }
+      catch (e) { threw = e; }
+      expect(threw).not.toBe(null);
+      // The .tmp file MUST NOT exist after a failed wipe.
+      let tmpExists = true;
+      try { await fs.promises.access(tmpPath); }
+      catch (err) { if (err && err.code === 'ENOENT') tmpExists = false; }
+      expect(tmpExists).toBe(false);
+      // The decrypted ledger MUST NOT exist either (no commit happened).
+      let ledgerExists = true;
+      try { await fs.promises.access(ledgerPath); }
+      catch (err) { if (err && err.code === 'ENOENT') ledgerExists = false; }
+      expect(ledgerExists).toBe(false);
+    } finally {
+      await fs.promises.rm(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('CAR-243 — passkey unlock via raw WK', () => {
+  it('addMethod(passkey, kdf:raw) + unlockPasskey round-trip', async () => {
+    const { runtime } = await setupRuntimeWith({ pin: { secret: '4729', kdfParams: FAST_PIN_ARGON } });
+    await runtime.unlockPin('4729');
+    // Raw 32-byte WK the renderer would have derived.
+    const wk = new Uint8Array(32);
+    for (let i = 0; i < 32; i++) wk[i] = i + 1;
+    const added = await runtime.addMethod({
+      method: 'passkey',
+      secret: wk,
+      extra: { rpId: 'localhost', credentialId: [1,2,3], salt: [4,5,6], prfPath: 'prf' },
+    });
+    expect(added.ok).toBe(true);
+    runtime.clearMk();
+    const r = await runtime.unlockPasskey(wk);
+    expect(r.success).toBe(true);
+    expect(runtime.getMk().length).toBe(32);
+  });
+
+  // C1 regression: getState() must surface the passkey replay metadata the
+  // lock screen reads (credentialId/salt/prfPath/userHandle). Previously it
+  // only emitted {name,rpId,lockedUntil,failures}, so LockScreen.getPasskeyWk
+  // received undefined for all four and could never derive the WK.
+  it('getState().methodsDetail surfaces passkey replay metadata', async () => {
+    const { runtime } = await setupRuntimeWith({ pin: { secret: '4729', kdfParams: FAST_PIN_ARGON } });
+    await runtime.unlockPin('4729');
+    const wk = new Uint8Array(32).fill(7);
+    await runtime.addMethod({
+      method: 'passkey',
+      secret: wk,
+      extra: { rpId: 'localhost', credentialId: [1, 2, 3], salt: [4, 5, 6], prfPath: 'prf', userHandle: [9, 9] },
+    });
+    const detail = runtime.getState().methodsDetail.find(m => m.name === 'passkey');
+    expect(detail).toMatchObject({
+      name: 'passkey',
+      rpId: 'localhost',
+      credentialId: [1, 2, 3],
+      salt: [4, 5, 6],
+      prfPath: 'prf',
+      userHandle: [9, 9],
+    });
+    // Non-passkey methods stay lean (no leaked passkey keys).
+    const pinDetail = runtime.getState().methodsDetail.find(m => m.name === 'pin');
+    expect(pinDetail.credentialId).toBeUndefined();
+  });
+
+  // M2: setMk is no longer on the public runtime surface; the only sanctioned
+  // injection is adoptSetupMk, which validates the setup output's shape.
+  it('adoptSetupMk adopts a valid 32-byte MK and rejects junk; setMk is not exposed', async () => {
+    const { runtime } = await setupRuntimeWith({ pin: { secret: '4729', kdfParams: FAST_PIN_ARGON } });
+    expect(runtime.setMk).toBeUndefined();
+    expect(runtime.adoptSetupMk({ mk: new Uint8Array(16) })).toBe(false);
+    expect(runtime.adoptSetupMk({})).toBe(false);
+    expect(runtime.adoptSetupMk(null)).toBe(false);
+    expect(runtime.isLocked()).toBe(true);
+    const ok = runtime.adoptSetupMk({ mk: new Uint8Array(32).fill(8) });
+    expect(ok).toBe(true);
+    expect(runtime.isLocked()).toBe(false);
+    expect(runtime.getMk().length).toBe(32);
+  });
+
+  // I1 regression: a WK delivered as a plain number[] (post structured-clone)
+  // must coerce to Uint8Array inside addMethod, not throw "raw kdf requires a
+  // 32-byte Uint8Array secret". The validator accepts number[]; the runtime
+  // must agree.
+  it('addMethod coerces a number[] passkey WK and it round-trips', async () => {
+    const { runtime } = await setupRuntimeWith({ pin: { secret: '4729', kdfParams: FAST_PIN_ARGON } });
+    await runtime.unlockPin('4729');
+    const wkArr = Array.from({ length: 32 }, (_, i) => (i + 3) & 0xff);
+    const added = await runtime.addMethod({ method: 'passkey', secret: wkArr });
+    expect(added.ok).toBe(true);
+    runtime.clearMk();
+    const r = await runtime.unlockPasskey(Uint8Array.from(wkArr));
+    expect(r.success).toBe(true);
+    expect(runtime.getMk().length).toBe(32);
+  });
+});

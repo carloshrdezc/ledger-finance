@@ -126,6 +126,70 @@ app.whenReady().then(async () => {
   // write is awaited before the page is torn down.
   ipcMain.handle('ledger-db:flush', () => ledgerStore.flush());
 
+  // CAR-243: disableIo for "turn security off" (R7 final paragraph).
+  // CAR-243 round-3 (C2): split into stage / wipe / commit so a wipe failure
+  // can never leave plaintext on disk alongside an encrypted store. Phase 1
+  // writes plaintext to a `.tmp` sibling. Phase 2 unlinks the encrypted
+  // store + security config. Phase 3 renames the `.tmp` into place. Phase 3
+  // only runs if Phase 2 succeeded; a Phase 2 throw aborts the disable
+  // with the encrypted store intact and no plaintext on disk.
+  let pendingPlaintextTmp = null;
+  const disableIo = {
+    async stagePlaintext(mk) {
+      const { aeadDecryptString, AEAD_AAD_STORE } = await import('./security/index.mjs');
+      let blob;
+      try {
+        const raw = await fs.promises.readFile(encryptedPath, 'utf8');
+        blob = JSON.parse(raw);
+      } catch (err) {
+        // No encrypted store yet (setup-then-disable race). Stage an empty
+        // object so commitPlaintext can write `{}` deterministically.
+        if (err && err.code === 'ENOENT') {
+          const dir = path.dirname(ledgerPath);
+          await fs.promises.mkdir(dir, { recursive: true });
+          const tmp = `${ledgerPath}.tmp`;
+          await fs.promises.writeFile(tmp, '{}');
+          pendingPlaintextTmp = tmp;
+          return;
+        }
+        throw err;
+      }
+      const json = aeadDecryptString(blob, mk, AEAD_AAD_STORE);
+      const dir = path.dirname(ledgerPath);
+      await fs.promises.mkdir(dir, { recursive: true });
+      const tmp = `${ledgerPath}.tmp`;
+      await fs.promises.writeFile(tmp, json);
+      pendingPlaintextTmp = tmp;
+    },
+    async commitPlaintext() {
+      if (!pendingPlaintextTmp) return;
+      const tmp = pendingPlaintextTmp;
+      pendingPlaintextTmp = null;
+      await fs.promises.rename(tmp, ledgerPath);
+    },
+    // CAR-243 round-4: explicit cleanup for the orphan-`.tmp` case. Called
+    // from disableSecurity when Phase 2 (wipeSecurity) throws, so the
+    // staged plaintext doesn't linger on disk. Idempotent + ENOENT-tolerant
+    // because Phase 1 may not have run, the unlink may race with retries,
+    // and a Windows file-lock turns into ENOENT after a previous unlink.
+    async discardStagedPlaintext() {
+      if (!pendingPlaintextTmp) return;
+      const tmp = pendingPlaintextTmp;
+      pendingPlaintextTmp = null;
+      try {
+        await fs.promises.unlink(tmp);
+      } catch (err) {
+        if (err && err.code !== 'ENOENT') throw err;
+      }
+    },
+    async wipeSecurity() {
+      for (const p of [securityPath, encryptedPath]) {
+        try { await fs.promises.unlink(p); }
+        catch (err) { if (err && err.code !== 'ENOENT') throw err; }
+      }
+    },
+  };
+
   let createdWin;
   const wcGetter = () => (createdWin && !createdWin.isDestroyed() ? createdWin.webContents : null);
 
@@ -134,6 +198,7 @@ app.whenReady().then(async () => {
     runtime,
     webContents: wcGetter,
     setupIo,
+    disableIo,
     isDev,
   });
 
