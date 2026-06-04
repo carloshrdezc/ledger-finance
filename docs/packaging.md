@@ -17,6 +17,77 @@ Double-click the `.exe` to install. The installer is an **NSIS** wizard:
 - creates Start Menu + Desktop shortcuts,
 - ships an uninstaller in `Add or remove programs`.
 
+## macOS (.dmg)
+
+```bash
+npm install
+npm run package:mac   # MUST run on macOS
+```
+
+This produces a disk image at `dist-app/LEDGER-<version>.dmg` for both
+Intel (`x64`) and Apple Silicon (`arm64`) — the `mac.target` config requests
+both arches:
+
+```jsonc
+"mac": {
+  "target": [ { "target": "dmg", "arch": ["x64", "arm64"] } ],
+  "category": "public.app-category.finance"
+}
+```
+
+> **Build on macOS only.** electron-builder cannot cross-compile a `.dmg`/`.app`
+> from Windows or Linux (it needs macOS-only tooling such as `hdiutil`). Build
+> locally on a Mac or via the `macos-latest` leg of the release CI matrix.
+
+**Signing & notarization are deferred to CAR-213.** The `.dmg` produced today
+is **unsigned** — on first launch users will need to right-click → Open (or clear
+the quarantine attribute) until a Developer ID cert + notarization land. No
+signing/notarization keys are configured in `package.json` on purpose.
+
+## Linux (AppImage / .deb)
+
+```bash
+npm install
+npm run package:linux   # build on Linux (or the ubuntu-latest CI leg)
+```
+
+This emits two artifacts in `dist-app/`:
+- `LEDGER-<version>.AppImage` — portable, runs on most distros (`chmod +x` then run),
+- `ledger_<version>_amd64.deb` — Debian/Ubuntu package (`sudo apt install ./*.deb`).
+
+```jsonc
+"linux": {
+  "target": ["AppImage", "deb"],
+  "category": "Office"
+}
+```
+
+> **Build on Linux.** Like macOS, the Linux targets are built on their native OS
+> (or the `ubuntu-latest` CI matrix leg), not cross-compiled from Windows.
+
+## App icon
+
+There is no source art, so the icon is a deterministic **placeholder mark**: a
+dark charcoal (`#1a1a1a`) square with a centered amber/gold (`#d4a24e`)
+monospace "L". The source of truth is `build/icon.svg`; the 1024×1024 PNG master
+`build/icon.png` is generated from it by `build/generate-icon.mjs` (pure Node,
+no native deps):
+
+```bash
+node build/generate-icon.mjs   # regenerate build/icon.png from the SVG geometry
+```
+
+**electron-builder auto-derives every platform icon from this single master.**
+Because `build/icon.png` is ≥512×512, electron-builder generates the macOS
+`.icns`, the Windows `.ico`, and the Linux PNG set automatically at build time —
+so there is **no need to hand-craft `.icns`/`.ico` binaries** (which is
+error-prone on Windows). `directories.buildResources` is set to `build`, which
+is where electron-builder looks for `icon.png`.
+
+> The missing icon was the root cause of the v1.0.2 macOS release build failing
+> (`⨯ ... not a file` during DMG creation). With `build/icon.png` committed, the
+> mac leg's `continue-on-error` guard has been removed from `release.yml`.
+
 ## Scripts
 
 | Script | What it does |
@@ -25,8 +96,8 @@ Double-click the `.exe` to install. The installer is an **NSIS** wizard:
 | `npm run build` | Vite build only — emits the renderer to `dist/` |
 | `npm run package` | Vite build + electron-builder for the **current OS** |
 | `npm run package:win` | Vite build + Windows NSIS `.exe` installer |
-| `npm run package:mac` | Vite build + macOS `.dmg` (requires running on macOS) |
-| `npm run package:linux` | Vite build + Linux `AppImage` |
+| `npm run package:mac` | Vite build + macOS `.dmg` for x64 + arm64 (run on macOS) |
+| `npm run package:linux` | Vite build + Linux `AppImage` + `.deb` (run on Linux) |
 | `npm test` | Run vitest suite |
 
 ## Outputs
@@ -190,7 +261,7 @@ Local testing is awkward because `electron-updater` expects an installed app tha
 
 ## Troubleshooting
 
-**"electron-builder couldn't find an icon"** — there's no custom icon yet, so electron-builder uses Electron's default. Add `build/icon.ico` (256×256) to override.
+**"electron-builder couldn't find an icon"** — the placeholder master lives at `build/icon.png` (1024×1024); electron-builder auto-derives `.icns`/`.ico` and the Linux PNG set from it. Regenerate it with `node build/generate-icon.mjs` if it goes missing. To ship real branding, replace `build/icon.svg` + `build/icon.png` with a ≥512×512 master.
 
 **"resource (e.g. wasm) not found at runtime"** — make sure the file is referenced from the renderer source so Vite picks it up; or add it to `build.extraResources` and load via `process.resourcesPath`.
 
