@@ -315,6 +315,17 @@ export function registerSecurityIpc({
     }
   });
 
+  // CAR-244 / I10: persist the idle auto-lock timeout (0 = never).
+  ipcMain.handle('security:set-idle-lock-ms', async (_event, ms) => {
+    try {
+      const r = await runtime.setIdleLockMs(Number(ms));
+      emitState();
+      return r;
+    } catch (err) {
+      return { ok: false, error: sanitizeError(err, 'SET_IDLE_LOCK_FAILED') };
+    }
+  });
+
   // --- slice-2 dev scaffold (kept until slice 3 wizard fully replaces) ---
   if (isDev && setupIo) {
     ipcMain.handle('security:run-setup-dev', async (_event, pin) => {

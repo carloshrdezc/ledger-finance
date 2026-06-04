@@ -56,6 +56,8 @@ function makeBridge(initialState) {
       // earlier-round drift `setOsEscrowEnabled`. Optional chaining used to
       // mask the mismatch, so the OS-escrow toggle was never actually exercised.
       setOsEscrow: vi.fn(async () => ({ ok: true })),
+      // CAR-244: idle auto-lock preset persistence.
+      setIdleLockMs: vi.fn(async () => ({ ok: true, idleLockMs: 60000 })),
     },
     emit,
   };
@@ -318,3 +320,43 @@ describe('SecurityNudge — within MKProvider', () => {
     expect(screen.queryByText(/SECURE YOUR DATA/)).toBeNull();
   });
 });
+
+// CAR-244: idle auto-lock preset selector in the Security section.
+describe('SecuritySettings — idle auto-lock preset (CAR-244)', () => {
+  it('renders the AUTO-LOCK preset selector with the configured value', async () => {
+    const { bridge } = makeBridge({
+      enabled: true, locked: false,
+      methods: ['pin'], methodsDetail: [{ name: 'pin' }],
+      hasRecovery: true, idleLockMs: 60000,
+    });
+    render(
+      <MKProvider bridge={bridge}>
+        <SecuritySettings isElectron={true} />
+      </MKProvider>
+    );
+    const select = await waitFor(() => screen.getByLabelText('idle-lock'));
+    // Native DOM prop (no jest-dom in this repo).
+    expect(select.tagName).toBe('SELECT');
+    expect(select.value).toBe('60000');
+    // "Never" preset (0) must be one of the options (I10).
+    const values = Array.from(select.options).map(o => o.value);
+    expect(values).toContain('0');
+  });
+
+  it('persists a new preset via setIdleLockMs on change', async () => {
+    const { bridge } = makeBridge({
+      enabled: true, locked: false,
+      methods: ['pin'], methodsDetail: [{ name: 'pin' }],
+      hasRecovery: true, idleLockMs: 300000,
+    });
+    render(
+      <MKProvider bridge={bridge}>
+        <SecuritySettings isElectron={true} />
+      </MKProvider>
+    );
+    const select = await waitFor(() => screen.getByLabelText('idle-lock'));
+    fireEvent.change(select, { target: { value: '0' } });
+    await waitFor(() => expect(bridge.setIdleLockMs).toHaveBeenCalledWith(0));
+  });
+});
+
