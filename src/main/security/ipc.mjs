@@ -127,7 +127,12 @@ export function registerSecurityIpc({
     } catch (err) {
       // CAR-243 round 5 (R2 #1): sanitize unhandled throws so Node fs
       // codes (ENOENT/EBUSY/EACCES) and absolute paths can't leak.
-      return { ok: false, error: sanitizeError(err, 'UNLOCK_FAILED') };
+      // CAR-313 (I1): the unlock family's result contract is `{ success }`
+      // (see runtime.unlock* + LockScreen's `result.success` check) — the
+      // sibling reveal/rotate/disable family uses `{ ok }`. Match the
+      // unlock contract here so the failure branch is shaped like the
+      // BAD_SECRET guard above and the success path, not the other family.
+      return { success: false, error: sanitizeError(err, 'UNLOCK_FAILED') };
     }
   });
 
@@ -151,7 +156,8 @@ export function registerSecurityIpc({
       return result;
     } catch (err) {
       // CAR-243 round 5: sanitize so a raw fs/AEAD error can't cross IPC.
-      return { ok: false, error: sanitizeError(err, 'UNLOCK_FAILED') };
+      // CAR-313 (I1): use `{ success }` to match the unlock-family contract.
+      return { success: false, error: sanitizeError(err, 'UNLOCK_FAILED') };
     }
   });
 
@@ -172,7 +178,8 @@ export function registerSecurityIpc({
       return result;
     } catch (err) {
       // CAR-243 round 5: sanitize so a raw fs/AEAD error can't cross IPC.
-      return { ok: false, error: sanitizeError(err, 'UNLOCK_FAILED') };
+      // CAR-313 (I1): use `{ success }` to match the unlock-family contract.
+      return { success: false, error: sanitizeError(err, 'UNLOCK_FAILED') };
     }
   });
 
@@ -187,7 +194,8 @@ export function registerSecurityIpc({
       return result;
     } catch (err) {
       // CAR-243 round 5: sanitize so a raw fs/AEAD error can't cross IPC.
-      return { ok: false, error: sanitizeError(err, 'UNLOCK_FAILED') };
+      // CAR-313 (I1): use `{ success }` to match the unlock-family contract.
+      return { success: false, error: sanitizeError(err, 'UNLOCK_FAILED') };
     }
   });
 
