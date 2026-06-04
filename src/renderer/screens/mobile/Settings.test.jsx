@@ -59,3 +59,16 @@ describe('mobile Settings · replay onboarding', () => {
     expect(store.resetAndLoadSampleData).not.toHaveBeenCalled();
   });
 });
+
+describe('CAR-243 · mobile Settings security section parity', () => {
+  it('renders the Security section', () => {
+    renderWithStore();
+    expect(screen.getByTestId('security-settings')).toBeTruthy();
+  });
+
+  it('renders the legacy plaintext nudge when security is disabled', () => {
+    try { window.localStorage.removeItem('ledger.security.nudgeDismissedAt'); } catch { /* jsdom */ }
+    renderWithStore();
+    expect(screen.getByText('SECURE YOUR DATA')).toBeTruthy();
+  });
+});

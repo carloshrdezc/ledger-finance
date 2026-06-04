@@ -87,3 +87,18 @@ describe('CAR-218 · WebSettings liquid account toggles', () => {
     expect(store.setOnboarded).toHaveBeenCalledWith(false);
   });
 });
+
+describe('CAR-243 · WebSettings security section parity', () => {
+  it('renders the Security section', () => {
+    renderWithStore();
+    expect(screen.getByTestId('security-settings')).toBeTruthy();
+  });
+
+  it('renders the legacy plaintext nudge when security is disabled', () => {
+    // SecurityNudge keys off `useMK().enabled` (defaults to false outside MKProvider)
+    // and a localStorage dismissal flag — clear the flag so we always see it here.
+    try { window.localStorage.removeItem('ledger.security.nudgeDismissedAt'); } catch { /* jsdom */ }
+    renderWithStore();
+    expect(screen.getByText('SECURE YOUR DATA')).toBeTruthy();
+  });
+});

@@ -1,6 +1,6 @@
 {
   "name": "ledger-finance",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "description": "LEDGER — Personal Finance App",
   "main": "src/main/index.js",
   "scripts": {
@@ -28,6 +28,7 @@
     "files": [
       "dist/**/*",
       "src/main/**/*",
+      "src/preload/**/*",
       "package.json"
     ],
     "publish": [

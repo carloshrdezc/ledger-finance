@@ -28,6 +28,8 @@ import {
   convertToTransferInArray,
   updateTxsIndividuallyInArray,
 } from './bulkOps.mjs';
+import { MKProvider } from './security/useMK';
+import LockScreen from './screens/LockScreen';
 
 const MIGRATED_TO_DISK_KEY = 'ledger:_migratedToDisk';
 const ONBOARDED_KEY = 'ledger:onboarded';
@@ -179,8 +181,16 @@ function useLS(key, def) {
   // `ctx` is never null here. The browser-preview path (no Electron `ledgerDB`)
   // is handled inside StoreProvider by skipping the disk write; the
   // synchronous `localStorage` mirror still keeps state durable.
+  //
+  // CAR-242: when `ctx.locked` is true the disk store has been replaced by
+  // the encrypted variant in main and is returning the LOCKED sentinel —
+  // every `useLS` falls back to its caller's `def` until unlock fires the
+  // hydration event. This is per spec R5: locked state shouldn't throw or
+  // surface stale data; it should just look like an empty install.
   const ctx = React.useContext(PersistenceCtx);
-  const value = getSnapshotValue(ctx.snapshot, key, def);
+  const value = ctx.locked
+    ? def
+    : getSnapshotValue(ctx.snapshot, key, def);
   const set = React.useCallback(u => ctx.setKey(key, u, def), [ctx, key, def]);
   return [value, set];
 }
@@ -252,6 +262,18 @@ export function StoreProvider({ children }) {
   const snapshotRef = React.useRef(snapshot);
   const writeTimerRef = React.useRef(null);
   const ledgerDB = typeof window !== 'undefined' ? window.ledgerDB : undefined;
+  const ledgerSecurity = typeof window !== 'undefined' ? window.ledgerSecurity : undefined;
+
+  // CAR-242: lock-state mirror. `locked` is the renderer's view of the
+  // main-process MK lifecycle. While true, `useLS` returns `def` and
+  // ledgerDB.write IPC calls are no-ops on our side (main also refuses with
+  // `LOCKED`). The provider eagerly fetches state on mount and subscribes
+  // to `security:state-changed` so lockNow / unlock both re-render
+  // automatically without unmounting React state above (spec R4 / Example F).
+  const [securityState, setSecurityState] = React.useState({
+    enabled: false,
+    locked: false,
+  });
 
   React.useEffect(() => {
     snapshotRef.current = snapshot;
@@ -294,6 +316,15 @@ export function StoreProvider({ children }) {
       try {
         const diskState = await ledgerDB.read();
         if (cancelled) return;
+        // CAR-242: when security is enabled but the app is locked, main
+        // returns a sentinel instead of the plaintext snapshot. Don't run
+        // the migration path on that — keep the existing in-memory
+        // snapshot (which is empty / fallback defaults via useLS) until
+        // an unlock event re-fires this hydration.
+        if (diskState && diskState.__locked === true) {
+          setSecurityState(s => ({ ...s, enabled: true, locked: true }));
+          return;
+        }
         const { snapshot: bootSnapshot, needsWrite } = resolveBootSnapshot(diskState);
         const currentSnapshot = snapshotRef.current;
         const userChanges = {};
@@ -322,7 +353,7 @@ export function StoreProvider({ children }) {
       // Unmount during normal use (route change, etc.) is rare; if it does
       // happen the next setKey will reschedule a write of the same data.
     };
-  }, [ledgerDB]);
+  }, [ledgerDB, securityState.locked]);
 
   // CAR-91: durability on quit. Two coordinated paths:
   //
@@ -368,12 +399,53 @@ export function StoreProvider({ children }) {
     };
   }, [ledgerDB, flushPendingWrite]);
 
-  const persistenceValue = React.useMemo(() => ({ snapshot, setKey }), [snapshot, setKey]);
+  // CAR-242: subscribe to main's `security:state-changed` events. Whenever
+  // `locked` flips from true → false (successful unlock) we re-fire the
+  // hydration effect by toggling our local `securityState.locked` flag —
+  // its presence in the dep array of the hydration effect causes it to
+  // re-run, this time getting real plaintext from main.
+  // Whenever it flips false → true (lockNow), the hydration effect re-runs
+  // and stops at the LOCKED sentinel branch above; we set securityState
+  // accordingly and the render gate below switches to <LockScreen>.
+  React.useEffect(() => {
+    if (!ledgerSecurity || typeof ledgerSecurity.onStateChanged !== 'function') {
+      return undefined;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const initial = await ledgerSecurity.getState();
+        if (!cancelled && initial) {
+          setSecurityState({ enabled: !!initial.enabled, locked: !!initial.locked });
+        }
+      } catch {
+        // Bridge call failed — leave defaults; ledgerDB.read will surface
+        // the LOCKED sentinel separately if applicable.
+      }
+    })();
+    const unsubscribe = ledgerSecurity.onStateChanged(next => {
+      if (!next) return;
+      setSecurityState({ enabled: !!next.enabled, locked: !!next.locked });
+    });
+    return () => {
+      cancelled = true;
+      if (typeof unsubscribe === 'function') unsubscribe();
+    };
+  }, [ledgerSecurity]);
+
+  const persistenceValue = React.useMemo(
+    () => ({ snapshot, setKey, locked: securityState.locked }),
+    [snapshot, setKey, securityState.locked],
+  );
 
   return (
-    <PersistenceCtx.Provider value={persistenceValue}>
-      <StoreProviderImpl>{children}</StoreProviderImpl>
-    </PersistenceCtx.Provider>
+    <MKProvider>
+      <PersistenceCtx.Provider value={persistenceValue}>
+        {securityState.enabled && securityState.locked
+          ? <LockScreen />
+          : <StoreProviderImpl>{children}</StoreProviderImpl>}
+      </PersistenceCtx.Provider>
+    </MKProvider>
   );
 }
 

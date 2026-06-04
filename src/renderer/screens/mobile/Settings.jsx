@@ -5,6 +5,7 @@ import { useStore } from '../../store';
 import ImportExport from '../../components/ImportExport';
 import FxRatesSection from '../../components/FxRatesSection';
 import BackupSection from '../../components/BackupSection';
+import { SecuritySettings, SecurityNudge } from '../../components/SecuritySettings';
 
 const SETTINGS_CURRENCIES = ['USD', 'EUR', 'GBP', 'JPY', 'CAD', 'AUD', 'CHF', 'MXN'];
 const SETTINGS_THEMES = ['light', 'dark', 'auto'];
@@ -79,6 +80,15 @@ export default function Settings({ t, onBack, onNavigate, setAccent, setDensity,
         <div style={{ fontSize: 10, letterSpacing: 1.2, color: A.muted }}>v1.0</div>
       </div>
       <ARule thick />
+
+      {/* CAR-243: legacy plaintext install nudge — non-blocking, dismissable. */}
+      <div style={{ marginTop: 12 }}>
+        <SecurityNudge onSetup={() => {
+          if (typeof document !== 'undefined') {
+            document.getElementById('settings-security-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }
+        }} />
+      </div>
 
       {/* DISPLAY */}
       <div style={{ marginTop: 14 }}>
@@ -167,6 +177,11 @@ export default function Settings({ t, onBack, onNavigate, setAccent, setDensity,
       {/* BACKUP */}
       <div style={{ marginTop: 14 }}>
         <BackupSection />
+      </div>
+
+      {/* CAR-243: SECURITY */}
+      <div id="settings-security-section" style={{ marginTop: 14 }}>
+        <SecuritySettings />
       </div>
 
       {/* DATA */}

@@ -27,4 +27,11 @@ describe('Windows packaging config', () => {
       },
     ]);
   });
+
+  it('includes the preload directory in the packaged bundle (CAR-242)', () => {
+    // The renderer relies on `window.ledgerSecurity` / `window.ledgerDB`
+    // exposed via `src/preload/index.js`. If the preload isn't bundled,
+    // the lock screen and DB bridge silently break in production.
+    expect(packageJson.build?.files).toContain('src/preload/**/*');
+  });
 });
