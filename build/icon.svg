@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  LEDGER app icon — placeholder mark (CAR-212).
+  Dark charcoal background (#1a1a1a) with a centered amber/gold (#d4a24e)
+  monospace "L" glyph and generous padding. This SVG is the source of
+  truth; build/icon.png is the deterministic 1024x1024 rasterization
+  produced by build/generate-icon.mjs. electron-builder auto-derives
+  .icns (mac), .ico (win) and Linux PNGs from build/icon.png.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <rect width="1024" height="1024" fill="#1a1a1a"/>
+  <!-- Monospace "L": vertical stem + horizontal foot, generous padding -->
+  <g fill="#d4a24e">
+    <!-- vertical stem -->
+    <rect x="352" y="256" width="128" height="512"/>
+    <!-- horizontal foot -->
+    <rect x="352" y="640" width="320" height="128"/>
+  </g>
+</svg>

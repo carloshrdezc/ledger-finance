@@ -35,3 +35,46 @@ describe('Windows packaging config', () => {
     expect(packageJson.build?.files).toContain('src/preload/**/*');
   });
 });
+
+describe('macOS packaging config (CAR-212)', () => {
+  it('targets dmg for both x64 and arm64 in the finance category', () => {
+    const mac = packageJson.build?.mac;
+    expect(mac.category).toBe('public.app-category.finance');
+    expect(mac.target).toEqual([
+      { target: 'dmg', arch: ['x64', 'arm64'] },
+    ]);
+  });
+
+  it('does not configure mac code signing/notarization (deferred to CAR-213)', () => {
+    const mac = packageJson.build?.mac ?? {};
+    expect(mac).not.toHaveProperty('identity');
+    expect(mac).not.toHaveProperty('notarize');
+  });
+});
+
+describe('Linux packaging config (CAR-212)', () => {
+  it('builds AppImage and deb in the Office category', () => {
+    const linux = packageJson.build?.linux;
+    expect(linux.category).toBe('Office');
+    expect(linux.target).toEqual(['AppImage', 'deb']);
+  });
+});
+
+describe('app icon resources (CAR-212)', () => {
+  it('points buildResources at the build/ dir holding the icon master', () => {
+    expect(packageJson.build?.directories?.buildResources).toBe('build');
+  });
+
+  it('ships a >=512px icon master so electron-builder auto-derives all platforms', () => {
+    const png = readFileSync(new URL('../../build/icon.png', import.meta.url));
+    // PNG signature
+    expect(png.subarray(0, 8).toString('hex')).toBe('89504e470d0a1a0a');
+    // IHDR width/height live at byte offsets 16 and 20
+    const width = png.readUInt32BE(16);
+    const height = png.readUInt32BE(20);
+    expect(width).toBe(1024);
+    expect(height).toBe(1024);
+    expect(width).toBeGreaterThanOrEqual(512);
+    expect(height).toBeGreaterThanOrEqual(512);
+  });
+});
