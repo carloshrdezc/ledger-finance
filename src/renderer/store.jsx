@@ -29,6 +29,7 @@ import {
   updateTxsIndividuallyInArray,
 } from './bulkOps.mjs';
 import { MKProvider } from './security/useMK';
+import { IdleLockGuard } from './security/IdleLockGuard';
 import LockScreen from './screens/LockScreen';
 
 const MIGRATED_TO_DISK_KEY = 'ledger:_migratedToDisk';
@@ -440,6 +441,7 @@ export function StoreProvider({ children }) {
 
   return (
     <MKProvider>
+      <IdleLockGuard />
       <PersistenceCtx.Provider value={persistenceValue}>
         {securityState.enabled && securityState.locked
           ? <LockScreen />

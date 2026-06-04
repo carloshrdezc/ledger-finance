@@ -477,6 +477,20 @@ export function createRuntime({ io, now = () => Date.now() }) {
     return { ok: true };
   }
 
+  // CAR-244 / I10: persist the idle auto-lock timeout. `0` means "never".
+  // Non-numeric / negative values collapse to 0 so a corrupt input can never
+  // produce a runaway or instant lock. The renderer idle controller reads
+  // this back via getState().idleLockMs.
+  async function setIdleLockMs(value) {
+    if (!cachedConfig) return { ok: false, error: 'NOT_ENABLED' };
+    const ms = (typeof value === 'number' && Number.isFinite(value) && value > 0)
+      ? Math.floor(value)
+      : 0;
+    cachedConfig = { ...cachedConfig, idleLockMs: ms };
+    await io.writeSecurity(cachedConfig);
+    return { ok: true, idleLockMs: ms };
+  }
+
   // R3 step 2 + edge-case row 4: list methods the *current origin* can
   // actually use. Browser path filters out passkey if the stored RP ID
   // doesn't match the served origin (METHOD_UNAVAILABLE_ON_ORIGIN). Main
@@ -551,6 +565,7 @@ export function createRuntime({ io, now = () => Date.now() }) {
     rotateRecoveryPhrase,
     disableSecurity,
     setOsEscrowEnabled,
+    setIdleLockMs,
     getState,
   };
 }

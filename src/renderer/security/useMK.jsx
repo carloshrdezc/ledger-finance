@@ -40,6 +40,7 @@ const MKContext = React.createContext({
   rotateRecovery: noopOk,
   disable: noopOk,
   setOsEscrow: noopOk,
+  setIdleLockMs: noopOk,
 });
 
 const DEFAULT_STATE = Object.freeze({
@@ -153,6 +154,11 @@ export function MKProvider({ children, bridge }) {
       { ok: false, error: 'NO_BRIDGE' }),
   [work]);
 
+  const setIdleLockMs = React.useCallback(ms =>
+    work(b => b.setIdleLockMs?.(ms) ?? Promise.resolve({ ok: false, error: 'NOT_SUPPORTED' }),
+      { ok: false, error: 'NO_BRIDGE' }),
+  [work]);
+
   const value = React.useMemo(() => ({
     enabled: state.enabled,
     locked: state.locked,
@@ -165,10 +171,10 @@ export function MKProvider({ children, bridge }) {
     working,
     unlockPin, unlockPassword, unlockPasskey, unlockRecovery,
     lockNow, setup, addMethod, removeMethod,
-    revealRecovery, rotateRecovery, disable, setOsEscrow,
+    revealRecovery, rotateRecovery, disable, setOsEscrow, setIdleLockMs,
   }), [state, working, unlockPin, unlockPassword, unlockPasskey, unlockRecovery,
        lockNow, setup, addMethod, removeMethod, revealRecovery, rotateRecovery,
-       disable, setOsEscrow]);
+       disable, setOsEscrow, setIdleLockMs]);
 
   return <MKContext.Provider value={value}>{children}</MKContext.Provider>;
 }

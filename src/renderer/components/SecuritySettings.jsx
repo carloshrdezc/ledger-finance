@@ -23,6 +23,7 @@ import { ALabel, ARule } from './Shared';
 import { useMK } from '../security/useMK';
 import { SecuritySetupWizard } from '../security/SecuritySetupWizard';
 import { createPasskey, passkeyMatchesOrigin } from '../security/webauthn';
+import { IDLE_LOCK_PRESETS } from '../security/idleLock.mjs';
 
 // Browser path = no preload bridge present. Used to hide OS-escrow toggle
 // per spec I9.
@@ -80,9 +81,9 @@ function ReauthForm({ methods, onSubmit, onCancel, label = 'CONFIRM' }) {
 export function SecuritySettings({ isElectron = detectIsElectron() }) {
   const mk = useMK();
   const {
-    enabled, locked, methods, methodsDetail, hasRecovery, osEscrow,
+    enabled, locked, methods, methodsDetail, hasRecovery, osEscrow, idleLockMs,
     addMethod, removeMethod, revealRecovery, rotateRecovery, disable,
-    setOsEscrow, lockNow,
+    setOsEscrow, lockNow, setIdleLockMs,
   } = mk;
 
   const [showWizard, setShowWizard] = React.useState(false);
@@ -247,6 +248,13 @@ export function SecuritySettings({ isElectron = detectIsElectron() }) {
     if (!r.ok) setError(r.error || 'ESCROW_FAILED');
   }
 
+  // CAR-244 / I10: change the idle auto-lock timeout (0 = never).
+  async function handleIdleLockChange(e) {
+    clearMessages();
+    const r = await setIdleLockMs(Number(e.target.value));
+    if (!r.ok) setError(r.error || 'IDLE_LOCK_FAILED');
+  }
+
 
   return (
     <div data-testid="security-settings" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -334,6 +342,19 @@ export function SecuritySettings({ isElectron = detectIsElectron() }) {
               </label>
             </>
           )}
+
+          <ARule />
+          <ALabel>AUTO-LOCK WHEN IDLE</ALabel>
+          <select
+            aria-label="idle-lock"
+            value={IDLE_LOCK_PRESETS.some(p => p.ms === idleLockMs) ? idleLockMs : 300000}
+            onChange={handleIdleLockChange}
+            style={cellInput}
+          >
+            {IDLE_LOCK_PRESETS.map(p => (
+              <option key={p.label} value={p.ms}>{p.label}</option>
+            ))}
+          </select>
 
           <ARule />
           <div style={{ display: 'flex', gap: 6 }}>
