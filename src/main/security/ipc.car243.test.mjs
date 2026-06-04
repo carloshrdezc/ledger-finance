@@ -408,3 +408,100 @@ describe('CAR-243 (I3) — reveal/rotate/disable error sanitization', () => {
     expect(r).toEqual({ ok: false, error: 'DISABLE_FAILED' });
   });
 });
+
+// CAR-313 (I2): the four unlock handlers were the last unwrapped runtime.*
+// call surface. Round 5 wrapped each in try/catch + sanitizeError so a raw
+// fs/AEAD throw (ENOENT/EBUSY/EACCES with an absolute path) can't cross IPC.
+// Unlike the reveal/rotate/disable family (which returns `{ ok }`), the
+// unlock family's contract is `{ success }` (runtime.unlock* success path +
+// LockScreen's `result.success` check), so the sanitized failure must be
+// shaped `{ success: false, error: 'UNLOCK_FAILED' }` — NOT `{ ok: false }`.
+// These tests lock both the sanitization and the contract shape; without
+// them a future refactor could drop the catch or flip the key undetected.
+describe('CAR-313 (I2) — unlock-handler throw sanitization + contract shape', () => {
+  it('sanitizes a thrown fs-path error from unlock-pin as success:false', async () => {
+    const ipc = makeIpcMainShim();
+    const runtime = makeStubRuntime({
+      unlockPin: async () => { throw new Error('EBUSY: C:\\Users\\x\\security.json'); },
+    });
+    registerSecurityIpc({ ipcMain: ipc, runtime, webContents: () => null });
+    const r = await ipc.invoke('security:unlock-pin', '4729');
+    expect(r).toEqual({ success: false, error: 'UNLOCK_FAILED' });
+  });
+
+  it('sanitizes a thrown fs-path error from unlock-password as success:false', async () => {
+    const ipc = makeIpcMainShim();
+    const runtime = makeStubRuntime({
+      unlockPassword: async () => { throw new Error('EACCES: /Users/secret/ledger-security.json'); },
+    });
+    registerSecurityIpc({ ipcMain: ipc, runtime, webContents: () => null });
+    const r = await ipc.invoke('security:unlock-password', 'fishfish');
+    expect(r).toEqual({ success: false, error: 'UNLOCK_FAILED' });
+  });
+
+  it('sanitizes a thrown fs-path error from unlock-passkey as success:false', async () => {
+    const ipc = makeIpcMainShim();
+    const runtime = makeStubRuntime({
+      unlockPasskey: async () => { throw new Error('ENOENT: /home/x/.config/ledger/security.json'); },
+    });
+    registerSecurityIpc({ ipcMain: ipc, runtime, webContents: () => null });
+    const r = await ipc.invoke('security:unlock-passkey', new Uint8Array(32));
+    expect(r).toEqual({ success: false, error: 'UNLOCK_FAILED' });
+  });
+
+  it('sanitizes a thrown fs-path error from unlock-recovery as success:false', async () => {
+    const ipc = makeIpcMainShim();
+    const runtime = makeStubRuntime({
+      unlockRecovery: async () => { throw new Error('EBUSY: /Users/secret/ledger-security.json'); },
+    });
+    registerSecurityIpc({ ipcMain: ipc, runtime, webContents: () => null });
+    const r = await ipc.invoke('security:unlock-recovery', 'correct horse battery staple');
+    expect(r).toEqual({ success: false, error: 'UNLOCK_FAILED' });
+  });
+
+  it('preserves an allow-listed err.code thrown by unlock instead of falling back', async () => {
+    // WRONG_KEY is in SAFE_ERROR_CODES, so a thrown error carrying it as
+    // err.code passes through verbatim rather than collapsing to the
+    // UNLOCK_FAILED fallback — defense-in-depth for any future path that
+    // attaches a known code on a thrown error.
+    const ipc = makeIpcMainShim();
+    const runtime = makeStubRuntime({
+      unlockPin: async () => { const e = new Error('boom'); e.code = 'WRONG_KEY'; throw e; },
+    });
+    registerSecurityIpc({ ipcMain: ipc, runtime, webContents: () => null });
+    const r = await ipc.invoke('security:unlock-pin', '4729');
+    expect(r).toEqual({ success: false, error: 'WRONG_KEY' });
+  });
+});
+
+// CAR-313 (M1): round 5 added PRIMARY_METHOD_REQUIRED, METHODS_REQUIRED and
+// NO_SETUP_IO to SAFE_ERROR_CODES as defense-in-depth — they're currently
+// only ever *returned* (not thrown with err.code), so nothing else exercises
+// their allow-list membership. These tests lock that a thrown error carrying
+// each code passes through sanitizeError verbatim, so a future drive-by edit
+// to the allow-list can't silently drop them.
+describe('CAR-313 (M1) — round-5 allow-list codes pass through when thrown', () => {
+  for (const code of ['PRIMARY_METHOD_REQUIRED', 'METHODS_REQUIRED', 'NO_SETUP_IO']) {
+    it(`preserves a thrown err.code of ${code} via an unlock handler`, async () => {
+      const ipc = makeIpcMainShim();
+      const runtime = makeStubRuntime({
+        unlockPin: async () => { const e = new Error('boom'); e.code = code; throw e; },
+      });
+      registerSecurityIpc({ ipcMain: ipc, runtime, webContents: () => null });
+      const r = await ipc.invoke('security:unlock-pin', '4729');
+      expect(r).toEqual({ success: false, error: code });
+    });
+  }
+
+  it('drops a non-allow-listed thrown code to the UNLOCK_FAILED fallback', async () => {
+    // Sanity counter-test: a code that is NOT in SAFE_ERROR_CODES (e.g. a raw
+    // fs code) must collapse to the fallback, proving the allow-list gates.
+    const ipc = makeIpcMainShim();
+    const runtime = makeStubRuntime({
+      unlockPin: async () => { const e = new Error('boom'); e.code = 'EBUSY'; throw e; },
+    });
+    registerSecurityIpc({ ipcMain: ipc, runtime, webContents: () => null });
+    const r = await ipc.invoke('security:unlock-pin', '4729');
+    expect(r).toEqual({ success: false, error: 'UNLOCK_FAILED' });
+  });
+});

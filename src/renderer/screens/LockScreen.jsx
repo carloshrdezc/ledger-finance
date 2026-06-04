@@ -225,7 +225,16 @@ export function LockScreen() {
             {usableMethods.map(m => (
               <button
                 key={m.name}
-                ref={el => { if (el) tabRefs.current[m.name] = el; }}
+                ref={el => {
+                  // CAR-243 round 5 (R1 nit, R2 #5): bounded retention is
+                  // safe (4-element domain, only `active` ever read), but
+                  // the conventional ref-callback cleanup is `delete on
+                  // null` so detached DOM nodes aren't held alive when
+                  // `usableMethods` shrinks at runtime (e.g. PIN auto-
+                  // disabled). Tidier and matches React's own docs.
+                  if (el) tabRefs.current[m.name] = el;
+                  else delete tabRefs.current[m.name];
+                }}
                 type="button"
                 role="tab"
                 id={`unlock-tab-${m.name}`}

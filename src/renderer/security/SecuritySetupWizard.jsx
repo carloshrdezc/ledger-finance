@@ -152,6 +152,19 @@ export function SecuritySetupWizard({ onDone, onCancel, isElectron = (typeof win
   // error in Electron) and gates a confirmation step so the user reads
   // it before the wizard tears down.
   const [pendingOrphanCancel, setPendingOrphanCancel] = React.useState(false);
+  // CAR-243 round 5 (R1 nit, R2 #4): WAI-ARIA APG requires that when an
+  // alertdialog appears, focus moves into it (typically onto the safer
+  // default action — KEEP EDITING here) and Escape dismisses it. The
+  // round-4 implementation shipped neither, so a keyboard user had to tab
+  // into the warning. Fix below: ref + effect for focus, onKeyDown for
+  // Escape, and `aria-describedby` linking the title to the body text so
+  // SR users hear the explanation along with the dialog announcement.
+  const keepEditingRef = React.useRef(null);
+  React.useEffect(() => {
+    if (pendingOrphanCancel && keepEditingRef.current) {
+      keepEditingRef.current.focus();
+    }
+  }, [pendingOrphanCancel]);
   function cancelWithHint() {
     if (passkey) {
       // Show the inline notice; the actual cancel only fires when the
@@ -189,6 +202,13 @@ export function SecuritySetupWizard({ onDone, onCancel, isElectron = (typeof win
           <div
             role="alertdialog"
             aria-label="Orphan passkey warning"
+            aria-describedby="orphan-cancel-desc"
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') {
+                e.preventDefault();
+                dismissOrphanCancel();
+              }
+            }}
             style={{
               display: 'flex', flexDirection: 'column', gap: 10,
               padding: 12, border: `1px solid ${A.neg}`, background: A.bg,
@@ -196,14 +216,14 @@ export function SecuritySetupWizard({ onDone, onCancel, isElectron = (typeof win
             }}
           >
             <ALabel>ORPHAN PASSKEY · CONFIRM CANCEL</ALabel>
-            <div style={{ fontSize: 12, lineHeight: 1.5, color: A.muted, letterSpacing: 0 }}>
+            <div id="orphan-cancel-desc" style={{ fontSize: 12, lineHeight: 1.5, color: A.muted, letterSpacing: 0 }}>
               A passkey was enrolled at your OS or browser before you cancelled.
               No data is at risk, but the credential is now orphaned. You may
               want to delete it from your OS keychain or browser passkey
               manager.
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
-              <button type="button" onClick={dismissOrphanCancel} style={btn(false)}>KEEP EDITING</button>
+              <button ref={keepEditingRef} type="button" onClick={dismissOrphanCancel} style={btn(false)}>KEEP EDITING</button>
               <button type="button" onClick={confirmOrphanCancel} style={btn(true)}>CANCEL ANYWAY</button>
             </div>
           </div>
@@ -299,10 +319,16 @@ export function SecuritySetupWizard({ onDone, onCancel, isElectron = (typeof win
             )}
             {error && <div role="alert" style={{ fontSize: 11, color: A.neg, letterSpacing: 1.2 }}>{error}</div>}
             <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-              <button type="button" onClick={() => setStep(1)} style={btn(false)}>BACK</button>
+              {/* CAR-243 round 5 (R2 #3): disable while `working` so the
+                  user can't tear down the wizard mid-`commit()` (Argon2id
+                  is hundreds of ms — the IPC promise is in flight while
+                  the renderer un-mounts, leaving setup persisted but the
+                  user thinks they cancelled). BACK has the same race —
+                  guard it too. */}
+              <button type="button" onClick={() => setStep(1)} disabled={working} style={btn(false, working)}>BACK</button>
               {/* CAR-243 round-4 (I2): Step 2 also gets a CANCEL so the
                   orphan-passkey hint fires without forcing Back→Cancel. */}
-              <button type="button" onClick={cancelWithHint} style={btn(false)}>CANCEL</button>
+              <button type="button" onClick={cancelWithHint} disabled={working} style={btn(false, working)}>CANCEL</button>
               <button
                 type="button"
                 disabled={!step2Valid() || working}

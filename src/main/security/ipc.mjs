@@ -44,6 +44,19 @@ const SAFE_ERROR_CODES = new Set([
   'BAD_SECRET',
   'WRONG_KEY',
   'NEEDS_RECOVERY',
+  // CAR-243 round 5: PRIMARY_METHOD_REQUIRED is thrown by storeCodec
+  // when a setup migration would leave zero primary methods. Practically
+  // unreachable behind security:setup's METHODS_REQUIRED guard, but the
+  // allow-list claims to cover "every code intentionally surfaced by
+  // the runtime, the validator, and the wrappers" — adding it keeps
+  // that contract honest. (Round-4 re-reviewers R1 nit, R2 #2.)
+  'PRIMARY_METHOD_REQUIRED',
+  // CAR-243 round 5: setup-migration / NO_SETUP_IO surface from
+  // security:setup that we already use as { ok:false, error:'…' };
+  // including in allow-list lets defense-in-depth pass through if any
+  // future path ever attaches it as err.code instead of returning it.
+  'METHODS_REQUIRED',
+  'NO_SETUP_IO',
 ]);
 // Retained for shape validation only (defense against future codes that
 // don't even look like UPPER_SNAKE — those should never be surfaced).
@@ -107,9 +120,20 @@ export function registerSecurityIpc({
   ipcMain.handle('security:get-state', () => runtime.getState());
 
   ipcMain.handle('security:unlock-pin', async (_event, pin) => {
-    const result = await runtime.unlockPin(pin);
-    emitState();
-    return result;
+    try {
+      const result = await runtime.unlockPin(pin);
+      emitState();
+      return result;
+    } catch (err) {
+      // CAR-243 round 5 (R2 #1): sanitize unhandled throws so Node fs
+      // codes (ENOENT/EBUSY/EACCES) and absolute paths can't leak.
+      // CAR-313 (I1): the unlock family's result contract is `{ success }`
+      // (see runtime.unlock* + LockScreen's `result.success` check) — the
+      // sibling reveal/rotate/disable family uses `{ ok }`. Match the
+      // unlock contract here so the failure branch is shaped like the
+      // BAD_SECRET guard above and the success path, not the other family.
+      return { success: false, error: sanitizeError(err, 'UNLOCK_FAILED') };
+    }
   });
 
   ipcMain.handle('security:lock-now', () => {
@@ -126,9 +150,15 @@ export function registerSecurityIpc({
     if (typeof password !== 'string' || password.length > 1024) {
       return { success: false, error: 'BAD_SECRET' };
     }
-    const result = await runtime.unlockPassword(password);
-    emitState();
-    return result;
+    try {
+      const result = await runtime.unlockPassword(password);
+      emitState();
+      return result;
+    } catch (err) {
+      // CAR-243 round 5: sanitize so a raw fs/AEAD error can't cross IPC.
+      // CAR-313 (I1): use `{ success }` to match the unlock-family contract.
+      return { success: false, error: sanitizeError(err, 'UNLOCK_FAILED') };
+    }
   });
 
   // Renderer derives the WK from the WebAuthn PRF result and ships the raw
@@ -142,9 +172,15 @@ export function registerSecurityIpc({
     if (bytes.length !== 32) {
       return { success: false, error: 'BAD_SECRET' };
     }
-    const result = await runtime.unlockPasskey(bytes);
-    emitState();
-    return result;
+    try {
+      const result = await runtime.unlockPasskey(bytes);
+      emitState();
+      return result;
+    } catch (err) {
+      // CAR-243 round 5: sanitize so a raw fs/AEAD error can't cross IPC.
+      // CAR-313 (I1): use `{ success }` to match the unlock-family contract.
+      return { success: false, error: sanitizeError(err, 'UNLOCK_FAILED') };
+    }
   });
 
   ipcMain.handle('security:unlock-recovery', async (_event, phrase) => {
@@ -152,9 +188,15 @@ export function registerSecurityIpc({
     if (typeof phrase !== 'string' || phrase.length > 512) {
       return { success: false, error: 'BAD_SECRET' };
     }
-    const result = await runtime.unlockRecovery(phrase);
-    emitState();
-    return result;
+    try {
+      const result = await runtime.unlockRecovery(phrase);
+      emitState();
+      return result;
+    } catch (err) {
+      // CAR-243 round 5: sanitize so a raw fs/AEAD error can't cross IPC.
+      // CAR-313 (I1): use `{ success }` to match the unlock-family contract.
+      return { success: false, error: sanitizeError(err, 'UNLOCK_FAILED') };
+    }
   });
 
   // --- slice-3: setup, add/remove, reveal/rotate, disable ------------------
@@ -253,6 +295,12 @@ export function registerSecurityIpc({
       emitState();
       return r;
     } catch (err) {
+      // CAR-243 round 5 (R2 #1, borderline-blocker): round-4 widened
+      // disableSecurity's throw surface (Phase-2 wipe failure now
+      // bubbles after .tmp cleanup). Without this catch, Electron's IPC
+      // returns the raw rejected promise to the renderer — full
+      // `Error('EBUSY: resource busy or locked, unlink C:\\…\\security.json')`
+      // including the absolute path, defeating the entire I8 hardening.
       return { ok: false, error: sanitizeError(err, 'DISABLE_FAILED') };
     }
   });
