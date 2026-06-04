@@ -35,6 +35,10 @@ jobs:
         run: npx electron-builder --win --publish=never
       - name: Package (macOS)
         if: matrix.os == 'macos-latest'
+        # macOS DMG packaging requires signing/icon assets that aren't
+        # configured yet; don't let an unconfigured mac leg block the
+        # Windows + Linux release. CAR-317.
+        continue-on-error: true
         env:
           CSC_LINK: ${{ secrets.MAC_CERT_P12_BASE64 }}
           CSC_KEY_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
@@ -60,7 +64,10 @@ jobs:
   release:
     needs: build
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v') && github.event_name == 'push'
+    # Run as long as the build job didn't get cancelled, even if one matrix
+    # leg (e.g. an unconfigured macOS target) failed — attach whatever
+    # installers were produced rather than blocking the whole release. CAR-317.
+    if: always() && needs.build.result != 'cancelled' && startsWith(github.ref, 'refs/tags/v') && github.event_name == 'push'
     permissions:
       contents: write
     steps:
