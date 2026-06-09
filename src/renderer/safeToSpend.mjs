@@ -138,12 +138,21 @@ export function sumGoalsRemaining(goals) {
  * }}
  */
 export function computeSafeToSpend({ accounts, billRows, budgetRows, goals, convert } = {}) {
-  const liquidBalance = roundCents(sumLiquidBalance(accounts, convert));
-  const unpaidBills = roundCents(sumUnpaidBills(billRows, convert));
-  const budgetRemaining = roundCents(sumBudgetRemaining(budgetRows));
-  const goalsRemaining = roundCents(sumGoalsRemaining(goals));
-  const reserved = roundCents(unpaidBills + budgetRemaining + goalsRemaining);
-  const safeToSpend = roundCents(liquidBalance - reserved);
+  // M1 (CAR-344 review): return FULL-PRECISION component values, do NOT round
+  // to cents here. The consuming hero card FX-converts each component
+  // (`toReporting(value, 'USD')`) and then `fmtMoney` rounds for display.
+  // Rounding in USD *before* that conversion would drift by a sub-cent versus
+  // the Accounts/Bills/Budgets screens (which convert-then-round, the
+  // net-worth pattern) for any non-USD reporting currency. Keeping precision
+  // here makes the breakdown line tie out to the penny in every locale.
+  // `isNegative` is derived from a cents-rounded copy so a -0.004-style FP
+  // residue never flips the sign / color.
+  const liquidBalance = sumLiquidBalance(accounts, convert);
+  const unpaidBills = sumUnpaidBills(billRows, convert);
+  const budgetRemaining = sumBudgetRemaining(budgetRows);
+  const goalsRemaining = sumGoalsRemaining(goals);
+  const reserved = unpaidBills + budgetRemaining + goalsRemaining;
+  const safeToSpend = liquidBalance - reserved;
   return {
     safeToSpend,
     liquidBalance,
@@ -151,6 +160,6 @@ export function computeSafeToSpend({ accounts, billRows, budgetRows, goals, conv
     budgetRemaining,
     goalsRemaining,
     reserved,
-    isNegative: safeToSpend < 0,
+    isNegative: roundCents(safeToSpend) < 0,
   };
 }

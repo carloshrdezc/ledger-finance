@@ -131,6 +131,11 @@ export default function Dashboard({ t, onNavigate, onAdd }) {
           derived in the store from the same rows as Accounts / Bills /
           Budgets / Goals, so it moves with every transaction edit. Displayed
           in the reporting currency (store computes in USD base). */}
+      {/* M2 (CAR-344 review): the `&& safeToSpend` guard is RETAINED — it is
+          not redundant. A partial store (e.g. test mocks of useStore) can omit
+          the field, in which case the real gate `accountsIncludedInTotals` may
+          still be non-empty and the card would deref undefined. Defensive on
+          purpose. */}
       {accountsIncludedInTotals.length > 0 && safeToSpend && (() => {
         const safeVal      = toReporting(safeToSpend.safeToSpend, 'USD');
         const liquidVal    = toReporting(safeToSpend.liquidBalance, 'USD');

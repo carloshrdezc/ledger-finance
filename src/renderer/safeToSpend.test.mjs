@@ -125,4 +125,47 @@ describe('computeSafeToSpend', () => {
     const after = computeSafeToSpend({ accounts: [acct('chk', 850)], billRows: [bill(-200)] });
     expect(after.safeToSpend).toBe(before.safeToSpend - 150);
   });
+
+  // M1 (CAR-344 review) documentation-as-test: components are returned at FULL
+  // PRECISION (NOT pre-rounded to cents), so a downstream FX conversion can
+  // convert-then-round and tie out to the penny the same way the net-worth /
+  // Accounts surfaces do. If a future edit re-introduces a per-component
+  // `roundCents` in the module, this test fails — locking the decision.
+  test('M1: components are full-precision (not pre-rounded), so convert-then-round ties out', () => {
+    // A balance whose third decimal place would be lost by a premature
+    // round-to-cents in USD. 100.005 rounds to 100.01 — if the module rounded
+    // first, the precision below the cent would be gone before conversion.
+    const out = computeSafeToSpend({ accounts: [acct('chk', 100.005)] });
+    // The raw component must retain sub-cent precision (proves no pre-round).
+    expect(out.liquidBalance).toBe(100.005);
+    expect(out.safeToSpend).toBe(100.005);
+
+    // Convert-then-round (the card's order) on a non-USD rate must match
+    // rounding the converted value, NOT the pre-rounded USD value.
+    const rate = 1.1;
+    const convertThenRound = Math.round(out.safeToSpend * rate * 100) / 100; // 110.0055 -> 110.01
+    const preRoundThenConvert = Math.round((Math.round(out.safeToSpend * 100) / 100) * rate * 100) / 100; // (100.01*1.1) -> 110.01... close but lossy in general
+    expect(convertThenRound).toBe(110.01);
+    // Document that the lossy order can diverge; the module must enable the
+    // correct (convert-then-round) order by NOT rounding first.
+    expect(convertThenRound).toBeGreaterThanOrEqual(preRoundThenConvert - 0.01);
+  });
+
+  // M1 companion: a -0.004-style floating-point residue must NOT flip the
+  // negative flag / color, even though raw safeToSpend is unrounded.
+  test('M1: isNegative uses a cents-rounded copy so FP residue does not flip sign', () => {
+    // Construct inputs whose exact float subtraction lands a hair below zero
+    // but rounds to exactly 0.00. 0.1 + 0.2 === 0.30000000000000004.
+    const out = computeSafeToSpend({
+      accounts: [acct('chk', 0.3)],
+      billRows: [bill(-0.1), bill(-0.2)], // reserved = 0.30000000000000004
+    });
+    // Raw safeToSpend is a tiny negative FP residue...
+    expect(out.safeToSpend).toBeLessThanOrEqual(0);
+    // ...but rounds to zero (note: Math.round can yield -0, so add 0 to
+    // normalize the sign before the Object.is-based toBe(0) check).
+    expect(Math.round(out.safeToSpend * 100) / 100 + 0).toBe(0);
+    expect(out.isNegative).toBe(false);
+  });
 });
+
