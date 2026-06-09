@@ -9,6 +9,7 @@ import {
   monthKey,
 } from './period.mjs';
 import { buildBillRows, markRecurringPaid as createRecurringPayment, getBillDueDate, slug, createGoalContribution } from './planning.mjs';
+import { computeSafeToSpend } from './safeToSpend.mjs';
 import {
   applyRecategorizeEvent,
   applyDismiss,
@@ -17,7 +18,7 @@ import {
 } from './recategorizeStats.mjs';
 import { buildAlertRows } from './alerts.mjs';
 import { buildInsightRows } from './insights.mjs';
-import { DEFAULT_RATES, buildDefaultRatesHistory, latestRateEntry, normalizeRatesHistory } from './fx.mjs';
+import { DEFAULT_RATES, buildDefaultRatesHistory, latestRateEntry, normalizeRatesHistory, toReportingCurrency } from './fx.mjs';
 import { fetchRatesFromFrankfurter } from './fxFetch.mjs';
 import { buildBackup } from './backup.mjs';
 import { ACCENTS } from './theme';
@@ -593,6 +594,24 @@ function StoreProviderImpl({ children }) {
   const accountsIncludedInTotals = React.useMemo(
     () => accountsWithBalance.filter(a => a.includeInTotals !== false),
     [accountsWithBalance],
+  );
+
+  // CAR-344: "safe to spend" hero metric. Derived entirely from the same
+  // rows the Accounts / Bills / Budgets / Goals surfaces already compute, so
+  // it stays provably consistent with them and re-renders whenever any of
+  // those inputs change (transactions edit balances, bills, and budgets).
+  // Computed in USD base via the FX rate history; the consuming hero card
+  // converts the final figure to the user's reporting currency the same way
+  // net worth is converted on the dashboard.
+  const safeToSpend = React.useMemo(
+    () => computeSafeToSpend({
+      accounts: accountsIncludedInTotals,
+      billRows,
+      budgetRows,
+      goals,
+      convert: (amt, ccy) => toReportingCurrency(amt, ccy, rates, 'USD'),
+    }),
+    [accountsIncludedInTotals, billRows, budgetRows, goals, rates],
   );
 
   const isAppEmpty = React.useMemo(
@@ -1585,6 +1604,7 @@ function StoreProviderImpl({ children }) {
       accounts,
       accountsWithBalance,
       accountsIncludedInTotals,
+      safeToSpend,
       allAccountsWithBalance,
       setAccounts,
       addAccount,
