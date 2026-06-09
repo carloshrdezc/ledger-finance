@@ -26,7 +26,7 @@ function windowStart(period) {
 }
 
 export default function Dashboard({ t, onNavigate, onAdd }) {
-  const { transactions, budgetRows, accounts, accountsWithBalance, accountsIncludedInTotals, periodLabel, billRows, goals, alertRows, insightRows, dismissInsight, setTxFilter, rates } = useStore();
+  const { transactions, budgetRows, accounts, accountsWithBalance, accountsIncludedInTotals, periodLabel, billRows, goals, alertRows, insightRows, dismissInsight, setTxFilter, rates, safeToSpend } = useStore();
   const { toReporting } = useFx(t.currency || 'USD');
   const [scrub, setScrub] = React.useState(null);
   const [period, setPeriod] = React.useState('1M');
@@ -125,6 +125,49 @@ export default function Dashboard({ t, onNavigate, onAdd }) {
           </div>
         </div>
       )}
+
+      {/* CAR-344: Safe-to-spend hero metric — discretionary money left after
+          unpaid bills, remaining budgets, and un-funded goals. Reactively
+          derived in the store from the same rows as Accounts / Bills /
+          Budgets / Goals, so it moves with every transaction edit. Displayed
+          in the reporting currency (store computes in USD base). */}
+      {accountsIncludedInTotals.length > 0 && safeToSpend && (() => {
+        const safeVal      = toReporting(safeToSpend.safeToSpend, 'USD');
+        const liquidVal    = toReporting(safeToSpend.liquidBalance, 'USD');
+        const billsVal     = toReporting(safeToSpend.unpaidBills, 'USD');
+        const budgetsVal   = toReporting(safeToSpend.budgetRemaining, 'USD');
+        const goalsVal     = toReporting(safeToSpend.goalsRemaining, 'USD');
+        const negative     = safeToSpend.isNegative;
+        return (
+          <div style={{ marginTop: 18, border: '2px solid ' + A.ink, padding: '16px 18px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+              <ALabel>[01B] SAFE TO SPEND · {periodLabel}</ALabel>
+              <span style={{ fontSize: 9, color: A.muted, letterSpacing: 1.2 }}>
+                {negative ? 'OVER-COMMITTED' : 'DISCRETIONARY'}
+              </span>
+            </div>
+            <div style={{
+              fontSize: 48, letterSpacing: -1.5, fontVariantNumeric: 'tabular-nums',
+              lineHeight: 1, marginTop: 8, color: negative ? A.neg : A.ink,
+            }}>
+              {fmtMoney(safeVal, t.currency, t.decimals)}
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 18, marginTop: 12, fontSize: 10, letterSpacing: 0.8 }}>
+              {[
+                { l: 'LIQUID',  v: liquidVal,  sign: '' },
+                { l: 'BILLS',   v: billsVal,   sign: '−' },
+                { l: 'BUDGETS', v: budgetsVal, sign: '−' },
+                { l: 'GOALS',   v: goalsVal,   sign: '−' },
+              ].map(x => (
+                <div key={x.l}>
+                  <span style={{ color: A.muted }}>{x.sign}{x.l} </span>
+                  <span style={{ fontVariantNumeric: 'tabular-nums' }}>{fmtMoney(x.v, t.currency, t.decimals)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Sparkline */}
       {transactions.length > 0 && (
