@@ -5,6 +5,11 @@ import WebShell from './WebShell';
 import EmptySectionHint from '../../components/EmptySectionHint';
 import { fmtMoney, fmtSigned, fmtPct } from '../../data';
 import { useUndoableStore } from '../../useUndoableStore';
+import {
+  computeHoldingAnalytics,
+  computeAllocationByClass,
+  computePortfolioReturns,
+} from '../../investmentAnalytics.mjs';
 
 const PERIOD_DAYS = { '1D': 1, '1W': 7, '1M': 30, '3M': 90, '1Y': 365, '5Y': 1825 };
 
@@ -89,8 +94,16 @@ export default function WebInvestments({ t, onNavigate, onAdd }) {
 
   const totalPort  = investments.reduce((s, i) => s + i.shares * i.price, 0);
   const dayChg     = investments.reduce((s, i) => s + i.shares * i.price * i.chg / 100, 0);
-  const alloc      = investments.map(i => ({ ...i, val: i.shares * i.price, pct: totalPort ? (i.shares * i.price) / totalPort : 0 }));
   const shades     = [t.accent, A.ink, '#8c8678', '#bdb6a3', '#4a463e'];
+
+  // CAR-353: cost-basis analytics (returns, allocation by asset class).
+  const returns      = React.useMemo(() => computePortfolioReturns(investments, trades), [investments, trades]);
+  const holdingStats = React.useMemo(() => {
+    const map = new Map();
+    for (const h of computeHoldingAnalytics(investments, trades)) map.set(h.ticker, h);
+    return map;
+  }, [investments, trades]);
+  const classAlloc   = React.useMemo(() => computeAllocationByClass(investments), [investments]);
 
   const spark      = React.useMemo(() => portfolioCurve(investments, trades, period), [investments, trades, period]);
   const dateLabels = React.useMemo(() => chartDateLabels(period), [period]);
@@ -131,6 +144,23 @@ export default function WebInvestments({ t, onNavigate, onAdd }) {
         </div>
       </div>
 
+      {/* CAR-353: cost-basis return summary. */}
+      {investments.length > 0 && (
+        <div style={{ marginTop: 24, display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 1, background: A.rule2, border: '1px solid ' + A.rule2 }}>
+          {[
+            ['INVESTED', fmtMoney(returns.invested, t.currency, false), A.ink],
+            ['MARKET VALUE', fmtMoney(returns.value, t.currency, false), A.ink],
+            ['UNREALIZED', fmtSigned(returns.unrealizedGain, t.currency, false) + ' · ' + fmtPct(returns.totalReturnPct), returns.unrealizedGain >= 0 ? t.accent : A.neg],
+            ['REALIZED', fmtSigned(returns.realizedGain, t.currency, false), returns.realizedGain >= 0 ? t.accent : A.neg],
+          ].map(([label, val, color]) => (
+            <div key={label} style={{ background: A.bg, padding: '14px 16px' }}>
+              <div style={{ fontSize: 9, color: A.muted, letterSpacing: 1.2 }}>{label}</div>
+              <div style={{ fontSize: 16, fontVariantNumeric: 'tabular-nums', color, marginTop: 6 }}>{val}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
       <div style={{ marginTop: 28, display: 'grid', gridTemplateColumns: '1.6fr 1fr', gap: 32 }}>
         <div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
@@ -138,11 +168,12 @@ export default function WebInvestments({ t, onNavigate, onAdd }) {
             <span onClick={() => setSheet({ mode: 'holding', holding: null })} style={{ fontSize: 9, color: A.muted, letterSpacing: 1.2, cursor: 'pointer' }}>+ ADD</span>
           </div>
           <div style={{ marginTop: 12, borderTop: '2px solid ' + A.ink }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '70px 1fr 90px 90px 100px 90px 28px', padding: '8px 0', fontSize: 9, color: A.muted, letterSpacing: 1.2, borderBottom: '1px solid ' + A.rule2 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '64px 1fr 80px 84px 96px 82px 84px 24px', padding: '8px 0', fontSize: 9, color: A.muted, letterSpacing: 1.2, borderBottom: '1px solid ' + A.rule2 }}>
               <div>TICKER</div><div>NAME</div>
               <div style={{ textAlign: 'right' }}>SHARES</div>
               <div style={{ textAlign: 'right' }}>PRICE</div>
               <div style={{ textAlign: 'right' }}>VALUE</div>
+              <div style={{ textAlign: 'right' }}>GAIN</div>
               <div style={{ textAlign: 'right' }}>DAY</div>
               <div />
             </div>
@@ -153,19 +184,27 @@ export default function WebInvestments({ t, onNavigate, onAdd }) {
                 onCta={() => setSheet({ mode: 'holding', holding: null })}
               />
             ) : null}
-            {investments.map(i => (
+            {investments.map(i => {
+              const stat = holdingStats.get(i.ticker);
+              const gain = stat ? stat.unrealizedGain : 0;
+              const gainPct = stat ? stat.unrealizedPct : 0;
+              return (
               <div key={i.ticker}
                 onClick={() => setSheet({ mode: 'holding', holding: i })}
-                style={{ display: 'grid', gridTemplateColumns: '70px 1fr 90px 90px 100px 90px 28px', padding: t.density === 'compact' ? '8px 0' : '12px 0', fontSize: 12, borderBottom: '1px solid ' + A.rule2, alignItems: 'center', cursor: 'pointer' }}>
+                style={{ display: 'grid', gridTemplateColumns: '64px 1fr 80px 84px 96px 82px 84px 24px', padding: t.density === 'compact' ? '8px 0' : '12px 0', fontSize: 12, borderBottom: '1px solid ' + A.rule2, alignItems: 'center', cursor: 'pointer' }}>
                 <div style={{ fontWeight: 700, letterSpacing: 0.6 }}>{i.ticker}</div>
                 <div style={{ color: A.muted, fontSize: 10, letterSpacing: 0.6 }}>{i.name}</div>
                 <div style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: A.muted }}>{i.shares.toLocaleString('en-US', { maximumFractionDigits: 4 })}</div>
                 <div style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: A.muted }}>{fmtMoney(i.price, t.currency, t.decimals)}</div>
                 <div style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{fmtMoney(i.shares * i.price, t.currency, t.decimals)}</div>
+                <div style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: gain >= 0 ? t.accent : A.neg, fontSize: 11 }}>
+                  {fmtSigned(gain, t.currency, false)}<br />
+                  <span style={{ fontSize: 9, color: A.muted }}>{fmtPct(gainPct)}</span>
+                </div>
                 <div style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: i.chg >= 0 ? t.accent : A.neg, fontSize: 11 }}>{fmtPct(i.chg)}</div>
                 <div onClick={e => { e.stopPropagation(); removeHolding(i.ticker); }} style={{ textAlign: 'right', color: A.muted, fontSize: 10, cursor: 'pointer' }}>✕</div>
               </div>
-            ))}
+            );})}
           </div>
 
           <ALabel style={{ marginTop: 28 }}>[04] PERFORMANCE</ALabel>
@@ -184,22 +223,22 @@ export default function WebInvestments({ t, onNavigate, onAdd }) {
         </div>
 
         <div>
-          <ALabel>[03] ALLOCATION</ALabel>
+          <ALabel>[03] ALLOCATION · BY CLASS</ALabel>
           <div style={{ marginTop: 12, borderTop: '2px solid ' + A.ink, paddingTop: 18 }}>
             <div style={{ display: 'flex', height: 36, border: '1px solid ' + A.ink }}>
-              {alloc.map((a, i) => (
-                <div key={a.ticker} style={{ width: (a.pct * 100) + '%', background: shades[i % shades.length], display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  {a.pct > 0.08 && <span style={{ fontSize: 9, color: A.bg, letterSpacing: 1 }}>{a.ticker}</span>}
+              {classAlloc.map((a, i) => (
+                <div key={a.assetClass} title={`${a.assetClass} · ${(a.pct * 100).toFixed(1)}%`} style={{ width: (a.pct * 100) + '%', background: shades[i % shades.length], display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  {a.pct > 0.1 && <span style={{ fontSize: 9, color: A.bg, letterSpacing: 1 }}>{(a.pct * 100).toFixed(0)}%</span>}
                 </div>
               ))}
             </div>
             <div style={{ marginTop: 16 }}>
-              {[...alloc].sort((a, b) => b.val - a.val).map((a, i) => (
-                <div key={a.ticker} style={{ display: 'grid', gridTemplateColumns: '14px 60px 1fr 80px', padding: '9px 0', fontSize: 11, alignItems: 'center', borderBottom: '1px solid ' + A.rule2 }}>
+              {classAlloc.map((a, i) => (
+                <div key={a.assetClass} style={{ display: 'grid', gridTemplateColumns: '14px 1fr 52px 80px', padding: '9px 0', fontSize: 11, alignItems: 'center', borderBottom: '1px solid ' + A.rule2 }}>
                   <div style={{ width: 10, height: 10, background: shades[i % shades.length] }} />
-                  <div style={{ fontWeight: 700 }}>{a.ticker}</div>
-                  <div style={{ color: A.muted, fontSize: 10 }}>{(a.pct * 100).toFixed(1)}%</div>
-                  <div style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{fmtMoney(a.val, t.currency, false)}</div>
+                  <div style={{ fontWeight: 700, letterSpacing: 0.4 }}>{a.assetClass.toUpperCase()}</div>
+                  <div style={{ color: A.muted, fontSize: 10, textAlign: 'right' }}>{(a.pct * 100).toFixed(1)}%</div>
+                  <div style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{fmtMoney(a.value, t.currency, false)}</div>
                 </div>
               ))}
             </div>
@@ -240,6 +279,7 @@ function WebInvestmentSheet({ mode: initMode = 'holding', holding = null, onClos
   const [shares,     setShares]     = React.useState(holding?.shares != null ? String(holding.shares) : '');
   const [price,      setPrice]      = React.useState(holding?.price  != null ? String(holding.price)  : '');
   const [chg,        setChg]        = React.useState(holding?.chg    != null ? String(holding.chg)    : '');
+  const [assetClass, setAssetClass] = React.useState(holding?.assetClass ?? '');
 
   const [tradeType,   setTradeType]   = React.useState('buy');
   const [tradeShares, setTradeShares] = React.useState('');
@@ -256,6 +296,7 @@ function WebInvestmentSheet({ mode: initMode = 'holding', holding = null, onClos
       shares: parseFloat(shares) || 0,
       price:  parseFloat(price)  || 0,
       chg:    parseFloat(chg)    || 0,
+      ...(assetClass ? { assetClass } : {}),
     });
     onClose();
   }
@@ -309,6 +350,13 @@ function WebInvestmentSheet({ mode: initMode = 'holding', holding = null, onClos
           <input value={ticker} onChange={e => setTicker(e.target.value)} style={fieldStyle} placeholder="VTI" required disabled={isEdit} />
           <label style={labelStyle}>NAME</label>
           <input value={name} onChange={e => setName(e.target.value)} style={fieldStyle} placeholder="VANGUARD TOTAL MKT" />
+          <label style={labelStyle}>ASSET CLASS</label>
+          <select value={assetClass} onChange={e => setAssetClass(e.target.value)} style={fieldStyle}>
+            <option value="">AUTO (INFER)</option>
+            {['US Stocks', 'Intl Stocks', 'Bonds', 'Crypto', 'Real Estate', 'Commodities', 'Cash', 'Other'].map(c => (
+              <option key={c} value={c}>{c.toUpperCase()}</option>
+            ))}
+          </select>
           <label style={labelStyle}>SHARES</label>
           <input type="number" step="any" value={shares} onChange={e => setShares(e.target.value)} style={fieldStyle} placeholder="0.00" required />
           <label style={labelStyle}>PRICE</label>
