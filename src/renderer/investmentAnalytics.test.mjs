@@ -128,7 +128,8 @@ describe('computePortfolioReturns', () => {
     expect(r.costBasis).toBe(1000);
     expect(r.invested).toBe(1000);
     expect(r.unrealizedGain).toBe(500);
-    expect(r.totalReturnPct).toBe(50);
+    expect(r.unrealizedPct).toBe(50);     // 500 / 1000
+    expect(r.totalReturnPct).toBe(50);    // totalGain 500 / invested 1000
     expect(r.realizedGain).toBe(0);
     expect(r.totalGain).toBe(500);
   });
@@ -145,6 +146,45 @@ describe('computePortfolioReturns', () => {
     expect(r.costBasis).toBe(500);           // 5 remaining * 100
     expect(r.unrealizedGain).toBe(500);      // value 1000 - basis 500
     expect(r.totalGain).toBe(750);           // 500 unrealized + 250 realized
+    expect(r.totalReturnPct).toBe(300);      // totalGain 750 / invested 250
+  });
+
+  it('scales trade cost basis to the holding shares when they diverge (review M1)', () => {
+    // Trades sum to 350 shares but the holding declares 412.2 (incomplete
+    // import). Basis must scale to 412.2 so value and basis use the same count.
+    const investments = [{ ticker: 'X', shares: 412.2, price: 300 }]; // value 123660
+    const trades = [
+      { ticker: 'X', type: 'buy', shares: 350, price: 200, date: '2026-01-01' }, // basis 70000 for 350
+    ];
+    const [h] = computeHoldingAnalytics(investments, trades);
+    expect(h.sharesMismatch).toBe(true);
+    // per-share basis 200 → scaled to 412.2 shares = 82440
+    expect(h.costBasis).toBe(82440);
+    expect(h.avgCost).toBe(200);
+    expect(h.unrealizedGain).toBe(round2(123660 - 82440)); // 41220
+  });
+
+  it('flags an oversell and clamps realized math (review m1)', () => {
+    const trades = [
+      { ticker: 'X', type: 'buy', shares: 10, price: 100, date: '2026-01-01' },
+      { ticker: 'X', type: 'sell', shares: 15, price: 120, date: '2026-02-01' }, // 5 oversold
+    ];
+    const b = costBasisForTicker(trades, 'X');
+    expect(b.shares).toBe(0);
+    expect(b.oversold).toBe(5);
+    expect(b.realizedGain).toBe(200); // only 10 shares realized: 10*(120-100)
+  });
+
+  it('settles same-day buys before sells so the sell uses the day basis (review m2)', () => {
+    // Sell listed before the buy in the array, same date — buy must settle first.
+    const trades = [
+      { ticker: 'X', type: 'sell', shares: 5, price: 150, date: '2026-01-01' },
+      { ticker: 'X', type: 'buy', shares: 10, price: 100, date: '2026-01-01' },
+    ];
+    const b = costBasisForTicker(trades, 'X');
+    expect(b.shares).toBe(5);          // 10 bought - 5 sold
+    expect(b.realizedGain).toBe(250);  // 5 * (150 - 100), against the same-day buy basis
+    expect(b.oversold).toBe(0);
   });
 
   it('returns zeros for an empty portfolio', () => {

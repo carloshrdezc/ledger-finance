@@ -150,7 +150,7 @@ export default function WebInvestments({ t, onNavigate, onAdd }) {
           {[
             ['INVESTED', fmtMoney(returns.invested, t.currency, false), A.ink],
             ['MARKET VALUE', fmtMoney(returns.value, t.currency, false), A.ink],
-            ['UNREALIZED', fmtSigned(returns.unrealizedGain, t.currency, false) + ' · ' + fmtPct(returns.totalReturnPct), returns.unrealizedGain >= 0 ? t.accent : A.neg],
+            ['UNREALIZED', fmtSigned(returns.unrealizedGain, t.currency, false) + ' · ' + fmtPct(returns.unrealizedPct), returns.unrealizedGain >= 0 ? t.accent : A.neg],
             ['REALIZED', fmtSigned(returns.realizedGain, t.currency, false), returns.realizedGain >= 0 ? t.accent : A.neg],
           ].map(([label, val, color]) => (
             <div key={label} style={{ background: A.bg, padding: '14px 16px' }}>

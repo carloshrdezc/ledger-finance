@@ -59,24 +59,32 @@ function assetClassOf(holding) {
  *
  * @param {Array<Object>} trades
  * @param {string} ticker
- * @returns {{shares:number, costBasis:number, avgCost:number, realizedGain:number}}
+ * @returns {{shares:number, costBasis:number, avgCost:number, realizedGain:number, oversold:number}}
  *   shares: net shares held; costBasis: total cost of held shares;
- *   avgCost: per-share; realizedGain: cumulative realized P/L from sells.
+ *   avgCost: per-share; realizedGain: cumulative realized P/L from sells;
+ *   oversold: shares sold beyond what was held (data-entry signal; clamped out
+ *   of the realized math).
  */
 export function costBasisForTicker(trades, ticker) {
   let shares = 0;
   let costBasis = 0;
   let realizedGain = 0;
+  let oversold = 0;
   const chron = (trades || [])
     .filter(tr => tr && tr.ticker === ticker)
     .slice()
-    .sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
+    // Sort by date; within the same date settle buys before sells so a same-day
+    // sell realizes against the day's purchases (not a stale/empty basis).
+    .sort((a, b) =>
+      String(a.date || '').localeCompare(String(b.date || '')) ||
+      ((a.type === 'sell') - (b.type === 'sell')));
   for (const tr of chron) {
     const qty = num(tr.shares);
     const price = num(tr.price);
     if (tr.type === 'sell') {
       const avg = shares > 0 ? costBasis / shares : 0;
       const sold = Math.min(qty, shares);
+      if (qty > sold) oversold += round2(qty - sold); // sell beyond held shares
       realizedGain += round2(sold * (price - avg));
       costBasis -= round2(sold * avg);
       shares -= sold;
@@ -91,6 +99,7 @@ export function costBasisForTicker(trades, ticker) {
     costBasis: round2(costBasis),
     avgCost: shares > 0 ? round2(costBasis / shares) : 0,
     realizedGain: round2(realizedGain),
+    oversold: round2(oversold),
   };
 }
 
@@ -109,12 +118,27 @@ export function computeHoldingAnalytics(investments, trades) {
     const price = num(h.price);
     const value = round2(shares * price);
     const basis = costBasisForTicker(trades, h.ticker);
-    // Use trade-derived cost basis when the ticker has trade history;
-    // otherwise fall back to current value (0 unrealized) so a holding entered
-    // directly (no trades) doesn't show a bogus gain/loss.
-    const hasTrades = basis.shares > 0 || basis.realizedGain !== 0;
-    const costBasis = hasTrades ? basis.costBasis : value;
-    const avgCost = hasTrades && shares > 0 ? round2(costBasis / shares) : price;
+    // A ticker "has trades" if its history left a position or realized a gain.
+    const hasTrades = basis.shares > 0 || basis.realizedGain !== 0 || basis.oversold > 0;
+    // The holding's declared `shares` is the source of truth for *value*. When
+    // it diverges from the net shares implied by the trade history (incomplete
+    // import, or the user edited shares directly), scale the trade-derived cost
+    // basis to the holding's actual share count so value and basis are measured
+    // on the same shares — otherwise unrealizedGain/avgCost compare mismatched
+    // quantities. Flag the divergence so the UI can surface it.
+    const sharesMismatch = hasTrades && Math.abs(basis.shares - shares) > 1e-6;
+    let costBasis;
+    if (!hasTrades) {
+      costBasis = value; // entered directly, no trade history → 0 unrealized
+    } else if (basis.shares > 0) {
+      const perShare = basis.costBasis / basis.shares;
+      costBasis = round2(perShare * shares); // scale basis to holding shares
+    } else {
+      // Position fully exited per trades but the holding still lists shares —
+      // we have no basis for them; fall back to current value (0 unrealized).
+      costBasis = value;
+    }
+    const avgCost = shares > 0 ? round2(costBasis / shares) : price;
     const unrealizedGain = round2(value - costBasis);
     const unrealizedPct = costBasis > 0 ? round2((unrealizedGain / costBasis) * 100) : 0;
     return {
@@ -129,6 +153,8 @@ export function computeHoldingAnalytics(investments, trades) {
       unrealizedGain,
       unrealizedPct,
       realizedGain: basis.realizedGain,
+      oversold: basis.oversold,
+      sharesMismatch,
     };
   });
 }
@@ -193,13 +219,18 @@ export function computePortfolioReturns(investments, trades) {
   }
   const invested = hasAnyTrade ? tradedInvested : costBasis;
   const totalGain = round2(unrealizedGain + realizedGain);
-  const totalReturnPct = costBasis > 0 ? round2((unrealizedGain / costBasis) * 100) : 0;
+  // unrealizedPct: gain on currently-held shares vs their cost basis.
+  const unrealizedPct = costBasis > 0 ? round2((unrealizedGain / costBasis) * 100) : 0;
+  // totalReturnPct: total P/L (unrealized + realized) against net invested
+  // capital — the headline "how is the portfolio doing overall" number.
+  const totalReturnPct = invested > 0 ? round2((totalGain / invested) * 100) : 0;
+
   return {
     value,
     costBasis,
     invested,
     unrealizedGain,
-    unrealizedPct: totalReturnPct,
+    unrealizedPct,
     realizedGain,
     totalGain,
     totalReturnPct,
