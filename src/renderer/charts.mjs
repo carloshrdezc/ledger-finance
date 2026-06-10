@@ -102,6 +102,66 @@ export function buildNetWorthDailyTrend(accounts, transactions, endDateIso, dayC
   });
 }
 
+// CAR-350: aggregate inflows/outflows for a Sankey cash-flow diagram.
+// Income categories flow into a central hub; the hub flows out to spending
+// categories. Any surplus (income > expense) becomes a "SAVINGS" outflow.
+// Shape: { nodes: [{ id, label, side, value }], links: [{ source, target, value }] }
+// where `side` is 'in' | 'hub' | 'out'. Values are in the reporting currency.
+export function buildSankeyFlows(transactions, periods, rates = { USD: 1 }, reportingCcy = 'USD', limit = 8) {
+  const HUB = '__hub__';
+  const SAVINGS = '__savings__';
+  const inflows = new Map();
+  const outflows = new Map();
+
+  for (const tx of transactions) {
+    if (!periods.includes(txPeriod(tx))) continue;
+    const cat = txCategory(tx) || (tx.amt >= 0 ? 'income' : 'other');
+    const value = toReporting(tx.amt, tx.ccy, rates, tx.date, reportingCcy);
+    if (value > 0) {
+      inflows.set(cat, (inflows.get(cat) || 0) + value);
+    } else if (value < 0) {
+      outflows.set(cat, (outflows.get(cat) || 0) + Math.abs(value));
+    }
+  }
+
+  const collapse = (map) => {
+    const sorted = [...map.entries()]
+      .map(([cat, v]) => [cat, roundCents(v)])
+      .filter(([, v]) => v > 0)
+      .sort((a, b) => b[1] - a[1]);
+    if (sorted.length <= limit) return sorted;
+    const kept = sorted.slice(0, limit - 1);
+    const rest = sorted.slice(limit - 1).reduce((s, [, v]) => s + v, 0);
+    kept.push(['__other__', roundCents(rest)]);
+    return kept;
+  };
+
+  const inEntries = collapse(inflows);
+  const outEntries = collapse(outflows);
+  const totalIn = roundCents(inEntries.reduce((s, [, v]) => s + v, 0));
+  const totalOut = roundCents(outEntries.reduce((s, [, v]) => s + v, 0));
+
+  const nodes = [];
+  const links = [];
+  for (const [cat, v] of inEntries) {
+    nodes.push({ id: `in:${cat}`, label: cat, side: 'in', value: v });
+    links.push({ source: `in:${cat}`, target: HUB, value: v });
+  }
+  nodes.push({ id: HUB, label: 'budget', side: 'hub', value: Math.max(totalIn, totalOut) });
+  for (const [cat, v] of outEntries) {
+    nodes.push({ id: `out:${cat}`, label: cat, side: 'out', value: v });
+    links.push({ source: HUB, target: `out:${cat}`, value: v });
+  }
+
+  const surplus = roundCents(totalIn - totalOut);
+  if (surplus > 0) {
+    nodes.push({ id: SAVINGS, label: 'savings', side: 'out', value: surplus });
+    links.push({ source: HUB, target: SAVINGS, value: surplus });
+  }
+
+  return { nodes, links, totalIn, totalOut };
+}
+
 export function svgLinePath(values, width, height) {
   if (!values.length) return '';
   if (values.length === 1) return `M0.0 ${(height / 2).toFixed(1)} L${width.toFixed(1)} ${(height / 2).toFixed(1)}`;
