@@ -83,6 +83,19 @@ describe('summarizeDue', () => {
     const rule = { id: 'r1', goalId: 'g1', amount: 200, source: 'chk', freq: 'monthly', day: 1, lastFundedDate: '2026-03-01' };
     expect(summarizeDue(rule, '2026-03-15')).toEqual({ dates: [], count: 0, total: 0, nextDate: null });
   });
+
+  it('clips count/total to goal headroom when a goal is supplied (review N1)', () => {
+    // 3×$200 due but goal only has $150 of headroom → badge previews 1×$150,
+    // matching what RUN DUE will actually apply (not the raw 3×$200=$600).
+    const rule = { id: 'r1', goalId: 'g1', amount: 200, source: 'chk', freq: 'monthly', day: 1, startDate: '2026-01-01' };
+    const goal = { id: 'g1', target: 1000, current: 850 };
+    expect(summarizeDue(rule, '2026-03-15', goal)).toEqual({
+      dates: ['2026-01-01', '2026-02-01', '2026-03-01'],
+      count: 1,
+      total: 150,
+      nextDate: '2026-01-01',
+    });
+  });
 });
 
 describe('planAutoFundContributions', () => {

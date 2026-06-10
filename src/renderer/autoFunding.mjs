@@ -81,15 +81,27 @@ function prevDay(iso) {
 }
 
 /**
- * Summarize what a rule owes right now: the due dates, their count, and the
- * total amount. Convenience wrapper over computeDueContributions for the UI.
+ * Summarize what a rule owes right now: the due dates, count, and total amount.
+ * When `goal` is supplied, the count/total reflect the headroom-clipped plan
+ * RUN DUE will actually apply (so the badge can't promise more than it funds);
+ * `dates` always lists every owed occurrence.
  *
  * @param {AutoFundRule} rule
  * @param {string} [todayIso]
+ * @param {{target:number, current:number}} [goal] optional goal for headroom clipping
  * @returns {{dates:string[], count:number, total:number, nextDate:(string|null)}}
  */
-export function summarizeDue(rule, todayIso = new Date().toISOString().slice(0, 10)) {
+export function summarizeDue(rule, todayIso = new Date().toISOString().slice(0, 10), goal = null) {
   const dates = computeDueContributions(rule, todayIso);
+  if (goal) {
+    const plan = planAutoFundContributions(goal, rule, dates);
+    return {
+      dates,
+      count: plan.contributions.length,
+      total: plan.total,
+      nextDate: plan.contributions.length ? plan.contributions[0].date : null,
+    };
+  }
   const amount = Math.max(0, Number(rule?.amount) || 0);
   return {
     dates,

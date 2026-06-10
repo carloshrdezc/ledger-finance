@@ -27,7 +27,7 @@ export default function AutoFundPanel({ t, goal, rule, accounts }) {
     rule?.source || fundAccounts.find(a => a.type === 'SAV')?.id || fundAccounts[0]?.id || 'chk',
   );
 
-  const due = rule ? summarizeDue(rule) : null;
+  const due = rule ? summarizeDue(rule, undefined, goal) : null;
   const todayIso = new Date().toISOString().slice(0, 10);
 
   const startEdit = () => {
