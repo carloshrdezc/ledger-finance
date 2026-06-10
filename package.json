@@ -12,6 +12,7 @@
     "package:mac": "vite build && electron-builder --mac",
     "package:linux": "vite build && electron-builder --linux",
     "preview": "vite preview",
+    "mcp": "node src/mcp/server.mjs",
     "test": "vitest run",
     "test:watch": "vitest"
   },
@@ -29,6 +30,7 @@
       "dist/**/*",
       "src/main/**/*",
       "src/preload/**/*",
+      "src/mcp/**/*",
       "package.json"
     ],
     "publish": [
@@ -64,12 +66,21 @@
       "shortcutName": "LEDGER"
     },
     "mac": {
-      "target": "dmg",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
       "category": "public.app-category.finance"
     },
     "linux": {
       "target": [
-        "AppImage"
+        "AppImage",
+        "deb"
       ],
       "category": "Office"
     }

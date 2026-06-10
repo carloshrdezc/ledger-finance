@@ -2,6 +2,7 @@ import React from 'react';
 import { A } from '../theme';
 import { ALabel, ARule } from './Shared';
 import { useUndoableStore } from '../useUndoableStore';
+import { GOAL_TEMPLATES, goalFromTemplate } from '../goalTemplates.mjs';
 
 export default function GoalFormModal({ t, onClose, editGoal = null }) {
   const { addGoal, updateGoal, deleteGoal, goalContributions } = useUndoableStore();
@@ -13,6 +14,13 @@ export default function GoalFormModal({ t, onClose, editGoal = null }) {
   const isEdit = !!editGoal;
   const contribCount = isEdit ? goalContributions.filter(c => c.goalId === editGoal.id).length : 0;
   const canSave = name.trim() && target !== '' && parseFloat(target) > 0;
+
+  // CAR-347: one-tap prefill from a predefined template (new goals only).
+  const applyTemplate = (tpl) => {
+    const fields = goalFromTemplate(tpl);
+    setName(fields.name);
+    setTarget(String(fields.target));
+  };
 
   const handleSave = () => {
     if (!canSave) return;
@@ -70,6 +78,21 @@ export default function GoalFormModal({ t, onClose, editGoal = null }) {
         <ARule thick />
 
         <div style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {!isEdit && (
+            <div>
+              <div style={fieldLabel}>START FROM A TEMPLATE</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {GOAL_TEMPLATES.map(tpl => (
+                  <button key={tpl.id} onClick={() => applyTemplate(tpl)} title={tpl.blurb} style={{
+                    all: 'unset', cursor: 'pointer', fontSize: 9, letterSpacing: 1,
+                    padding: '5px 9px', border: '1px solid ' + (name === tpl.name ? A.ink : A.rule2),
+                    background: name === tpl.name ? A.ink : 'transparent',
+                    color: name === tpl.name ? A.bg : A.ink,
+                  }}>{tpl.name}</button>
+                ))}
+              </div>
+            </div>
+          )}
           <div>
             <div style={fieldLabel}>NAME</div>
             <input value={name} onChange={e => setName(e.target.value)} placeholder="E.G. EMERGENCY FUND" style={input} autoFocus />

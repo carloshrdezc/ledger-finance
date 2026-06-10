@@ -29,6 +29,7 @@ export default function CashFlowForecastWidget({ t, width = 780, height = 160 })
     accountsWithBalance,
     transactions,
     bills,
+    rates,
     forecastLiquidAccountIds,
     forecastThreshold,
   } = useStore();
@@ -41,16 +42,19 @@ export default function CashFlowForecastWidget({ t, width = 780, height = 160 })
   const todayIso = React.useMemo(() => new Date().toISOString().slice(0, 10), []);
 
   // CAR-84 data layer: per-day-per-account rows for the full horizon. The
-  // helper already filters to liquid accounts (CHK / SAV) and skips
-  // non-USD until FX rules are wired up. forecastLiquidAccountIds, when
-  // non-empty, narrows further via compactForecastSeries.
+  // helper already filters to liquid accounts (CHK / SAV). CAR-359 threads
+  // rates + the reporting currency (t.currency) so non-USD liquid accounts
+  // are converted into the primary currency before cross-account summing.
+  // forecastLiquidAccountIds, when non-empty, narrows further via
+  // compactForecastSeries.
   const liquidAccounts = React.useMemo(
     () => (accountsWithBalance || []).filter(isLiquidAccount),
     [accountsWithBalance],
   );
+  const reportingCcy = t.currency || 'USD';
   const rows = React.useMemo(
-    () => projectBalances(liquidAccounts, transactions, bills, todayIso, horizon.days),
-    [liquidAccounts, transactions, bills, todayIso, horizon.days],
+    () => projectBalances(liquidAccounts, transactions, bills, todayIso, horizon.days, { rates, reportingCcy }),
+    [liquidAccounts, transactions, bills, todayIso, horizon.days, rates, reportingCcy],
   );
 
   const { dates, totals, riskIndices, minTotal, minDate } = React.useMemo(

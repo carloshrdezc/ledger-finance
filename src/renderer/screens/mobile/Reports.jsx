@@ -1,6 +1,6 @@
 import React from 'react';
 import { A } from '../../theme';
-import { ALabel, ARule, CategoryTrendChart, IncomeExpenseChart, LineChart } from '../../components/Shared';
+import { ALabel, ARule, CategoryTrendChart, IncomeExpenseChart, LineChart, SankeyChart } from '../../components/Shared';
 import PeriodSwitcher from '../../components/PeriodSwitcher';
 import { fmtMoney, fmtSigned } from '../../data';
 import { useStore } from '../../store';
@@ -8,7 +8,7 @@ import { useFx } from '../../useFx';
 import { exportReportCSV } from '../../importExport';
 import RangeSelector from '../../components/RangeSelector';
 import { CURRENT_PERIOD_SENTINEL, addMonths, filterTransactionsForPeriod, filterTransactionsForRange, formatShortPeriodLabel, resolvePeriod, resolveRangePreset } from '../../period.mjs';
-import { buildCategoryTrend, buildIncomeExpenseSeries, buildNetWorthTrend, getRecentPeriods } from '../../charts.mjs';
+import { buildCategoryTrend, buildIncomeExpenseSeries, buildNetWorthTrend, buildSankeyFlows, getRecentPeriods } from '../../charts.mjs';
 
 export default function Reports({ t, onBack, onGoToRoute }) {
   const { transactions, periodTransactions, categoryTree, selectedPeriod, setSelectedPeriod, periodLabel, accounts, bills, rates, txFilter, setTxFilter, savedViews, addView, updateView, deleteView } = useStore();
@@ -117,9 +117,20 @@ export default function Reports({ t, onBack, onGoToRoute }) {
     .sort((a, b) => b.amt - a.amt)
     .slice(0, 8);
   const trendPeriods = getRecentPeriods(selectedPeriod, 6);
-  const incomeExpense = buildIncomeExpenseSeries(transactions, trendPeriods, rates);
-  const categoryTrend = buildCategoryTrend(transactions, trendPeriods, 4, rates);
-  const netWorthTrend = buildNetWorthTrend(accounts, transactions, trendPeriods, rates);
+  const incomeExpense = buildIncomeExpenseSeries(transactions, trendPeriods, rates, t.currency || 'USD');
+  const categoryTrend = buildCategoryTrend(transactions, trendPeriods, 4, rates, t.currency || 'USD');
+  const netWorthTrend = buildNetWorthTrend(accounts, transactions, trendPeriods, rates, t.currency || 'USD');
+  // CAR-350: cash-flow Sankey for the active report window. reportTxs is already
+  // period/range-scoped; reportPeriods just enumerates the months it spans so
+  // buildSankeyFlows' own period filter is a no-op safety net here.
+  const reportPeriods = React.useMemo(
+    () => [...new Set(reportTxs.map(tx => tx.date?.slice(0, 7)).filter(Boolean))],
+    [reportTxs],
+  );
+  const sankeyFlows = React.useMemo(
+    () => buildSankeyFlows(reportTxs, reportPeriods, rates, t.currency || 'USD'),
+    [reportTxs, reportPeriods, rates, t.currency],
+  );
 
   // Rolling 12-month spend (absolute expense totals, USD-normalized).
   const momPeriods = getRecentPeriods(selectedPeriod, 12);
@@ -270,21 +281,42 @@ export default function Reports({ t, onBack, onGoToRoute }) {
       </div>
       <ARule style={{ marginTop: 14 }} />
       <div style={{ padding: '14px 0 0' }}>
-        <ALabel>[03] CATEGORY · TREND</ALabel>
+        <ALabel>[03] CASH · FLOW · {heroLabel}</ALabel>
+        <div style={{ marginTop: 12 }}>
+          {sankeyFlows.totalIn === 0 && sankeyFlows.totalOut === 0 ? (
+            <div style={{ padding: '12px 0', fontSize: 10, color: A.muted, letterSpacing: 1 }}>NO INCOME OR SPENDING FOR THIS PERIOD</div>
+          ) : (
+            <SankeyChart
+              flows={sankeyFlows}
+              categoryTree={categoryTree}
+              accent={t.accent}
+              height={220}
+              fmt={(v) => fmtMoney(v, t.currency, false)}
+            />
+          )}
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 8, color: A.muted, letterSpacing: 0.5, marginTop: 4 }}>
+          <span>IN · {fmtMoney(sankeyFlows.totalIn, t.currency, false)}</span>
+          <span>OUT · {fmtMoney(sankeyFlows.totalOut, t.currency, false)}</span>
+        </div>
+      </div>
+      <ARule style={{ marginTop: 14 }} />
+      <div style={{ padding: '14px 0 0' }}>
+        <ALabel>[04] CATEGORY · TREND</ALabel>
         <div style={{ marginTop: 12 }}>
           <CategoryTrendChart rows={categoryTrend} periods={trendPeriods} height={120} accent={t.accent} categoryTree={categoryTree} />
         </div>
       </div>
       <ARule style={{ marginTop: 14 }} />
       <div style={{ padding: '14px 0 0' }}>
-        <ALabel>[04] NET WORTH · TREND</ALabel>
+        <ALabel>[05] NET WORTH · TREND</ALabel>
         <div style={{ marginTop: 12 }}>
           <LineChart data={netWorthTrend} height={110} stroke={t.accent} fill={t.accent} />
         </div>
       </div>
       <ARule style={{ marginTop: 14 }} />
       <div style={{ padding: '14px 0 0' }}>
-        <ALabel>[05] MONTH · OVER · MONTH</ALabel>
+        <ALabel>[06] MONTH · OVER · MONTH</ALabel>
         <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4, height: 110, marginTop: 14 }}>
           {momSpend.map((v, i) => {
             const h = (v / momMax) * 100;
@@ -305,7 +337,7 @@ export default function Reports({ t, onBack, onGoToRoute }) {
         </div>
       </div>
       <ARule style={{ marginTop: 14 }} />
-      <div style={{ padding: '14px 0 4px' }}><ALabel>[06] TOP · CATEGORIES</ALabel></div>
+      <div style={{ padding: '14px 0 4px' }}><ALabel>[07] TOP · CATEGORIES</ALabel></div>
       {cats.map(([k, v]) => {
         const c = categoryTree[k] || { label: k, glyph: '·' };
         return (
@@ -328,7 +360,7 @@ export default function Reports({ t, onBack, onGoToRoute }) {
         );
       })}
       <ARule style={{ marginTop: 14 }} />
-      <div style={{ padding: '14px 0 4px' }}><ALabel>[07] TOP · MERCHANTS</ALabel></div>
+      <div style={{ padding: '14px 0 4px' }}><ALabel>[08] TOP · MERCHANTS</ALabel></div>
       {topMerchants.length === 0 ? (
         <div style={{ padding: '12px 0', fontSize: 11, color: A.muted, letterSpacing: 1, borderBottom: '1px solid ' + A.rule2 }}>
           NO MERCHANTS THIS PERIOD
@@ -356,7 +388,7 @@ export default function Reports({ t, onBack, onGoToRoute }) {
       )}
       <ARule style={{ marginTop: 14 }} />
       <div style={{ padding: '14px 0 0' }}>
-        <ALabel>[08] DETECTED · INSIGHTS</ALabel>
+        <ALabel>[09] DETECTED · INSIGHTS</ALabel>
         {insights.length === 0 ? (
           <div style={{ padding: '10px 0', borderBottom: '1px solid ' + A.rule2, fontSize: 11, color: A.muted, letterSpacing: 1 }}>
             NOT ENOUGH DATA YET

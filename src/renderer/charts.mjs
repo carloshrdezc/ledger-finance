@@ -1,7 +1,10 @@
 import { toReportingCurrency } from './fx.mjs';
 
-function toUsd(amount, ccy, rates, date) {
-  return toReportingCurrency(amount, ccy, rates, 'USD', date);
+// CAR-348: convert `amount` (in `ccy`) into the user's PRIMARY reporting
+// currency. Defaults to 'USD' so existing call sites and tests are unchanged;
+// the public builders below thread the user's primary currency through.
+function toReporting(amount, ccy, rates, date, reportingCcy = 'USD') {
+  return toReportingCurrency(amount, ccy, rates, reportingCcy, date);
 }
 
 function roundCents(value) {
@@ -28,7 +31,7 @@ export function getRecentPeriods(selectedPeriod, count = 6) {
   });
 }
 
-export function buildCategoryTrend(transactions, periods, limit = 6, rates = { USD: 1 }) {
+export function buildCategoryTrend(transactions, periods, limit = 6, rates = { USD: 1 }, reportingCcy = 'USD') {
   const totals = new Map();
   for (const tx of transactions) {
     if (tx.amt >= 0) continue;
@@ -36,7 +39,7 @@ export function buildCategoryTrend(transactions, periods, limit = 6, rates = { U
     if (!periods.includes(period)) continue;
     const cat = txCategory(tx);
     if (!totals.has(cat)) totals.set(cat, Object.fromEntries(periods.map(p => [p, 0])));
-    totals.get(cat)[period] += Math.abs(toUsd(tx.amt, tx.ccy, rates, tx.date));
+    totals.get(cat)[period] += Math.abs(toReporting(tx.amt, tx.ccy, rates, tx.date, reportingCcy));
   }
 
   return [...totals.entries()]
@@ -48,11 +51,11 @@ export function buildCategoryTrend(transactions, periods, limit = 6, rates = { U
     .slice(0, limit);
 }
 
-export function buildIncomeExpenseSeries(transactions, periods, rates = { USD: 1 }) {
+export function buildIncomeExpenseSeries(transactions, periods, rates = { USD: 1 }, reportingCcy = 'USD') {
   return periods.map(period => {
     const periodTxs = transactions.filter(tx => txPeriod(tx) === period);
-    const income = periodTxs.filter(tx => tx.amt > 0).reduce((s, tx) => s + toUsd(tx.amt, tx.ccy, rates, tx.date), 0);
-    const expense = periodTxs.filter(tx => tx.amt < 0).reduce((s, tx) => s + Math.abs(toUsd(tx.amt, tx.ccy, rates, tx.date)), 0);
+    const income = periodTxs.filter(tx => tx.amt > 0).reduce((s, tx) => s + toReporting(tx.amt, tx.ccy, rates, tx.date, reportingCcy), 0);
+    const expense = periodTxs.filter(tx => tx.amt < 0).reduce((s, tx) => s + Math.abs(toReporting(tx.amt, tx.ccy, rates, tx.date, reportingCcy)), 0);
     return {
       period,
       income: roundCents(income),
@@ -62,23 +65,23 @@ export function buildIncomeExpenseSeries(transactions, periods, rates = { USD: 1
   });
 }
 
-export function buildNetWorthTrend(accounts, transactions, periods, rates = { USD: 1 }) {
+export function buildNetWorthTrend(accounts, transactions, periods, rates = { USD: 1 }, reportingCcy = 'USD') {
   return periods.map(period => {
     const value = accounts.reduce((sum, account) => {
       if (!countedAccount(account)) return sum;
       // Opening balances stay at current valuation (date-free) — they're user-entered
       // current numbers, not aggregations of historical txs. Don't thread a date here.
-      const opening = toUsd(account.openingBal || 0, account.ccy, rates);
+      const opening = toReporting(account.openingBal || 0, account.ccy, rates, undefined, reportingCcy);
       const delta = transactions
         .filter(tx => tx.acct === account.id && txPeriod(tx) <= period)
-        .reduce((s, tx) => s + toUsd(tx.amt, tx.ccy, rates, tx.date), 0);
+        .reduce((s, tx) => s + toReporting(tx.amt, tx.ccy, rates, tx.date, reportingCcy), 0);
       return sum + opening + delta;
     }, 0);
     return { period, value: roundCents(value) };
   });
 }
 
-export function buildNetWorthDailyTrend(accounts, transactions, endDateIso, dayCount, rates = { USD: 1 }) {
+export function buildNetWorthDailyTrend(accounts, transactions, endDateIso, dayCount, rates = { USD: 1 }, reportingCcy = 'USD') {
   const safeCount = Math.max(1, Number(dayCount) || 1);
   const endDate = new Date(`${endDateIso}T00:00:00`);
   return Array.from({ length: safeCount }, (_, i) => {
@@ -89,14 +92,75 @@ export function buildNetWorthDailyTrend(accounts, transactions, endDateIso, dayC
       .filter(countedAccount)
       .reduce((sum, account) => {
         // Opening balance is current valuation (date-free); only the tx delta below threads tx.date.
-        const opening = toUsd(account.openingBal || 0, account.ccy, rates);
+        const opening = toReporting(account.openingBal || 0, account.ccy, rates, undefined, reportingCcy);
         const delta = transactions
           .filter(tx => tx.acct === account.id && tx.date <= iso)
-          .reduce((s, tx) => s + toUsd(tx.amt, tx.ccy, rates, tx.date), 0);
+          .reduce((s, tx) => s + toReporting(tx.amt, tx.ccy, rates, tx.date, reportingCcy), 0);
         return sum + opening + delta;
       }, 0);
     return { date: iso, value: roundCents(value) };
   });
+}
+
+// CAR-350: aggregate inflows/outflows for a Sankey cash-flow diagram.
+// Income categories flow into a central hub; the hub flows out to spending
+// categories. Any surplus (income > expense) becomes a "SAVINGS" outflow.
+// Shape: { nodes: [{ id, label, side, value }], links: [{ source, target, value }] }
+// where `side` is 'in' | 'hub' | 'out'. Values are in the reporting currency.
+export function buildSankeyFlows(transactions, periods, rates = { USD: 1 }, reportingCcy = 'USD', limit = 8) {
+  const HUB = '__hub__';
+  const SAVINGS = '__savings__';
+  const inflows = new Map();
+  const outflows = new Map();
+
+  for (const tx of transactions) {
+    if (tx.cat === 'transfer') continue;   // CAR-350: internal movements aren't cash flow
+    if (!periods.includes(txPeriod(tx))) continue;
+    const cat = txCategory(tx) || (tx.amt >= 0 ? 'income' : 'other');
+    const value = toReporting(tx.amt, tx.ccy, rates, tx.date, reportingCcy);
+    if (value > 0) {
+      inflows.set(cat, (inflows.get(cat) || 0) + value);
+    } else if (value < 0) {
+      outflows.set(cat, (outflows.get(cat) || 0) + Math.abs(value));
+    }
+  }
+
+  const collapse = (map) => {
+    const sorted = [...map.entries()]
+      .map(([cat, v]) => [cat, roundCents(v)])
+      .filter(([, v]) => v > 0)
+      .sort((a, b) => b[1] - a[1]);
+    if (sorted.length <= limit) return sorted;
+    const kept = sorted.slice(0, limit - 1);
+    const rest = sorted.slice(limit - 1).reduce((s, [, v]) => s + v, 0);
+    kept.push(['__other__', roundCents(rest)]);
+    return kept;
+  };
+
+  const inEntries = collapse(inflows);
+  const outEntries = collapse(outflows);
+  const totalIn = roundCents(inEntries.reduce((s, [, v]) => s + v, 0));
+  const totalOut = roundCents(outEntries.reduce((s, [, v]) => s + v, 0));
+
+  const nodes = [];
+  const links = [];
+  for (const [cat, v] of inEntries) {
+    nodes.push({ id: `in:${cat}`, label: cat, side: 'in', value: v });
+    links.push({ source: `in:${cat}`, target: HUB, value: v });
+  }
+  nodes.push({ id: HUB, label: 'budget', side: 'hub', value: Math.max(totalIn, totalOut) });
+  for (const [cat, v] of outEntries) {
+    nodes.push({ id: `out:${cat}`, label: cat, side: 'out', value: v });
+    links.push({ source: HUB, target: `out:${cat}`, value: v });
+  }
+
+  const surplus = roundCents(totalIn - totalOut);
+  if (surplus > 0) {
+    nodes.push({ id: SAVINGS, label: 'savings', side: 'out', value: surplus });
+    links.push({ source: HUB, target: SAVINGS, value: surplus });
+  }
+
+  return { nodes, links, totalIn, totalOut };
 }
 
 export function svgLinePath(values, width, height) {

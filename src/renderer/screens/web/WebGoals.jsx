@@ -6,9 +6,10 @@ import { fmtMoney, dayLabel } from '../../data';
 import { useStore } from '../../store';
 import { getDaysInPeriod } from '../../period.mjs';
 import GoalFormModal from '../../components/GoalFormModal';
+import AutoFundPanel from '../../components/AutoFundPanel';
 
 export default function WebGoals({ t, onNavigate, onAdd }) {
-  const { goals, goalContributions, contributeToGoal, accountsWithBalance, selectedPeriod } = useStore();
+  const { goals, goalContributions, contributeToGoal, accountsWithBalance, selectedPeriod, goalAutoFundRules } = useStore();
   const [contributing, setContributing] = React.useState(null);
   const [contribAmt, setContribAmt] = React.useState('');
   const [acct, setAcct] = React.useState(accountsWithBalance.find(a => a.type === 'SAV')?.id || accountsWithBalance[0]?.id || 'chk');
@@ -113,6 +114,15 @@ export default function WebGoals({ t, onNavigate, onAdd }) {
                     }}>+ ADD FUNDS</button>
                   )}
                 </div>
+              )}
+
+              {!done && (
+                <AutoFundPanel
+                  t={t}
+                  goal={g}
+                  rule={goalAutoFundRules.find(r => r.goalId === g.id) || null}
+                  accounts={accountsWithBalance}
+                />
               )}
 
               {history.length > 0 && (

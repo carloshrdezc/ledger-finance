@@ -217,11 +217,11 @@ export const BILLS = [
 ];
 
 export const INVESTMENTS = [
-  { ticker: 'VTI',  name: 'VANGUARD TOTAL MKT', shares:  412.20, price:  281.40, chg: +1.21 },
-  { ticker: 'VXUS', name: 'INTL STOCK INDEX',   shares:  220.00, price:   68.40, chg: -0.42 },
-  { ticker: 'BND',  name: 'TOTAL BOND',         shares:  140.00, price:   74.10, chg: +0.08 },
-  { ticker: 'AAPL', name: 'APPLE INC',          shares:   48.00, price:  224.80, chg: +2.10 },
-  { ticker: 'BTC',  name: 'BITCOIN',            shares:    0.612,price: 68920.00,chg: +3.40 },
+  { ticker: 'VTI',  name: 'VANGUARD TOTAL MKT', shares:  412.20, price:  281.40, chg: +1.21, assetClass: 'US Stocks' },
+  { ticker: 'VXUS', name: 'INTL STOCK INDEX',   shares:  220.00, price:   68.40, chg: -0.42, assetClass: 'Intl Stocks' },
+  { ticker: 'BND',  name: 'TOTAL BOND',         shares:  140.00, price:   74.10, chg: +0.08, assetClass: 'Bonds' },
+  { ticker: 'AAPL', name: 'APPLE INC',          shares:   48.00, price:  224.80, chg: +2.10, assetClass: 'US Stocks' },
+  { ticker: 'BTC',  name: 'BITCOIN',            shares:    0.612,price: 68920.00,chg: +3.40, assetClass: 'Crypto' },
 ];
 
 export const TRADES = [

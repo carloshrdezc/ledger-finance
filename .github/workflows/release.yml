@@ -35,10 +35,6 @@ jobs:
         run: npx electron-builder --win --publish=never
       - name: Package (macOS)
         if: matrix.os == 'macos-latest'
-        # macOS DMG packaging requires signing/icon assets that aren't
-        # configured yet; don't let an unconfigured mac leg block the
-        # Windows + Linux release. CAR-317.
-        continue-on-error: true
         env:
           CSC_LINK: ${{ secrets.MAC_CERT_P12_BASE64 }}
           CSC_KEY_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}

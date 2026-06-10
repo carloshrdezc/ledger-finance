@@ -1,7 +1,7 @@
 import React from 'react';
 import { A } from '../theme';
 import { Checkbox } from './Shared';
-import { fmtSigned, dayLabel, catGlyph, catBreadcrumb } from '../data';
+import { fmtSigned, fmtMoney, dayLabel, catGlyph, catBreadcrumb } from '../data';
 
 /**
  * Presentational row for the web transactions list. All click decisions
@@ -58,7 +58,20 @@ export default function TransactionRow({
       </div>
       <div style={{ fontSize: 9, color: A.muted, letterSpacing: 1 }}>{dayLabel(tx.date)}</div>
       <div>{tx.cat === 'transfer' ? '⇄' : catGlyph(tx.path || [tx.cat])}</div>
-      <div style={{ fontSize: 12 }}>{tx.name}</div>
+      <div style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tx.name}</span>
+        {/* CAR-346: indicator when a tx carries a note and/or receipt photos. */}
+        {tx.note ? (
+          <span title={tx.note} aria-label="has note" style={{ flex: '0 0 auto', fontSize: 10, color: A.muted }}>✎</span>
+        ) : null}
+        {tx.attachments && tx.attachments.length > 0 ? (
+          <span
+            title={`${tx.attachments.length} receipt${tx.attachments.length > 1 ? 's' : ''}`}
+            aria-label={`${tx.attachments.length} attachment${tx.attachments.length > 1 ? 's' : ''}`}
+            style={{ flex: '0 0 auto', fontSize: 10, color: A.muted, letterSpacing: 0.4 }}
+          >📎{tx.attachments.length > 1 ? tx.attachments.length : ''}</span>
+        ) : null}
+      </div>
       <div style={{ color: A.ink2, fontSize: 10, letterSpacing: 0.6, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
         {tx.cat === 'transfer' ? 'TRANSFER' : catBreadcrumb(tx.path || [tx.cat])}
       </div>
@@ -71,6 +84,15 @@ export default function TransactionRow({
         color: accentColor,
       }}>
         {fmtSigned(tx.amt, tx.ccy, t.decimals)}
+        {/* CAR-348: foreign-spend provenance — show the original amount the
+            charge was incurred in (e.g. "€42.00 → $45.30"). Only rendered when
+            the optional origAmt/origCcy fields are present and the original
+            currency differs from the account currency. */}
+        {tx.origCcy && tx.origAmt != null && tx.origCcy !== tx.ccy && (
+          <div style={{ fontSize: 9, color: A.muted, letterSpacing: 0.4, marginTop: 2 }}>
+            {fmtMoney(Math.abs(tx.origAmt), tx.origCcy, t.decimals)} → {fmtMoney(Math.abs(tx.amt), tx.ccy, t.decimals)}
+          </div>
+        )}
       </div>
     </div>
   );

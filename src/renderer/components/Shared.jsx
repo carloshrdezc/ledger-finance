@@ -242,3 +242,108 @@ export function CategoryTrendChart({ rows, periods, width = 520, height = 180, a
     </div>
   );
 }
+
+// CAR-350: Sankey cash-flow diagram. Income sources (left) flow through a
+// central budget hub to spending categories + savings (right). Band heights
+// and ribbon widths are proportional to value; the column with the larger
+// total fills the full height and the lighter column is centered.
+export function SankeyChart({ flows, categoryTree, accent = A.ink, width = 520, height = 260, fmt }) {
+  const ins = flows.nodes.filter(n => n.side === 'in');
+  const outs = flows.nodes.filter(n => n.side === 'out');
+  if (!ins.length && !outs.length) return null;
+
+  const pad = 8;
+  const gap = 6;                          // vertical gap between stacked bands
+  const nodeW = 9;                        // band thickness
+  const hubX = width / 2 - nodeW / 2;
+  const inX = pad;
+  const outX = width - pad - nodeW;
+  const usable = height - pad * 2;
+
+  // One shared pixel-per-currency scale so a band of value V is the same height
+  // on both sides — the taller stack fills the canvas, the shorter is centered.
+  const sumVals = (ns) => ns.reduce((s, n) => s + n.value, 0);
+  const inTotal = sumVals(ins) || 1;
+  const outTotal = sumVals(outs) || 1;
+  const maxTotal = Math.max(inTotal, outTotal);
+  const maxBands = Math.max(ins.length, outs.length);
+  const unit = (usable - gap * Math.max(0, maxBands - 1)) / maxTotal;
+
+  const layout = (ns, x) => {
+    const stack = ns.reduce((s, n) => s + Math.max(1, n.value * unit), 0) + gap * Math.max(0, ns.length - 1);
+    let y = pad + (usable - stack) / 2;
+    return ns.map(n => {
+      const bandH = Math.max(1, n.value * unit);
+      const rect = { ...n, x, y, h: bandH };
+      y += bandH + gap;
+      return rect;
+    });
+  };
+
+  const inRects = layout(ins, inX);
+  const outRects = layout(outs, outX);
+  const hubH = Math.max(...inRects.map(r => r.y + r.h), ...outRects.map(r => r.y + r.h), pad)
+    - Math.min(...inRects.map(r => r.y), ...outRects.map(r => r.y), pad);
+  const hubTop = Math.min(...inRects.map(r => r.y), ...outRects.map(r => r.y), pad);
+
+  const ribbon = (x1, y1, x2, y2, h) => {
+    const mx = (x1 + x2) / 2;
+    return `M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2} `
+      + `L${x2},${y2 + h} C${mx},${y2 + h} ${mx},${y1 + h} ${x1},${y1 + h} Z`;
+  };
+
+  // Ribbons stack along the hub edge in band order, advancing by band height +
+  // gap so each ribbon lines up with its source/target band (CAR-350 review m2).
+  let hubInY = hubTop;
+  let hubOutY = hubTop;
+  const labelFor = (n) => {
+    if (n.id === '__hub__') return 'BUDGET';
+    if (n.id === '__savings__') return 'SAVINGS';
+    if (n.label === '__other__') return 'OTHER CATEGORIES';
+    return (categoryTree && categoryTree[n.label]?.label) || (n.label || '').toUpperCase();
+  };
+
+  return (
+    <div>
+      <svg viewBox={`0 0 ${width} ${height}`} width="100%" height={height} preserveAspectRatio="none" style={{ display: 'block' }}>
+        {inRects.map(r => {
+          const d = ribbon(inX + nodeW, r.y, hubX, hubInY, r.h);
+          hubInY += r.h + gap;
+          return <path key={`lin-${r.id}`} d={d} fill={accent} opacity="0.22" />;
+        })}
+        {outRects.map(r => {
+          const isSavings = r.id === '__savings__';
+          const d = ribbon(hubX + nodeW, hubOutY, outX, r.y, r.h);
+          hubOutY += r.h + gap;
+          return <path key={`lout-${r.id}`} d={d} fill={isSavings ? A.pos : A.neg} opacity="0.18" />;
+        })}
+        <rect x={hubX} y={hubTop} width={nodeW} height={Math.max(1, hubH)} fill={A.ink} />
+        {inRects.map(r => (
+          <rect key={`nin-${r.id}`} x={r.x} y={r.y} width={nodeW} height={r.h} fill={accent} />
+        ))}
+        {outRects.map(r => (
+          <rect key={`nout-${r.id}`} x={r.x} y={r.y} width={nodeW} height={r.h}
+            fill={r.id === '__savings__' ? A.pos : A.neg} />
+        ))}
+      </svg>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, marginTop: 8 }}>
+        <div style={{ flex: 1 }}>
+          {inRects.map(r => (
+            <div key={`tin-${r.id}`} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: A.ink2, letterSpacing: 0.6, padding: '2px 0' }}>
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{labelFor(r)}</span>
+              <span style={{ color: A.muted, fontVariantNumeric: 'tabular-nums', marginLeft: 8 }}>{fmt ? fmt(r.value) : r.value}</span>
+            </div>
+          ))}
+        </div>
+        <div style={{ flex: 1 }}>
+          {outRects.map(r => (
+            <div key={`tout-${r.id}`} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: A.ink2, letterSpacing: 0.6, padding: '2px 0' }}>
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: r.id === '__savings__' ? A.pos : A.ink2 }}>{labelFor(r)}</span>
+              <span style={{ color: A.muted, fontVariantNumeric: 'tabular-nums', marginLeft: 8 }}>{fmt ? fmt(r.value) : r.value}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}

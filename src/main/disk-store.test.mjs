@@ -96,4 +96,68 @@ describe('disk store', () => {
     const raw = await readFile(filePath, 'utf8');
     expect(JSON.parse(raw)).toEqual({ 'ledger:theme': 'dark' });
   });
+
+  // CAR-245: the on-disk JSON is machine-read, so it is written single-line /
+  // unindented (stringify via worker dropped the `null, 2` pretty-print). This
+  // asserts the output has no multi-line indentation, NOT the exact bytes.
+  it('writes single-line / unindented JSON', async () => {
+    const { filePath, store } = await makeStore();
+    await store.write({ 'ledger:currency': 'USD', 'ledger:theme': 'dark' });
+    const raw = await readFile(filePath, 'utf8');
+    // Pretty-printed JSON.stringify(_, null, 2) would contain newlines + 2-space
+    // indentation between keys. A compact serialization has neither.
+    expect(raw).not.toMatch(/\n\s+"/);
+    expect(raw).toBe('{"ledger:currency":"USD","ledger:theme":"dark"}');
+  });
+
+  // CAR-245: stringify happens on a worker_threads worker. A round-trip across
+  // many sequential writes (each reusing the single per-store worker) must
+  // produce correct, parseable JSON on disk.
+  it('serializes correctly across many sequential writes (worker reuse)', async () => {
+    const { filePath, store } = await makeStore();
+    for (let i = 0; i < 25; i += 1) {
+      await store.write({ 'ledger:counter': i, 'ledger:nested': { a: [1, 2, i] } });
+    }
+    const raw = await readFile(filePath, 'utf8');
+    expect(JSON.parse(raw)).toEqual({ 'ledger:counter': 24, 'ledger:nested': { a: [1, 2, 24] } });
+  });
+
+  // CAR-245 crash-safety: if the worker dies, write() must NOT lose data — it
+  // falls back to an inline JSON.stringify. We replace the worker_threads
+  // Worker with one whose constructor throws (simulating a worker that can
+  // never spawn / immediately dies), then load a fresh copy of disk-store so
+  // its `import { Worker }` binding picks up the mock. The store must still
+  // produce a correct file via the inline fallback.
+  it('falls back to inline stringify when the worker can never spawn (no data loss)', async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), 'ledger-disk-store-'));
+    const filePath = path.join(dir, 'ledger-state.json');
+    const state = { 'ledger:currency': 'GBP', 'ledger:safe': true };
+
+    vi.resetModules();
+    vi.doMock('worker_threads', async () => {
+      const actual = await vi.importActual('worker_threads');
+      return {
+        ...actual,
+        Worker: class BrokenWorker {
+          constructor() {
+            throw new Error('worker spawn failed (simulated)');
+          }
+        },
+      };
+    });
+
+    try {
+      const { createDiskStore: freshCreateDiskStore } = await import('./disk-store.mjs');
+      const store = freshCreateDiskStore(filePath);
+
+      // Despite the worker constructor throwing, the write resolves and the
+      // file is correct — proving the inline fallback ran.
+      await expect(store.write(state)).resolves.toBeUndefined();
+      const raw = await readFile(filePath, 'utf8');
+      expect(JSON.parse(raw)).toEqual(state);
+    } finally {
+      vi.doUnmock('worker_threads');
+      vi.resetModules();
+    }
+  });
 });

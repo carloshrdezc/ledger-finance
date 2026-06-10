@@ -9,6 +9,7 @@ import {
   monthKey,
 } from './period.mjs';
 import { buildBillRows, markRecurringPaid as createRecurringPayment, getBillDueDate, slug, createGoalContribution } from './planning.mjs';
+import { computeSafeToSpend } from './safeToSpend.mjs';
 import {
   applyRecategorizeEvent,
   applyDismiss,
@@ -17,9 +18,11 @@ import {
 } from './recategorizeStats.mjs';
 import { buildAlertRows } from './alerts.mjs';
 import { buildInsightRows } from './insights.mjs';
-import { DEFAULT_RATES, buildDefaultRatesHistory, latestRateEntry, normalizeRatesHistory } from './fx.mjs';
+import { buildAnomalyRows } from './anomalies.mjs';
+import { DEFAULT_RATES, buildDefaultRatesHistory, latestRateEntry, normalizeRatesHistory, toReportingCurrency } from './fx.mjs';
 import { fetchRatesFromFrankfurter } from './fxFetch.mjs';
 import { buildBackup } from './backup.mjs';
+import { computeDueContributions, planAutoFundContributions } from './autoFunding.mjs';
 import { ACCENTS } from './theme';
 import {
   deleteTxsFromArray,
@@ -29,13 +32,14 @@ import {
   updateTxsIndividuallyInArray,
 } from './bulkOps.mjs';
 import { MKProvider } from './security/useMK';
+import { IdleLockGuard } from './security/IdleLockGuard';
 import LockScreen from './screens/LockScreen';
 
 const MIGRATED_TO_DISK_KEY = 'ledger:_migratedToDisk';
 const ONBOARDED_KEY = 'ledger:onboarded';
 const FIRST_RUN_SLICES = ['ledger:tx', 'ledger:accounts', 'ledger:bills', 'ledger:goals',
                           'ledger:budgets', 'ledger:investments', 'ledger:trades',
-                          'ledger:catTree', 'ledger:rules', 'ledger:savedViews'];
+                          'ledger:catTree', 'ledger:rules', 'ledger:savedViews', 'ledger:debts'];
 const LEDGER_PREFIX = 'ledger:';
 const PERSIST_DEBOUNCE_MS = 250;
 const PersistenceCtx = React.createContext(null);
@@ -237,7 +241,7 @@ export const StoreCtx = React.createContext(null);
     if (localStorage.getItem('ledger:welcomeSeen') !== null) return;
 
     const slices = ['ledger:tx', 'ledger:accounts', 'ledger:bills', 'ledger:goals',
-                    'ledger:budgets', 'ledger:investments', 'ledger:trades'];
+                    'ledger:budgets', 'ledger:investments', 'ledger:trades', 'ledger:debts'];
     for (const key of slices) {
       const raw = localStorage.getItem(key);
       if (!raw) continue;
@@ -440,6 +444,7 @@ export function StoreProvider({ children }) {
 
   return (
     <MKProvider>
+      <IdleLockGuard />
       <PersistenceCtx.Provider value={persistenceValue}>
         {securityState.enabled && securityState.locked
           ? <LockScreen />
@@ -461,7 +466,17 @@ function StoreProviderImpl({ children }) {
     setBills(prev => migrateBills(prev));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [goals, setGoals] = useLS('ledger:goals', []);
+  // CAR-345: debt payoff planner. Each debt: { id, name, balance, apr, minPayment }.
+  // `debtExtraPayment` is the single shared "extra monthly budget" the planner
+  // funnels into the focus debt on top of every debt's minimum.
+  const [debts, setDebts] = useLS('ledger:debts', []);
+  const [debtExtraPayment, setDebtExtraPayment] = useLS('ledger:debtExtraPayment', 0);
   const [goalContributions, setGoalContributions] = useLS('ledger:goalContributions', []);
+  // CAR-347: per-goal auto-funding rules. Each: { id, goalId, amount, source,
+  // freq, day/interval/startDate, active, lastFundedDate }. Ledger has no
+  // backend scheduler, so rules are applied on demand (runAutoFundRule) the
+  // same way bills are paid — never silently.
+  const [goalAutoFundRules, setGoalAutoFundRules] = useLS('ledger:goalAutoFundRules', []);
   const [rules, setRules] = useLS('ledger:rules', []);
   // CAR-83: one persisted slice for both Transactions and Reports saved views.
   // Simpler than split slices because the only difference is `scope`.
@@ -480,6 +495,8 @@ function StoreProviderImpl({ children }) {
   // CAR-217: weekly insight dismissal. Same pattern as alerts — store the
   // insight ids the user has dismissed; insightRows filters them out.
   const [dismissedInsightIds, setDismissedInsightIds] = useLS('ledger:dismissedInsights', []);
+  // CAR-351: transaction-level anomaly flags. Same dismissal pattern as insights.
+  const [dismissedAnomalyIds, setDismissedAnomalyIds] = useLS('ledger:dismissedAnomalies', []);
   const [welcomeSeen, setWelcomeSeen] = useLS('ledger:welcomeSeen', false);
   const [onboarded, setOnboarded] = useLS('ledger:onboarded', false);
   const [rates, setRates] = useLS('ledger:fxRates', buildDefaultRatesHistory());
@@ -560,8 +577,8 @@ function StoreProviderImpl({ children }) {
   );
   const periodLabel = React.useMemo(() => formatPeriodLabel(selectedPeriod, budgetStartDay), [selectedPeriod, budgetStartDay]);
   const budgetRows = React.useMemo(
-    () => buildBudgetRows(Array.isArray(budgets) ? budgets : [], transactions, selectedPeriod, rates),
-    [budgets, transactions, selectedPeriod, rates],
+    () => buildBudgetRows(Array.isArray(budgets) ? budgets : [], transactions, selectedPeriod, rates, currency),
+    [budgets, transactions, selectedPeriod, rates, currency],
   );
   const billRows = React.useMemo(
     () => buildBillRows(bills, transactions, selectedPeriod),
@@ -591,6 +608,27 @@ function StoreProviderImpl({ children }) {
   const accountsIncludedInTotals = React.useMemo(
     () => accountsWithBalance.filter(a => a.includeInTotals !== false),
     [accountsWithBalance],
+  );
+
+  // CAR-344: "safe to spend" hero metric. Derived entirely from the same
+  // rows the Accounts / Bills / Budgets / Goals surfaces already compute, so
+  // it stays provably consistent with them and re-renders whenever any of
+  // those inputs change (transactions edit balances, bills, and budgets).
+  // CAR-348: computed directly in the user's PRIMARY (reporting) currency.
+  // `convert` maps each account/bill amount from its own ccy straight to the
+  // primary ccy in ONE call; `budgetRows.left` is already in the primary ccy
+  // (buildBudgetRows now threads `currency`); goals are bare primary-ccy
+  // numbers. The consuming hero card therefore renders these values directly
+  // WITHOUT a second conversion (doing so would double-convert).
+  const safeToSpend = React.useMemo(
+    () => computeSafeToSpend({
+      accounts: accountsIncludedInTotals,
+      billRows,
+      budgetRows,
+      goals,
+      convert: (amt, ccy) => toReportingCurrency(amt, ccy, rates, currency),
+    }),
+    [accountsIncludedInTotals, billRows, budgetRows, goals, rates, currency],
   );
 
   const isAppEmpty = React.useMemo(
@@ -630,6 +668,14 @@ function StoreProviderImpl({ children }) {
       dismissedInsightIds,
     }),
     [isAppEmpty, transactions, bills, budgetRows, dismissedInsightIds],
+  );
+
+  // CAR-351: per-transaction anomaly flags — also purely derived, suppressed on
+  // an empty store. Complements the weekly insights with transaction-level
+  // outlier / duplicate / new-merchant detection.
+  const anomalyRows = React.useMemo(
+    () => isAppEmpty ? [] : buildAnomalyRows({ transactions, dismissedAnomalyIds }),
+    [isAppEmpty, transactions, dismissedAnomalyIds],
   );
 
   const addTransactions = React.useCallback(incoming => setTxs(prev => {
@@ -710,6 +756,41 @@ function StoreProviderImpl({ children }) {
 
   const updateTx = React.useCallback((id, changes) => setTxs(prev =>
     prev.map(tx => tx.id === id ? { ...tx, ...changes } : tx)
+  ), [setTxs]);
+
+  // CAR-346: receipt/photo + note attachments on transactions. `note` reuses
+  // the SAME field/convention already used by transfer legs (createTransfer /
+  // updateTransfer). `attachments` is an optional array of downscaled,
+  // size-capped base64 data-URL images stored on the tx object so they ride
+  // the existing encrypted persistence + backup `transactions` slice. All
+  // fields are optional and backward-compatible (txs without them are
+  // unchanged). Built on the same setTxs map primitive as updateTx.
+  const setTxNote = React.useCallback((id, note) => setTxs(prev =>
+    prev.map(tx => {
+      if (tx.id !== id) return tx;
+      const trimmed = (note || '').trim();
+      if (trimmed) return { ...tx, note: trimmed };
+      // Empty note clears the field rather than storing an empty string.
+      const { note: _drop, ...rest } = tx;
+      return rest;
+    })
+  ), [setTxs]);
+
+  const addTxAttachment = React.useCallback((id, attachment) => setTxs(prev =>
+    prev.map(tx => tx.id === id
+      ? { ...tx, attachments: [...(tx.attachments || []), attachment] }
+      : tx)
+  ), [setTxs]);
+
+  const removeTxAttachment = React.useCallback((id, attachmentId) => setTxs(prev =>
+    prev.map(tx => {
+      if (tx.id !== id) return tx;
+      const next = (tx.attachments || []).filter(a => a.id !== attachmentId);
+      if (next.length > 0) return { ...tx, attachments: next };
+      // Drop the field entirely when the last attachment is removed.
+      const { attachments: _drop, ...rest } = tx;
+      return rest;
+    })
   ), [setTxs]);
 
   const addCategory = React.useCallback((pathParts, label) => {
@@ -928,7 +1009,8 @@ function StoreProviderImpl({ children }) {
   const deleteGoal = React.useCallback(id => {
     setGoals(prev => prev.filter(g => g.id !== id));
     setGoalContributions(prev => prev.filter(c => c.goalId !== id));
-  }, [setGoals, setGoalContributions]);
+    setGoalAutoFundRules(prev => prev.filter(r => r.goalId !== id));
+  }, [setGoals, setGoalContributions, setGoalAutoFundRules]);
 
   const restoreGoal = React.useCallback((goal, contributions = []) => {
     if (!goal) return;
@@ -941,6 +1023,110 @@ function StoreProviderImpl({ children }) {
       });
     }
   }, [setGoals, setGoalContributions]);
+
+  // CAR-347: auto-funding rule CRUD. Rules schedule recurring contributions to
+  // a goal; they're applied on demand via runAutoFundRule (no silent execution).
+  const addAutoFundRule = React.useCallback((rule) => {
+    const created = {
+      id: 'af_' + Date.now(),
+      goalId: rule.goalId,
+      amount: Math.max(0, Number(rule.amount) || 0),
+      source: rule.source || 'chk',
+      freq: rule.freq || 'monthly',
+      ...(rule.day != null ? { day: Number(rule.day) } : {}),
+      ...(rule.interval != null ? { interval: Number(rule.interval) } : {}),
+      ...(rule.startDate ? { startDate: rule.startDate } : {}),
+      active: rule.active !== false,
+      lastFundedDate: rule.lastFundedDate || null,
+    };
+    setGoalAutoFundRules(prev => [...prev, created]);
+    return created;
+  }, [setGoalAutoFundRules]);
+
+  const updateAutoFundRule = React.useCallback((id, patch) => {
+    setGoalAutoFundRules(prev => prev.map(r => r.id === id ? { ...r, ...patch } : r));
+  }, [setGoalAutoFundRules]);
+
+  const deleteAutoFundRule = React.useCallback((id) => {
+    setGoalAutoFundRules(prev => prev.filter(r => r.id !== id));
+  }, [setGoalAutoFundRules]);
+
+  // Apply every contribution a rule currently owes (occurrences since its last
+  // funded date, up to today, clipped to the goal's headroom), then stamp
+  // lastFundedDate. planAutoFundContributions produces stable-keyed dated
+  // contributions + transactions, so the goal balance, contribution history,
+  // and ledger all stay consistent and re-runs are idempotent.
+  const runAutoFundRule = React.useCallback((ruleId, todayIso = new Date().toISOString().slice(0, 10)) => {
+    const rule = goalAutoFundRules.find(r => r.id === ruleId);
+    if (!rule) return { applied: 0 };
+    const goal = goals.find(g => g.id === rule.goalId);
+    if (!goal) return { applied: 0 };
+    const dueDates = computeDueContributions(rule, todayIso);
+    if (dueDates.length === 0) return { applied: 0 };
+
+    // Pure planner: clips to the goal's remaining headroom (never over-funds
+    // past target) and assigns STABLE ids keyed on rule+date so a double-click
+    // or interrupted re-run is idempotent — the seen-set dedupe below catches
+    // already-applied dates instead of creating timestamped duplicates.
+    const plan = planAutoFundContributions(goal, rule, dueDates);
+    if (plan.contributions.length === 0) return { applied: 0 };
+
+    setGoals(prev => prev.map(g => g.id === plan.goalNext.id ? plan.goalNext : g));
+    setGoalContributions(prev => {
+      const seen = new Set(prev.map(c => c.id));
+      const additions = plan.contributions.filter(c => !seen.has(c.id));
+      return additions.length === 0 ? prev : [...prev, ...additions];
+    });
+    setTxs(prev => {
+      const seen = new Set(prev.map(tx => tx.id));
+      const additions = plan.transactions.filter(tx => !seen.has(tx.id));
+      return additions.length === 0 ? prev : [...prev, ...additions];
+    });
+    setGoalAutoFundRules(prev => prev.map(r => r.id === ruleId
+      ? { ...r, lastFundedDate: plan.lastFundedDate || r.lastFundedDate }
+      : r));
+
+    return { applied: plan.contributions.length, total: plan.total };
+  }, [goalAutoFundRules, goals, setGoals, setGoalContributions, setTxs, setGoalAutoFundRules]);
+
+  // CAR-345: debt payoff planner CRUD. Mirrors the goals slice shape.
+  const addDebt = React.useCallback(({ name, balance, apr, minPayment }) => {
+    const debt = {
+      id: 'd_' + Date.now(),
+      name: (name || '').trim().toUpperCase(),
+      balance: Math.max(0, Number(balance) || 0),
+      apr: Math.max(0, Number(apr) || 0),
+      minPayment: Math.max(0, Number(minPayment) || 0),
+      createdAt: new Date().toISOString().slice(0, 10),
+    };
+    setDebts(prev => [...prev, debt]);
+    return debt;
+  }, [setDebts]);
+
+  const updateDebt = React.useCallback((id, patch) => {
+    setDebts(prev => prev.map(d => {
+      if (d.id !== id) return d;
+      const next = { ...d, ...patch };
+      if (patch.name !== undefined) next.name = String(patch.name).trim().toUpperCase();
+      if (patch.balance !== undefined) next.balance = Math.max(0, Number(patch.balance) || 0);
+      if (patch.apr !== undefined) next.apr = Math.max(0, Number(patch.apr) || 0);
+      if (patch.minPayment !== undefined) next.minPayment = Math.max(0, Number(patch.minPayment) || 0);
+      return next;
+    }));
+  }, [setDebts]);
+
+  const deleteDebt = React.useCallback(id => {
+    setDebts(prev => prev.filter(d => d.id !== id));
+  }, [setDebts]);
+
+  const restoreDebt = React.useCallback(debt => {
+    if (!debt) return;
+    setDebts(prev => prev.some(d => d.id === debt.id) ? prev : [...prev, debt]);
+  }, [setDebts]);
+
+  const setExtraPayment = React.useCallback(v => {
+    setDebtExtraPayment(Math.max(0, Number(v) || 0));
+  }, [setDebtExtraPayment]);
 
   const addBudget = React.useCallback(({ cat, limit, rollover }) => {
     const entry = {
@@ -1238,6 +1424,15 @@ function StoreProviderImpl({ children }) {
     setDismissedInsightIds([]);
   }, [setDismissedInsightIds]);
 
+  // CAR-351: anomaly dismissal mirrors insights.
+  const dismissAnomaly = React.useCallback(id => {
+    setDismissedAnomalyIds(prev => prev.includes(id) ? prev : [...prev, id]);
+  }, [setDismissedAnomalyIds]);
+
+  const restoreAnomalies = React.useCallback(() => {
+    setDismissedAnomalyIds([]);
+  }, [setDismissedAnomalyIds]);
+
   const dismissWelcome = React.useCallback(() => {
     setWelcomeSeen(true);
   }, [setWelcomeSeen]);
@@ -1278,6 +1473,7 @@ function StoreProviderImpl({ children }) {
     setBills([]);
     setGoals([]);
     setGoalContributions([]);
+    setGoalAutoFundRules([]);
     setRules([]);
     setSavedViews([]);
     setRecategorizeStats({});
@@ -1288,6 +1484,7 @@ function StoreProviderImpl({ children }) {
     setTrades([]);
     setDismissedAlertIds([]);
     setDismissedInsightIds([]);
+    setDismissedAnomalyIds([]);
     setTxFilterRaw(null);
     setRates(DEFAULT_RATES);
     setRatesUpdated({});
@@ -1300,8 +1497,10 @@ function StoreProviderImpl({ children }) {
     setLastBackupAt(null);
     setBackupReminderSnoozedUntil(null);
     setBackupReminderIntervalRaw(30);
+    setDebts([]); // CAR-345
+    setDebtExtraPayment(0); // CAR-345
     _seedSampleData();
-  }, [_seedSampleData, abortFxFetch, setTxs, setCatTree, setBudgets, setAccounts, setBills, setGoals, setGoalContributions, setRules, setSavedViews, setSelectedPeriod, setHidden, setBudgetStartDay, setInvestments, setTrades, setDismissedAlertIds, setDismissedInsightIds, setTxFilterRaw, setRates, setRatesUpdated, setFxAutoFetch, setFxLastFetchedAt, setFxLastFetchError, setFxMigrationToastSeen, setWelcomeSeen, setOnboarded, setLastBackupAt, setBackupReminderSnoozedUntil, setBackupReminderIntervalRaw]);
+  }, [_seedSampleData, abortFxFetch, setTxs, setCatTree, setBudgets, setAccounts, setBills, setGoals, setGoalContributions, setRules, setSavedViews, setSelectedPeriod, setHidden, setBudgetStartDay, setInvestments, setTrades, setDismissedAlertIds, setDismissedInsightIds, setTxFilterRaw, setRates, setRatesUpdated, setFxAutoFetch, setFxLastFetchedAt, setFxLastFetchError, setFxMigrationToastSeen, setWelcomeSeen, setOnboarded, setLastBackupAt, setBackupReminderSnoozedUntil, setBackupReminderIntervalRaw, setDebts, setDebtExtraPayment]);
 
   React.useEffect(() => () => {
     if (fxFetchAbortRef.current) fxFetchAbortRef.current.abort();
@@ -1363,11 +1562,11 @@ function StoreProviderImpl({ children }) {
     const obj = buildBackup({
       txs, accounts, catTree, budgets, hidden, bills, goals, goalContributions,
       savedViews, investments, trades, rates, ratesUpdated, fxAutoFetch, fxLastFetchedAt, fxLastFetchError,
-      selectedPeriod, budgetStartDay,
+      selectedPeriod, budgetStartDay, debts, debtExtraPayment,
       settings: { accent, density, decimals, currency, theme, forecastLiquidAccountIds, forecastThreshold },
     });
     return JSON.stringify(obj, null, 2);
-  }, [txs, accounts, catTree, budgets, hidden, bills, goals, goalContributions, savedViews, investments, trades, rates, ratesUpdated, fxAutoFetch, fxLastFetchedAt, fxLastFetchError, selectedPeriod, budgetStartDay, accent, density, decimals, currency, theme, forecastLiquidAccountIds, forecastThreshold]);
+  }, [txs, accounts, catTree, budgets, hidden, bills, goals, goalContributions, savedViews, investments, trades, rates, ratesUpdated, fxAutoFetch, fxLastFetchedAt, fxLastFetchError, selectedPeriod, budgetStartDay, debts, debtExtraPayment, accent, density, decimals, currency, theme, forecastLiquidAccountIds, forecastThreshold]);
 
   const recordBackupTaken = React.useCallback(() => {
     setLastBackupAt(new Date().toISOString().slice(0, 10));
@@ -1395,6 +1594,9 @@ function StoreProviderImpl({ children }) {
     setGoalContributions(Array.isArray(data.goalContributions) ? data.goalContributions : []);
     setRules(Array.isArray(data.rules) ? data.rules : []);
     setSavedViews(Array.isArray(data.savedViews) ? data.savedViews : []);
+    // CAR-345: debts default to [] when restoring an older backup without them.
+    setDebts(Array.isArray(data.debts) ? data.debts : []);
+    setDebtExtraPayment(Math.max(0, Number(data.debtExtraPayment) || 0));
     // CAR-182: backups don't carry recategorize stats — clear them on restore
     // so the new dataset starts fresh (counters keyed on old tx ids would be stale).
     setRecategorizeStats({});
@@ -1433,6 +1635,7 @@ function StoreProviderImpl({ children }) {
     setTxFilterRaw(null);
     setDismissedAlertIds([]);
     setDismissedInsightIds([]);
+    setDismissedAnomalyIds([]);
     setFxAutoFetch('off');
     setFxLastFetchedAt(null);
     setFxLastFetchError(null);
@@ -1451,6 +1654,7 @@ function StoreProviderImpl({ children }) {
     setFxAutoFetch, setFxLastFetchedAt, setFxLastFetchError,
     setWelcomeSeen, setFxMigrationToastSeen,
     setBackupReminderSnoozedUntil,
+    setDebts, setDebtExtraPayment,
   ]);
 
   const reset = React.useCallback(() => {
@@ -1462,6 +1666,7 @@ function StoreProviderImpl({ children }) {
     setBills([]);
     setGoals([]);
     setGoalContributions([]);
+    setGoalAutoFundRules([]);
     setRules([]);
     setSavedViews([]);
     setRecategorizeStats({});
@@ -1472,6 +1677,7 @@ function StoreProviderImpl({ children }) {
     setTrades([]);
     setDismissedAlertIds([]);
     setDismissedInsightIds([]);
+    setDismissedAnomalyIds([]);
     setTxFilterRaw(null);
     setRates(DEFAULT_RATES);
     setRatesUpdated({});
@@ -1487,7 +1693,9 @@ function StoreProviderImpl({ children }) {
     // CAR-218: clear forecast settings to defaults too.
     setForecastLiquidAccountIds([]);
     setForecastThreshold(0);
-  }, [abortFxFetch, setTxs, setCatTree, setBudgets, setAccounts, setBills, setGoals, setGoalContributions, setRules, setSavedViews, setRecategorizeStats, setSelectedPeriod, setHidden, setBudgetStartDay, setInvestments, setTrades, setDismissedAlertIds, setDismissedInsightIds, setTxFilterRaw, setRates, setRatesUpdated, setFxAutoFetch, setFxLastFetchedAt, setFxLastFetchError, setFxMigrationToastSeen, setWelcomeSeen, setOnboarded, setLastBackupAt, setBackupReminderSnoozedUntil, setBackupReminderIntervalRaw, setForecastLiquidAccountIds, setForecastThreshold]);
+    setDebts([]); // CAR-345
+    setDebtExtraPayment(0); // CAR-345
+  }, [abortFxFetch, setTxs, setCatTree, setBudgets, setAccounts, setBills, setGoals, setGoalContributions, setRules, setSavedViews, setRecategorizeStats, setSelectedPeriod, setHidden, setBudgetStartDay, setInvestments, setTrades, setDismissedAlertIds, setDismissedInsightIds, setTxFilterRaw, setRates, setRatesUpdated, setFxAutoFetch, setFxLastFetchedAt, setFxLastFetchError, setFxMigrationToastSeen, setWelcomeSeen, setOnboarded, setLastBackupAt, setBackupReminderSnoozedUntil, setBackupReminderIntervalRaw, setForecastLiquidAccountIds, setForecastThreshold, setDebts, setDebtExtraPayment]);
 
   return (
     <StoreCtx.Provider value={{
@@ -1504,6 +1712,10 @@ function StoreProviderImpl({ children }) {
       updateTransfer,
       deleteTransfer,
       updateTx,
+      // CAR-346 receipt/photo + note attachments
+      setTxNote,
+      addTxAttachment,
+      removeTxAttachment,
       // CAR-82 bulk methods
       deleteTxs,
       hideTxs,
@@ -1551,6 +1763,10 @@ function StoreProviderImpl({ children }) {
       insightRows,
       dismissInsight,
       restoreInsights,
+      // CAR-351
+      anomalyRows,
+      dismissAnomaly,
+      restoreAnomalies,
       lastBackupAt,
       backupReminderInterval,
       setBackupReminderInterval,
@@ -1572,6 +1788,21 @@ function StoreProviderImpl({ children }) {
       updateGoal,
       deleteGoal,
       restoreGoal,
+      goalAutoFundRules,
+      setGoalAutoFundRules,
+      addAutoFundRule,
+      updateAutoFundRule,
+      deleteAutoFundRule,
+      runAutoFundRule,
+      // CAR-345: debt payoff planner
+      debts,
+      setDebts,
+      addDebt,
+      updateDebt,
+      deleteDebt,
+      restoreDebt,
+      debtExtraPayment,
+      setDebtExtraPayment: setExtraPayment,
       selectedPeriod,
       setSelectedPeriod,
       txFilter,
@@ -1583,6 +1814,7 @@ function StoreProviderImpl({ children }) {
       accounts,
       accountsWithBalance,
       accountsIncludedInTotals,
+      safeToSpend,
       allAccountsWithBalance,
       setAccounts,
       addAccount,

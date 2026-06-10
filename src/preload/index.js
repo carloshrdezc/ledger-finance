@@ -52,6 +52,8 @@ contextBridge.exposeInMainWorld('ledgerSecurity', {
   rotateRecovery: () => ipcRenderer.invoke('security:rotate-recovery'),
   disable: () => ipcRenderer.invoke('security:disable'),
   setOsEscrow: enabled => ipcRenderer.invoke('security:set-os-escrow', enabled),
+  // CAR-244 / I10: persist idle auto-lock timeout (0 = never).
+  setIdleLockMs: ms => ipcRenderer.invoke('security:set-idle-lock-ms', ms),
 
   // Dev-only — main only registers this handler when !app.isPackaged.
   // Kept around through slice 3 so existing automation keeps working;

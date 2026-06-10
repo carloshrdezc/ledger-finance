@@ -33,8 +33,8 @@ export default function Home({ t, onAcct, onAdd, onViewAll, onInsight }) {
 
   // 30-day net worth daily trend, derived from real transaction history.
   const nwTrend = React.useMemo(
-    () => buildNetWorthDailyTrend(accounts, transactions, todayIso, 30, rates).map(p => p.value),
-    [accounts, transactions, todayIso, rates],
+    () => buildNetWorthDailyTrend(accounts, transactions, todayIso, 30, rates, t.currency || 'USD').map(p => p.value),
+    [accounts, transactions, todayIso, rates, t.currency],
   );
   // Daily spend trend (rolling 30 days, absolute value of expenses per day).
   const spendTrend = React.useMemo(() => {
@@ -65,14 +65,18 @@ export default function Home({ t, onAcct, onAdd, onViewAll, onInsight }) {
     if (!liquidAccounts || liquidAccounts.length === 0) {
       return { totals: [], riskIndices: [], minTotal: 0, dates: [] };
     }
-    const rows = projectBalances(liquidAccounts, transactions || [], bills || [], todayIso, 30);
+    // CAR-359: convert non-USD liquid accounts into the primary currency.
+    const rows = projectBalances(liquidAccounts, transactions || [], bills || [], todayIso, 30, {
+      rates,
+      reportingCcy: t.currency || 'USD',
+    });
     return compactForecastSeries(rows, {
       threshold: Number.isFinite(forecastThreshold) ? forecastThreshold : 0,
       accountIds: forecastLiquidAccountIds && forecastLiquidAccountIds.length > 0
         ? forecastLiquidAccountIds
         : null,
     });
-  }, [liquidAccounts, forecastLiquidAccountIds, transactions, bills, todayIso, forecastThreshold]);
+  }, [liquidAccounts, forecastLiquidAccountIds, transactions, bills, todayIso, forecastThreshold, rates, t.currency]);
   const forecastSpark = forecastView.totals;
   const forecastEnd = forecastSpark.length ? forecastSpark[forecastSpark.length - 1] : 0;
   const forecastStart = forecastSpark.length ? forecastSpark[0] : 0;

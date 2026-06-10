@@ -98,13 +98,20 @@ export function parseCSV(text) {
 
   const headers = csvSplit(lines[0]).map(h => h.toLowerCase().trim());
   const col = (...pats) => headers.findIndex(h => pats.some(p => h.includes(p)));
+  // CAR-348: the optional foreign-amount columns contain "amount"/"currency"
+  // substrings, so detect them first and exclude their indices from the main
+  // amount/currency detection below to avoid mis-binding.
+  const origAmtI = headers.findIndex(h => /\borig/.test(h) && h.includes('amount'));
+  const origCcyI = headers.findIndex(h => /\borig/.test(h) && (h.includes('currency') || h.includes('ccy') || h.includes('cur')));
+  const colExcluding = (excluded, ...pats) =>
+    headers.findIndex((h, i) => !excluded.includes(i) && pats.some(p => h.includes(p)));
 
   const dateI = col('date', 'time', 'posted');
   const nameI = col('description', 'name', 'merchant', 'payee', 'narrative', 'details', 'memo');
-  const amtI  = col('amount', 'amt', 'sum', 'value', 'debit', 'credit');
+  const amtI  = colExcluding([origAmtI], 'amount', 'amt', 'sum', 'value', 'debit', 'credit');
   const catI  = col('category', 'cat', 'type', 'group');
   const acctI = col('account', 'acct');
-  const ccyI  = col('currency', 'ccy', 'cur');
+  const ccyI  = colExcluding([origCcyI], 'currency', 'ccy', 'cur');
   const noteI = col('note', 'notes', 'reference', 'remark');
 
   if (nameI < 0 || amtI < 0)
@@ -116,7 +123,9 @@ export function parseCSV(text) {
     const amt = parseFloat((c[amtI] || '').replace(/[$£€, ]/g, ''));
     const name = c[nameI]?.trim();
     if (!name || isNaN(amt)) return [];
-    return [{
+    const origAmtRaw = origAmtI >= 0 ? parseFloat((c[origAmtI] || '').replace(/[$£€, ]/g, '')) : NaN;
+    const origCcyRaw = origCcyI >= 0 ? (c[origCcyI]?.trim() || '') : '';
+    const tx = {
       id: `csv_${i}_${Math.random().toString(36).slice(2, 6)}`,
       name, amt,
       date: dateI >= 0 ? csvIso(c[dateI]) : new Date().toISOString().slice(0, 10),
@@ -124,7 +133,13 @@ export function parseCSV(text) {
       ccy: ccyI >= 0 ? (c[ccyI]?.trim() || 'USD') : 'USD',
       acct: acctI >= 0 ? (c[acctI]?.trim() || 'chk1') : 'chk1',
       memo: noteI >= 0 ? c[noteI]?.trim() : undefined,
-    }];
+    };
+    // CAR-348: only attach foreign provenance when both fields are present.
+    if (Number.isFinite(origAmtRaw) && origCcyRaw) {
+      tx.origAmt = origAmtRaw;
+      tx.origCcy = origCcyRaw;
+    }
+    return [tx];
   });
 }
 
@@ -714,6 +729,11 @@ export function exportXLSX(store) {
     Path: pathToString(tx.path || (tx.cat ? [tx.cat] : [])),
     Account: tx.acct || '',
     Currency: tx.ccy || 'USD',
+    // CAR-348: optional per-tx foreign amount provenance. Blank when absent.
+    'Original Amount': tx.origAmt ?? '',
+    'Original Currency': tx.origCcy ?? '',
+    // CAR-346: free-text note (text only — image data is never exported).
+    Note: tx.note || '',
     Memo: tx.memo || '',
   }));
   const accounts = (store.accounts || []).map(acct => ({
@@ -752,7 +772,7 @@ export function exportXLSX(store) {
 export function exportCSV(transactions) {
   const esc = s => `"${(s || '').replace(/"/g, '""')}"`;
   return [
-    'Date,Description,Amount,Category,Account,Currency,Memo',
+    'Date,Description,Amount,Category,Account,Currency,Original Amount,Original Currency,Note,Memo',
     ...transactions.map(tx =>
       [
         tx.date || new Date().toISOString().slice(0, 10),
@@ -761,6 +781,11 @@ export function exportCSV(transactions) {
         tx.cat || '',
         tx.acct || '',
         tx.ccy || 'USD',
+        // CAR-348: optional foreign-amount provenance; blank columns when absent.
+        tx.origAmt != null ? Number(tx.origAmt).toFixed(2) : '',
+        tx.origCcy || '',
+        // CAR-346: free-text note (text only — image data is never exported to CSV).
+        esc(tx.note),
         esc(tx.memo),
       ].join(',')
     ),

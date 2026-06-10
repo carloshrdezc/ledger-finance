@@ -61,14 +61,14 @@ describe('buildBackup', () => {
   });
 
   // Documentation-as-test: locks the user-data slice count so the comment
-  // in backup.mjs ("16 user-data slices total: 14 in SLICES + 2 in
+  // in backup.mjs ("18 user-data slices total: 15 in SLICES + 3 in
   // SCALAR_SLICES") can't drift silently. If a slice is added or removed,
   // this assertion forces the count + comment to be updated together.
-  it('emits exactly 16 user-data slice keys (locks slice count)', () => {
+  it('emits exactly 18 user-data slice keys (locks slice count)', () => {
     const b = buildBackup({});
     const envelopeKeys = ['_type', 'version', 'exportedAt', 'settings'];
     const sliceKeys = Object.keys(b).filter((k) => !envelopeKeys.includes(k));
-    expect(sliceKeys).toHaveLength(16);
+    expect(sliceKeys).toHaveLength(18);
   });
 
   it('handles missing/undefined slices by emitting empty defaults', () => {
@@ -86,6 +86,8 @@ describe('buildBackup', () => {
     expect(b.trades).toEqual([]);
     expect(b.fxRates).toEqual({});
     expect(b.fxRatesUpdated).toEqual({});
+    expect(b.debts).toEqual([]);
+    expect(b.debtExtraPayment).toBe(0);
     expect(b.settings).toEqual({});
   });
 
@@ -274,5 +276,46 @@ describe('CAR-188: mmbak full-restore parity', () => {
     expect(result.summary.investments).toBe(1);
     expect(result.summary.trades).toBe(1);
     expect(result.summary.hidden).toBe(2);
+  });
+});
+
+// CAR-345: debt payoff planner slices round-trip and remain backward-compatible.
+describe('CAR-345: debt payoff planner slices', () => {
+  const debtState = {
+    debts: [
+      { id: 'd1', name: 'VISA', balance: 4200, apr: 19.99, minPayment: 120 },
+      { id: 'd2', name: 'CAR LOAN', balance: 8800, apr: 6.5, minPayment: 240 },
+    ],
+    debtExtraPayment: 300,
+  };
+
+  it('build → JSON.stringify → parseBackup round-trips debts + extra payment', () => {
+    const json = JSON.stringify(buildBackup(debtState));
+    const result = parseBackup(json);
+    expect(result.ok).toBe(true);
+    expect(result.data.debts).toEqual(debtState.debts);
+    expect(result.data.debtExtraPayment).toBe(300);
+    expect(result.summary.debts).toBe(2);
+  });
+
+  it('an old backup missing the debts slice defaults to [] and 0', () => {
+    // Simulate a pre-CAR-345 backup: strip the new keys entirely.
+    const obj = buildBackup(debtState);
+    delete obj.debts;
+    delete obj.debtExtraPayment;
+    const result = parseBackup(JSON.stringify(obj));
+    expect(result.ok).toBe(true);
+    expect(result.data.debts).toEqual([]);
+    expect(result.data.debtExtraPayment).toBe(0);
+    expect(result.summary.debts).toBe(0);
+  });
+
+  it('a wrong-typed debts slice is skipped with a warning', () => {
+    const obj = buildBackup(debtState);
+    obj.debts = 'not an array';
+    const result = validateBackup(obj);
+    expect(result.ok).toBe(true);
+    expect(result.data.debts).toEqual([]);
+    expect(result.warnings.some(w => /debts/i.test(w))).toBe(true);
   });
 });

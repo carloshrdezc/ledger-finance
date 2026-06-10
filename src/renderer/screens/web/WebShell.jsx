@@ -10,6 +10,7 @@ const NAV_ITEMS = [
   ['BUDGETS',       'budgets'],
   ['INVESTMENTS',   'investments'],
   ['GOALS',         'goals'],
+  ['DEBT PAYOFF',   'debts'],
   ['BILLS',         'bills'],
   ['REPORTS',       'reports'],
   ['SETTINGS',      'settings'],
