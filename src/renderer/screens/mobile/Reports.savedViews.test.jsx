@@ -18,6 +18,7 @@ vi.mock('../../components/Shared', () => ({
   CategoryTrendChart: () => <div data-testid="category-chart" />,
   IncomeExpenseChart: () => <div data-testid="income-chart" />,
   LineChart: () => <div data-testid="line-chart" />,
+  SankeyChart: () => <div data-testid="sankey-chart" />,
 }));
 vi.mock('../../components/NetWorthAttributionBreakdown', () => ({ default: () => <div data-testid="net-worth-breakdown" /> }));
 vi.mock('../../components/PeriodSwitcher', () => ({ default: () => <div data-testid="period-switcher" /> }));
@@ -36,6 +37,7 @@ vi.mock('../../charts.mjs', () => ({
   buildCategoryTrend: () => [],
   buildIncomeExpenseSeries: () => [],
   buildNetWorthTrend: () => [],
+  buildSankeyFlows: () => ({ nodes: [], links: [], totalIn: 0, totalOut: 0 }),
   getRecentPeriods: () => ['2026-05'],
 }));
 
