@@ -35,6 +35,11 @@ jobs:
         run: npx electron-builder --win --publish=never
       - name: Package (macOS)
         if: matrix.os == 'macos-latest'
+        # macOS signing + notarization need the Apple secrets (CAR-213). Until
+        # they're configured, electron-builder can't complete a clean mac build,
+        # so don't let the mac leg block the Windows + Linux release artifacts.
+        # Remove once MAC_CERT_P12_BASE64 et al. are set (see docs/macos-signing.md).
+        continue-on-error: true
         env:
           CSC_LINK: ${{ secrets.MAC_CERT_P12_BASE64 }}
           CSC_KEY_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}

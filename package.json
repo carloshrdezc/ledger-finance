@@ -17,7 +17,7 @@
     "test:watch": "vitest"
   },
   "keywords": [],
-  "author": "",
+  "author": "Carlos Hernández <carloshrdezc@users.noreply.github.com>",
   "license": "ISC",
   "build": {
     "appId": "com.ledger.finance",
