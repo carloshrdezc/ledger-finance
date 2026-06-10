@@ -102,3 +102,75 @@ export function summarizeDue(rule, todayIso = new Date().toISOString().slice(0, 
 function round2(value) {
   return Math.round((value + Number.EPSILON) * 100) / 100 + 0;
 }
+
+/**
+ * Plan the concrete contributions a rule should apply for a set of due dates,
+ * respecting the goal's remaining headroom so we never over-fund past target.
+ *
+ * Each record carries a STABLE id (`autofund_<ruleId>_<date>`) — unlike the
+ * manual contribution path's timestamped id — so re-running a rule (double
+ * click, interrupted run) is idempotent: the store dedupes on these ids and a
+ * second run produces no duplicates. Records over the goal's headroom are
+ * dropped entirely (no contribution, no ledger transaction), keeping the goal
+ * balance, contribution history, and ledger consistent.
+ *
+ * @param {{id:string, name:string, target:number, current:number}} goal
+ * @param {AutoFundRule} rule
+ * @param {string[]} dueDates  ascending occurrence dates (from computeDueContributions)
+ * @returns {{
+ *   contributions: Array<{id, goalId, amount, date, acct, txId}>,
+ *   transactions: Array<{id, name, amt, date, cat, path, ccy, acct, goalId, billKey}>,
+ *   goalNext: object,
+ *   lastFundedDate: (string|null),
+ *   total: number,
+ * }}
+ */
+export function planAutoFundContributions(goal, rule, dueDates) {
+  const amount = Math.max(0, Number(rule?.amount) || 0);
+  const contributions = [];
+  const transactions = [];
+  let current = Number.isFinite(goal?.current) ? goal.current : 0;
+  const target = Number.isFinite(goal?.target) ? goal.target : Infinity;
+  let lastFundedDate = null;
+  let total = 0;
+
+  for (const date of dueDates || []) {
+    const headroom = round2(target - current);
+    if (headroom <= 0) break;                 // goal full — stop, fund no further
+    const applied = round2(Math.min(amount, headroom));
+    if (applied <= 0) break;
+
+    const id = `autofund_${rule.id}_${date}`; // STABLE → idempotent re-runs
+    transactions.push({
+      id,
+      name: `GOAL · ${goal.name}`,
+      amt: -applied,
+      date,
+      cat: 'income',
+      path: ['income'],
+      ccy: 'USD',
+      acct: rule.source || 'chk',
+      goalId: goal.id,
+      autoFundRuleId: rule.id,
+    });
+    contributions.push({
+      id: `contrib_${id}`,
+      goalId: goal.id,
+      amount: applied,
+      date,
+      acct: rule.source || 'chk',
+      txId: id,
+    });
+    current = round2(current + applied);
+    total = round2(total + applied);
+    lastFundedDate = date;
+  }
+
+  return {
+    contributions,
+    transactions,
+    goalNext: { ...goal, current },
+    lastFundedDate,
+    total,
+  };
+}

@@ -39,7 +39,7 @@ export default function AutoFundPanel({ t, goal, rule, accounts }) {
 
   const save = () => {
     const amt = parseFloat(amount);
-    if (!(amt > 0) || !source) return;
+    if (!(amt > 0) || !source || fundAccounts.length === 0) return;
     // Anchor monthly rules to the 1st; biweekly/weekly anchor at today so the
     // first occurrence is on/after creation, and seed lastFundedDate to "yesterday"
     // so we don't retroactively fund before the rule existed.

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { GOAL_TEMPLATES, getGoalTemplate, goalFromTemplate } from './goalTemplates.mjs';
-import { computeDueContributions, summarizeDue } from './autoFunding.mjs';
+import { computeDueContributions, summarizeDue, planAutoFundContributions } from './autoFunding.mjs';
 
 describe('goalTemplates', () => {
   it('exposes a non-empty library with the required shape', () => {
@@ -82,5 +82,52 @@ describe('summarizeDue', () => {
   it('reports nothing due when fully funded', () => {
     const rule = { id: 'r1', goalId: 'g1', amount: 200, source: 'chk', freq: 'monthly', day: 1, lastFundedDate: '2026-03-01' };
     expect(summarizeDue(rule, '2026-03-15')).toEqual({ dates: [], count: 0, total: 0, nextDate: null });
+  });
+});
+
+describe('planAutoFundContributions', () => {
+  const goal = { id: 'g1', name: 'EMERGENCY', target: 1000, current: 100 };
+  const rule = { id: 'r1', goalId: 'g1', amount: 200, source: 'sav' };
+
+  it('produces stable rule+date-keyed ids so re-runs are idempotent (review M1)', () => {
+    const plan1 = planAutoFundContributions(goal, rule, ['2026-01-01', '2026-02-01']);
+    const plan2 = planAutoFundContributions(goal, rule, ['2026-01-01', '2026-02-01']);
+    // Same inputs → identical ids (no Date.now()), so the store's seen-set dedupe
+    // catches an already-applied date instead of double-funding.
+    expect(plan1.transactions.map(t => t.id)).toEqual(['autofund_r1_2026-01-01', 'autofund_r1_2026-02-01']);
+    expect(plan2.transactions.map(t => t.id)).toEqual(plan1.transactions.map(t => t.id));
+    expect(plan1.contributions[0].id).toBe('contrib_autofund_r1_2026-01-01');
+    expect(plan1.contributions[0].txId).toBe('autofund_r1_2026-01-01');
+  });
+
+  it('builds full contribution + ledger transaction records', () => {
+    const plan = planAutoFundContributions(goal, rule, ['2026-01-01']);
+    expect(plan.transactions[0]).toMatchObject({ name: 'GOAL · EMERGENCY', amt: -200, date: '2026-01-01', acct: 'sav', goalId: 'g1', cat: 'income' });
+    expect(plan.contributions[0]).toMatchObject({ goalId: 'g1', amount: 200, date: '2026-01-01', acct: 'sav' });
+    expect(plan.goalNext.current).toBe(300);
+    expect(plan.total).toBe(200);
+    expect(plan.lastFundedDate).toBe('2026-01-01');
+  });
+
+  it('clips to remaining headroom and never over-funds past target (review M2)', () => {
+    // Goal is $150 from target ($850/$1000), rule is 3×$200 due. Only the first
+    // contribution applies ($150 clipped), the rest are dropped — no orphan txs.
+    const nearDone = { id: 'g1', name: 'EMERGENCY', target: 1000, current: 850 };
+    const plan = planAutoFundContributions(nearDone, rule, ['2026-01-01', '2026-02-01', '2026-03-01']);
+    expect(plan.contributions).toHaveLength(1);
+    expect(plan.transactions).toHaveLength(1);
+    expect(plan.contributions[0].amount).toBe(150); // clipped to headroom
+    expect(plan.transactions[0].amt).toBe(-150);
+    expect(plan.goalNext.current).toBe(1000);
+    expect(plan.total).toBe(150);
+    expect(plan.lastFundedDate).toBe('2026-01-01'); // stamp only to what we funded
+  });
+
+  it('produces nothing for an already-complete goal', () => {
+    const done = { id: 'g1', name: 'EMERGENCY', target: 1000, current: 1000 };
+    const plan = planAutoFundContributions(done, rule, ['2026-01-01']);
+    expect(plan.contributions).toEqual([]);
+    expect(plan.transactions).toEqual([]);
+    expect(plan.lastFundedDate).toBeNull();
   });
 });

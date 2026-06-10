@@ -21,7 +21,7 @@ import { buildInsightRows } from './insights.mjs';
 import { DEFAULT_RATES, buildDefaultRatesHistory, latestRateEntry, normalizeRatesHistory, toReportingCurrency } from './fx.mjs';
 import { fetchRatesFromFrankfurter } from './fxFetch.mjs';
 import { buildBackup } from './backup.mjs';
-import { computeDueContributions } from './autoFunding.mjs';
+import { computeDueContributions, planAutoFundContributions } from './autoFunding.mjs';
 import { ACCENTS } from './theme';
 import {
   deleteTxsFromArray,
@@ -1041,9 +1041,10 @@ function StoreProviderImpl({ children }) {
   }, [setGoalAutoFundRules]);
 
   // Apply every contribution a rule currently owes (occurrences since its last
-  // funded date, up to today), then stamp lastFundedDate. Each due date becomes
-  // a real dated contribution + transaction via createGoalContribution, so the
-  // goal balance, contribution history, and ledger all stay consistent.
+  // funded date, up to today, clipped to the goal's headroom), then stamp
+  // lastFundedDate. planAutoFundContributions produces stable-keyed dated
+  // contributions + transactions, so the goal balance, contribution history,
+  // and ledger all stay consistent and re-runs are idempotent.
   const runAutoFundRule = React.useCallback((ruleId, todayIso = new Date().toISOString().slice(0, 10)) => {
     const rule = goalAutoFundRules.find(r => r.id === ruleId);
     if (!rule) return { applied: 0 };
@@ -1052,34 +1053,29 @@ function StoreProviderImpl({ children }) {
     const dueDates = computeDueContributions(rule, todayIso);
     if (dueDates.length === 0) return { applied: 0 };
 
-    // Chain createGoalContribution across due dates so each one sees the
-    // updated running balance (and the goal target cap is respected).
-    let workingGoal = goal;
-    const newContributions = [];
-    const newTxs = [];
-    for (const date of dueDates) {
-      const result = createGoalContribution(workingGoal, { amount: rule.amount, date, acct: rule.source });
-      workingGoal = result.goal;
-      newContributions.push(result.contribution);
-      newTxs.push(result.transaction);
-    }
+    // Pure planner: clips to the goal's remaining headroom (never over-funds
+    // past target) and assigns STABLE ids keyed on rule+date so a double-click
+    // or interrupted re-run is idempotent — the seen-set dedupe below catches
+    // already-applied dates instead of creating timestamped duplicates.
+    const plan = planAutoFundContributions(goal, rule, dueDates);
+    if (plan.contributions.length === 0) return { applied: 0 };
 
-    setGoals(prev => prev.map(g => g.id === workingGoal.id ? workingGoal : g));
+    setGoals(prev => prev.map(g => g.id === plan.goalNext.id ? plan.goalNext : g));
     setGoalContributions(prev => {
       const seen = new Set(prev.map(c => c.id));
-      const additions = newContributions.filter(c => !seen.has(c.id));
+      const additions = plan.contributions.filter(c => !seen.has(c.id));
       return additions.length === 0 ? prev : [...prev, ...additions];
     });
     setTxs(prev => {
       const seen = new Set(prev.map(tx => tx.id));
-      const additions = newTxs.filter(tx => !seen.has(tx.id));
+      const additions = plan.transactions.filter(tx => !seen.has(tx.id));
       return additions.length === 0 ? prev : [...prev, ...additions];
     });
     setGoalAutoFundRules(prev => prev.map(r => r.id === ruleId
-      ? { ...r, lastFundedDate: dueDates[dueDates.length - 1] }
+      ? { ...r, lastFundedDate: plan.lastFundedDate || r.lastFundedDate }
       : r));
 
-    return { applied: dueDates.length, total: dueDates.length * rule.amount };
+    return { applied: plan.contributions.length, total: plan.total };
   }, [goalAutoFundRules, goals, setGoals, setGoalContributions, setTxs, setGoalAutoFundRules]);
 
   // CAR-345: debt payoff planner CRUD. Mirrors the goals slice shape.
