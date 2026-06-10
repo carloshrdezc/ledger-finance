@@ -155,10 +155,10 @@ describe('CAR-217 · WebAlerts insights section', () => {
     const { store } = renderWithStore(<WebAlerts t={THEME} onNavigate={() => {}} />, {
       insightRows: [],
     });
-    // Both Alerts and Insights sections have a RESTORE DISMISSED button.
-    // Insights is the second one (rendered after the alerts list).
+    // Alerts, Insights, and Flagged-transactions (CAR-351) sections each have a
+    // RESTORE DISMISSED button, in that DOM order. Insights is the second.
     const restoreButtons = screen.getAllByText('RESTORE DISMISSED');
-    expect(restoreButtons).toHaveLength(2);
+    expect(restoreButtons).toHaveLength(3);
     fireEvent.click(restoreButtons[1]);
     expect(store.restoreInsights).toHaveBeenCalled();
   });
