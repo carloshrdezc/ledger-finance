@@ -5,6 +5,7 @@ import { useStore } from '../../store';
 import ImportExport from '../../components/ImportExport';
 import FxRatesSection from '../../components/FxRatesSection';
 import BackupSection from '../../components/BackupSection';
+import UpdatesSection from '../../components/UpdatesSection';
 import { SecuritySettings, SecurityNudge } from '../../components/SecuritySettings';
 
 const SETTINGS_CURRENCIES = ['USD', 'EUR', 'GBP', 'JPY', 'CAD', 'AUD', 'CHF', 'MXN'];
@@ -177,6 +178,11 @@ export default function Settings({ t, onBack, onNavigate, setAccent, setDensity,
       {/* BACKUP */}
       <div style={{ marginTop: 14 }}>
         <BackupSection />
+      </div>
+
+      {/* CAR-364: UPDATES */}
+      <div style={{ marginTop: 14 }}>
+        <UpdatesSection />
       </div>
 
       {/* CAR-243: SECURITY */}

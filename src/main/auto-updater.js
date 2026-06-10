@@ -22,6 +22,12 @@ function broadcast(channel, payload) {
   }
 }
 
+// CAR-364: forward a compact status to the renderer so the Settings
+// "Check for updates" button can show live feedback.
+function broadcastStatus(status, extra) {
+  broadcast('auto-update:status', { status, ...extra });
+}
+
 async function setupAutoUpdater() {
   if (configured) return;
   configured = true;
@@ -32,18 +38,57 @@ async function setupAutoUpdater() {
     autoUpdater.quitAndInstall();
   });
 
-  autoUpdater.on('update-available', info => logUpdateEvent('update-available', info?.version));
-  autoUpdater.on('update-not-available', info => logUpdateEvent('update-not-available', info?.version));
-  autoUpdater.on('download-progress', progress => logUpdateEvent('download-progress', {
-    percent: progress?.percent,
-    transferred: progress?.transferred,
-    total: progress?.total,
-  }));
+  // CAR-364: expose the running app version to the renderer (Settings + About).
+  ipcMain.handle('app:get-version', () => app.getVersion());
+
+  // CAR-364: manual, on-demand check from the Settings UI. Returns a result
+  // the renderer can show immediately; live progress also arrives via the
+  // 'auto-update:status' broadcasts below. In dev/unpackaged builds there's no
+  // feed, so report a clear "unsupported" rather than throwing.
+  ipcMain.handle('auto-update:check', async () => {
+    if (!app.isPackaged) {
+      return { status: 'unsupported', reason: 'dev-build' };
+    }
+    try {
+      broadcastStatus('checking');
+      const result = await autoUpdater.checkForUpdates();
+      const version = result?.updateInfo?.version ?? null;
+      return { status: 'checking', version };
+    } catch (error) {
+      const message = error?.message ?? String(error);
+      return { status: 'error', error: message };
+    }
+  });
+
+  autoUpdater.on('checking-for-update', () => {
+    logUpdateEvent('checking-for-update');
+    broadcastStatus('checking');
+  });
+  autoUpdater.on('update-available', info => {
+    logUpdateEvent('update-available', info?.version);
+    broadcastStatus('available', { version: info?.version ?? null });
+  });
+  autoUpdater.on('update-not-available', info => {
+    logUpdateEvent('update-not-available', info?.version);
+    broadcastStatus('up-to-date', { version: info?.version ?? null });
+  });
+  autoUpdater.on('download-progress', progress => {
+    logUpdateEvent('download-progress', {
+      percent: progress?.percent,
+      transferred: progress?.transferred,
+      total: progress?.total,
+    });
+    broadcastStatus('downloading', { percent: progress?.percent ?? 0 });
+  });
   autoUpdater.on('update-downloaded', info => {
     logUpdateEvent('update-downloaded', info?.version);
     broadcast('auto-update:downloaded', { version: info?.version ?? null });
+    broadcastStatus('downloaded', { version: info?.version ?? null });
   });
-  autoUpdater.on('error', error => logUpdateEvent('error', error?.message ?? String(error)));
+  autoUpdater.on('error', error => {
+    logUpdateEvent('error', error?.message ?? String(error));
+    broadcastStatus('error', { error: error?.message ?? String(error) });
+  });
 
   if (!shouldCheckForUpdates({ isPackaged: app.isPackaged, isOnline: net.isOnline() })) {
     return;
