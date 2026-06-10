@@ -3,6 +3,8 @@ import { A } from '../../theme';
 import { ALabel, ARule } from '../../components/Shared';
 import WebShell from './WebShell';
 import EmptySectionHint from '../../components/EmptySectionHint';
+import CashFlowCalendar from '../../components/CashFlowCalendar';
+import PeriodSwitcher from '../../components/PeriodSwitcher';
 import { useUndoableStore } from '../../useUndoableStore';
 import { CATEGORIES, fmtMoney } from '../../data';
 
@@ -295,6 +297,11 @@ export default function WebBills({ t, onNavigate, onAdd }) {
           );
         })}
       </div>
+
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 24 }}>
+        <PeriodSwitcher />
+      </div>
+      <CashFlowCalendar t={t} />
     </WebShell>
   );
 }
