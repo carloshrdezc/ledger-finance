@@ -1,7 +1,7 @@
 import React from 'react';
 import { A } from '../theme';
 import { Checkbox } from './Shared';
-import { fmtSigned, dayLabel, catGlyph, catBreadcrumb } from '../data';
+import { fmtSigned, fmtMoney, dayLabel, catGlyph, catBreadcrumb } from '../data';
 
 /**
  * Presentational row for the web transactions list. All click decisions
@@ -71,6 +71,15 @@ export default function TransactionRow({
         color: accentColor,
       }}>
         {fmtSigned(tx.amt, tx.ccy, t.decimals)}
+        {/* CAR-348: foreign-spend provenance — show the original amount the
+            charge was incurred in (e.g. "€42.00 → $45.30"). Only rendered when
+            the optional origAmt/origCcy fields are present and the original
+            currency differs from the account currency. */}
+        {tx.origCcy && tx.origAmt != null && tx.origCcy !== tx.ccy && (
+          <div style={{ fontSize: 9, color: A.muted, letterSpacing: 0.4, marginTop: 2 }}>
+            {fmtMoney(Math.abs(tx.origAmt), tx.origCcy, t.decimals)} → {fmtMoney(Math.abs(tx.amt), tx.ccy, t.decimals)}
+          </div>
+        )}
       </div>
     </div>
   );

@@ -117,9 +117,9 @@ export default function Reports({ t, onBack, onGoToRoute }) {
     .sort((a, b) => b.amt - a.amt)
     .slice(0, 8);
   const trendPeriods = getRecentPeriods(selectedPeriod, 6);
-  const incomeExpense = buildIncomeExpenseSeries(transactions, trendPeriods, rates);
-  const categoryTrend = buildCategoryTrend(transactions, trendPeriods, 4, rates);
-  const netWorthTrend = buildNetWorthTrend(accounts, transactions, trendPeriods, rates);
+  const incomeExpense = buildIncomeExpenseSeries(transactions, trendPeriods, rates, t.currency || 'USD');
+  const categoryTrend = buildCategoryTrend(transactions, trendPeriods, 4, rates, t.currency || 'USD');
+  const netWorthTrend = buildNetWorthTrend(accounts, transactions, trendPeriods, rates, t.currency || 'USD');
 
   // Rolling 12-month spend (absolute expense totals, USD-normalized).
   const momPeriods = getRecentPeriods(selectedPeriod, 12);

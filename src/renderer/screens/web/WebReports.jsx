@@ -44,9 +44,9 @@ export default function WebReports({ t, onNavigate, onAdd }) {
   const previousPeriod = addMonths(selectedPeriod, -1);
   const previousTotal = sumExpense(filterTransactionsForPeriod(transactions, previousPeriod));
   const trendPeriods = getRecentPeriods(selectedPeriod, 6);
-  const incomeExpense = buildIncomeExpenseSeries(transactions, trendPeriods, rates);
-  const netWorthTrend = buildNetWorthTrend(accounts, transactions, trendPeriods, rates);
-  const categoryTrend = buildCategoryTrend(transactions, trendPeriods, 5, rates);
+  const incomeExpense = buildIncomeExpenseSeries(transactions, trendPeriods, rates, t.currency || 'USD');
+  const netWorthTrend = buildNetWorthTrend(accounts, transactions, trendPeriods, rates, t.currency || 'USD');
+  const categoryTrend = buildCategoryTrend(transactions, trendPeriods, 5, rates, t.currency || 'USD');
   const attributionRange = useRange
     ? resolved
     : getPeriodBoundaries(selectedPeriod, budgetStartDay);

@@ -5,6 +5,8 @@ import { CCY_SYM } from '../../data';
 import { useUndoableStore } from '../../useUndoableStore';
 import { getDaysInPeriod } from '../../period.mjs';
 import { applyRules } from '../../rules.mjs';
+import { ALL_CURRENCIES, convertBetween } from '../../fx.mjs';
+import { useFx } from '../../useFx';
 import AccountFormSheet from '../../components/AccountFormSheet';
 import CategoryPicker from '../../components/CategoryPicker';
 
@@ -39,6 +41,20 @@ export default function AddSheet({ t, onClose, editTx = null }) {
   const [catManuallySet, setCatManuallySet] = React.useState(!!editTx);
   const [acct, setAcct]         = React.useState(editTx ? editTx.acct : (accountsWithBalance[0]?.id || 'chk'));
   const [date, setDate]         = React.useState(editTx ? editTx.date : defaultDate);
+
+  // CAR-348: optional per-transaction FOREIGN amount (mobile parity with
+  // WebAddModal). Stores origAmt/origCcy alongside the account-currency
+  // amt/ccy. Fully optional + backward compatible.
+  const { rates } = useFx(t.currency || 'USD');
+  const acctCcyForTx = accountsWithBalance.find(a => a.id === acct)?.ccy || 'USD';
+  const [foreignOn, setForeignOn] = React.useState(!!editTx?.origCcy);
+  const [foreignAmt, setForeignAmt] = React.useState(
+    editTx?.origAmt != null ? String(Math.abs(editTx.origAmt)) : ''
+  );
+  const [foreignCcy, setForeignCcy] = React.useState(editTx?.origCcy || 'EUR');
+  const foreignConverted = foreignOn && parseFloat(foreignAmt) > 0 && foreignCcy !== acctCcyForTx
+    ? convertBetween(parseFloat(foreignAmt), foreignCcy, acctCcyForTx, rates, date)
+    : null;
 
   // CAR-80: pre-fill the picker when the user types a merchant.
   React.useEffect(() => {
@@ -79,9 +95,12 @@ export default function AddSheet({ t, onClose, editTx = null }) {
     ? (parseFloat(amtTo) / parseFloat(amtFrom)).toFixed(4)
     : null;
 
+  const nonTransferAmtOk = (foreignOn && foreignConverted != null)
+    ? true
+    : (amt && parseFloat(amt) > 0);
   const canSave = isTransfer
     ? parseFloat(amtFrom) > 0 && parseFloat(amtTo) > 0 && fromAcct && toAcct && fromAcct !== toAcct
-    : amt && parseFloat(amt) > 0 && merchant.trim();
+    : nonTransferAmtOk && merchant.trim();
 
   const handleSave = () => {
     if (!canSave) return;
@@ -104,11 +123,26 @@ export default function AddSheet({ t, onClose, editTx = null }) {
         });
       }
     } else {
+      const sign = isExpense ? -1 : 1;
+      // CAR-348: tx `ccy` is the ACCOUNT's currency; optional foreign pair
+      // derives `amt` from the converted foreign amount and preserves the
+      // original on origAmt/origCcy.
+      const usingForeign = foreignOn && foreignConverted != null;
+      const acctAmtAbs = usingForeign ? Math.abs(foreignConverted) : Math.abs(parseFloat(amt));
       const changes = {
         name: merchant.trim(),
-        amt: isExpense ? -Math.abs(parseFloat(amt)) : Math.abs(parseFloat(amt)),
-        date, cat, path, ccy: editTx?.ccy || 'USD', acct,
+        amt: sign * acctAmtAbs,
+        date, cat, path,
+        ccy: acctCcyForTx,
+        acct,
       };
+      if (usingForeign) {
+        changes.origAmt = sign * Math.abs(parseFloat(foreignAmt));
+        changes.origCcy = foreignCcy;
+      } else if (editTx && (editTx.origAmt != null || editTx.origCcy != null)) {
+        changes.origAmt = undefined;
+        changes.origCcy = undefined;
+      }
       if (editTx) {
         updateTx(editTx.id, changes);
       } else {
@@ -284,12 +318,14 @@ export default function AddSheet({ t, onClose, editTx = null }) {
 
         {!isTransfer && (<>
         <div style={{ padding: '14px 0 6px' }}>
-          <ALabel>{'AMOUNT · ' + t.currency}</ALabel>
+          <ALabel>{'AMOUNT · ' + acctCcyForTx}</ALabel>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 6 }}>
-            <span style={{ fontSize: 32, color: A.muted }}>{CCY_SYM[t.currency] || '$'}</span>
+            <span style={{ fontSize: 32, color: A.muted }}>{CCY_SYM[acctCcyForTx] || '$'}</span>
             <input
               autoFocus type="number" min="0" step="0.01" placeholder="0.00"
-              value={amt} onChange={e => setAmt(e.target.value)}
+              value={foreignConverted != null ? Math.abs(foreignConverted).toFixed(2) : amt}
+              onChange={e => setAmt(e.target.value)}
+              disabled={foreignConverted != null}
               style={{
                 all: 'unset', flex: 1, fontSize: 44, fontVariantNumeric: 'tabular-nums',
                 letterSpacing: -1, borderBottom: '1px solid ' + A.rule2,
@@ -297,6 +333,50 @@ export default function AddSheet({ t, onClose, editTx = null }) {
               }}
             />
           </div>
+        </div>
+
+        {/* CAR-348: optional foreign-amount entry (mobile parity). */}
+        <div style={{ paddingBottom: 12 }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <input
+              type="checkbox"
+              checked={foreignOn}
+              onChange={e => setForeignOn(e.target.checked)}
+              style={{ accentColor: t.accent }}
+            />
+            <span style={{ fontSize: 9, letterSpacing: 1.2, color: A.muted }}>
+              FOREIGN AMOUNT (DIFFERENT CURRENCY)
+            </span>
+          </label>
+          {foreignOn && (
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 10 }}>
+              <span style={{ fontSize: 18, color: A.muted }}>{CCY_SYM[foreignCcy] || ''}</span>
+              <input
+                type="number" min="0" step="0.01" placeholder="0.00"
+                value={foreignAmt} onChange={e => setForeignAmt(e.target.value)}
+                style={{
+                  all: 'unset', flex: 1, fontSize: 24, fontVariantNumeric: 'tabular-nums',
+                  borderBottom: '1px solid ' + A.rule2, color: A.ink, fontFamily: A.font,
+                }}
+              />
+              <select value={foreignCcy} onChange={e => setForeignCcy(e.target.value)} style={{
+                fontFamily: A.font, fontSize: 12, padding: 6,
+                border: '1px solid ' + A.ink, background: A.bg, color: A.ink,
+              }}>
+                {ALL_CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+          )}
+          {foreignOn && foreignConverted != null && (
+            <div style={{ fontSize: 10, color: A.muted, marginTop: 6, letterSpacing: 0.8 }}>
+              {`${CCY_SYM[foreignCcy] || ''}${Math.abs(parseFloat(foreignAmt)).toFixed(2)} ${foreignCcy} → ${CCY_SYM[acctCcyForTx] || ''}${Math.abs(foreignConverted).toFixed(2)} ${acctCcyForTx}`}
+            </div>
+          )}
+          {foreignOn && foreignCcy === acctCcyForTx && (
+            <div style={{ fontSize: 10, color: A.muted, marginTop: 6, letterSpacing: 0.8 }}>
+              Same as account currency — enter the amount above directly.
+            </div>
+          )}
         </div>
 
         <div style={{ paddingBottom: 12 }}>

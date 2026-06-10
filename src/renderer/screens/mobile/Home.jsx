@@ -33,8 +33,8 @@ export default function Home({ t, onAcct, onAdd, onViewAll, onInsight }) {
 
   // 30-day net worth daily trend, derived from real transaction history.
   const nwTrend = React.useMemo(
-    () => buildNetWorthDailyTrend(accounts, transactions, todayIso, 30, rates).map(p => p.value),
-    [accounts, transactions, todayIso, rates],
+    () => buildNetWorthDailyTrend(accounts, transactions, todayIso, 30, rates, t.currency || 'USD').map(p => p.value),
+    [accounts, transactions, todayIso, rates, t.currency],
   );
   // Daily spend trend (rolling 30 days, absolute value of expenses per day).
   const spendTrend = React.useMemo(() => {
