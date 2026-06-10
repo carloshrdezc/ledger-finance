@@ -90,3 +90,8 @@ jobs:
             artifacts/latest*.yml
           generate_release_notes: true
           fail_on_unmatched_files: false
+          # Publish immediately (not a draft) and mark as the latest release so
+          # electron-updater's GitHub provider can see it — a draft release is
+          # invisible to the auto-updater.
+          draft: false
+          make_latest: true
