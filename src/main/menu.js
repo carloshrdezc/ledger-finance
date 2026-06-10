@@ -33,7 +33,7 @@ function showAbout() {
 // menu wires them to showAbout / shell.openExternal.
 function menuTemplate({ platform, appName, onAbout, openUrl }) {
   const isMac = platform === 'darwin';
-  const aboutItem = { label: 'About LEDGER', click: onAbout };
+  const aboutItem = { label: `About ${appName}`, click: onAbout };
 
   return [
     ...(isMac
@@ -92,7 +92,6 @@ function menuTemplate({ platform, appName, onAbout, openUrl }) {
       submenu: [
         { label: 'Releases', click: () => openUrl(`${REPO_URL}/releases`) },
         { label: 'Repository', click: () => openUrl(REPO_URL) },
-        ...(isMac ? [] : [{ type: 'separator' }, aboutItem]),
       ],
     },
   ];

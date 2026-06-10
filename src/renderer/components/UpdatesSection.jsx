@@ -12,7 +12,7 @@ const STATUS_LABEL = {
   idle: '',
   checking: 'CHECKING…',
   'up-to-date': 'UP TO DATE',
-  available: 'UPDATE AVAILABLE — DOWNLOADING…',
+  available: 'UPDATE AVAILABLE',
   downloading: 'DOWNLOADING…',
   downloaded: 'UPDATE READY — RESTART TO APPLY',
   error: 'CHECK FAILED',
