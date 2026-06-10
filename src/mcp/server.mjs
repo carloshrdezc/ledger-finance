@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 /**
  * @file Ledger local MCP server (CAR-352).
  *
