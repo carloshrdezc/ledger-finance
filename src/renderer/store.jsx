@@ -21,6 +21,7 @@ import { buildInsightRows } from './insights.mjs';
 import { DEFAULT_RATES, buildDefaultRatesHistory, latestRateEntry, normalizeRatesHistory, toReportingCurrency } from './fx.mjs';
 import { fetchRatesFromFrankfurter } from './fxFetch.mjs';
 import { buildBackup } from './backup.mjs';
+import { computeDueContributions } from './autoFunding.mjs';
 import { ACCENTS } from './theme';
 import {
   deleteTxsFromArray,
@@ -470,6 +471,11 @@ function StoreProviderImpl({ children }) {
   const [debts, setDebts] = useLS('ledger:debts', []);
   const [debtExtraPayment, setDebtExtraPayment] = useLS('ledger:debtExtraPayment', 0);
   const [goalContributions, setGoalContributions] = useLS('ledger:goalContributions', []);
+  // CAR-347: per-goal auto-funding rules. Each: { id, goalId, amount, source,
+  // freq, day/interval/startDate, active, lastFundedDate }. Ledger has no
+  // backend scheduler, so rules are applied on demand (runAutoFundRule) the
+  // same way bills are paid — never silently.
+  const [goalAutoFundRules, setGoalAutoFundRules] = useLS('ledger:goalAutoFundRules', []);
   const [rules, setRules] = useLS('ledger:rules', []);
   // CAR-83: one persisted slice for both Transactions and Reports saved views.
   // Simpler than split slices because the only difference is `scope`.
@@ -992,7 +998,8 @@ function StoreProviderImpl({ children }) {
   const deleteGoal = React.useCallback(id => {
     setGoals(prev => prev.filter(g => g.id !== id));
     setGoalContributions(prev => prev.filter(c => c.goalId !== id));
-  }, [setGoals, setGoalContributions]);
+    setGoalAutoFundRules(prev => prev.filter(r => r.goalId !== id));
+  }, [setGoals, setGoalContributions, setGoalAutoFundRules]);
 
   const restoreGoal = React.useCallback((goal, contributions = []) => {
     if (!goal) return;
@@ -1005,6 +1012,75 @@ function StoreProviderImpl({ children }) {
       });
     }
   }, [setGoals, setGoalContributions]);
+
+  // CAR-347: auto-funding rule CRUD. Rules schedule recurring contributions to
+  // a goal; they're applied on demand via runAutoFundRule (no silent execution).
+  const addAutoFundRule = React.useCallback((rule) => {
+    const created = {
+      id: 'af_' + Date.now(),
+      goalId: rule.goalId,
+      amount: Math.max(0, Number(rule.amount) || 0),
+      source: rule.source || 'chk',
+      freq: rule.freq || 'monthly',
+      ...(rule.day != null ? { day: Number(rule.day) } : {}),
+      ...(rule.interval != null ? { interval: Number(rule.interval) } : {}),
+      ...(rule.startDate ? { startDate: rule.startDate } : {}),
+      active: rule.active !== false,
+      lastFundedDate: rule.lastFundedDate || null,
+    };
+    setGoalAutoFundRules(prev => [...prev, created]);
+    return created;
+  }, [setGoalAutoFundRules]);
+
+  const updateAutoFundRule = React.useCallback((id, patch) => {
+    setGoalAutoFundRules(prev => prev.map(r => r.id === id ? { ...r, ...patch } : r));
+  }, [setGoalAutoFundRules]);
+
+  const deleteAutoFundRule = React.useCallback((id) => {
+    setGoalAutoFundRules(prev => prev.filter(r => r.id !== id));
+  }, [setGoalAutoFundRules]);
+
+  // Apply every contribution a rule currently owes (occurrences since its last
+  // funded date, up to today), then stamp lastFundedDate. Each due date becomes
+  // a real dated contribution + transaction via createGoalContribution, so the
+  // goal balance, contribution history, and ledger all stay consistent.
+  const runAutoFundRule = React.useCallback((ruleId, todayIso = new Date().toISOString().slice(0, 10)) => {
+    const rule = goalAutoFundRules.find(r => r.id === ruleId);
+    if (!rule) return { applied: 0 };
+    const goal = goals.find(g => g.id === rule.goalId);
+    if (!goal) return { applied: 0 };
+    const dueDates = computeDueContributions(rule, todayIso);
+    if (dueDates.length === 0) return { applied: 0 };
+
+    // Chain createGoalContribution across due dates so each one sees the
+    // updated running balance (and the goal target cap is respected).
+    let workingGoal = goal;
+    const newContributions = [];
+    const newTxs = [];
+    for (const date of dueDates) {
+      const result = createGoalContribution(workingGoal, { amount: rule.amount, date, acct: rule.source });
+      workingGoal = result.goal;
+      newContributions.push(result.contribution);
+      newTxs.push(result.transaction);
+    }
+
+    setGoals(prev => prev.map(g => g.id === workingGoal.id ? workingGoal : g));
+    setGoalContributions(prev => {
+      const seen = new Set(prev.map(c => c.id));
+      const additions = newContributions.filter(c => !seen.has(c.id));
+      return additions.length === 0 ? prev : [...prev, ...additions];
+    });
+    setTxs(prev => {
+      const seen = new Set(prev.map(tx => tx.id));
+      const additions = newTxs.filter(tx => !seen.has(tx.id));
+      return additions.length === 0 ? prev : [...prev, ...additions];
+    });
+    setGoalAutoFundRules(prev => prev.map(r => r.id === ruleId
+      ? { ...r, lastFundedDate: dueDates[dueDates.length - 1] }
+      : r));
+
+    return { applied: dueDates.length, total: dueDates.length * rule.amount };
+  }, [goalAutoFundRules, goals, setGoals, setGoalContributions, setTxs, setGoalAutoFundRules]);
 
   // CAR-345: debt payoff planner CRUD. Mirrors the goals slice shape.
   const addDebt = React.useCallback(({ name, balance, apr, minPayment }) => {
@@ -1381,6 +1457,7 @@ function StoreProviderImpl({ children }) {
     setBills([]);
     setGoals([]);
     setGoalContributions([]);
+    setGoalAutoFundRules([]);
     setRules([]);
     setSavedViews([]);
     setRecategorizeStats({});
@@ -1571,6 +1648,7 @@ function StoreProviderImpl({ children }) {
     setBills([]);
     setGoals([]);
     setGoalContributions([]);
+    setGoalAutoFundRules([]);
     setRules([]);
     setSavedViews([]);
     setRecategorizeStats({});
@@ -1687,6 +1765,12 @@ function StoreProviderImpl({ children }) {
       updateGoal,
       deleteGoal,
       restoreGoal,
+      goalAutoFundRules,
+      setGoalAutoFundRules,
+      addAutoFundRule,
+      updateAutoFundRule,
+      deleteAutoFundRule,
+      runAutoFundRule,
       // CAR-345: debt payoff planner
       debts,
       setDebts,
