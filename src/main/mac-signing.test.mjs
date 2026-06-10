@@ -38,6 +38,10 @@ describe('CAR-213 · macOS signing + notarization config', () => {
     expect(entitlements).toContain('com.apple.security.cs.allow-jit');
     expect(entitlements).toContain('com.apple.security.cs.allow-unsigned-executable-memory');
     expect(entitlements).toContain('com.apple.security.cs.allow-dyld-environment-variables');
+    // disable-library-validation lets hardened runtime load the bundled unsigned
+    // native deps (sql.js wasm, @noble/*). Dropping it is the most common cause
+    // of a notarized app crashing on launch — lock it so a cleanup can't remove it.
+    expect(entitlements).toContain('com.apple.security.cs.disable-library-validation');
   });
 
   it('wires the signing + notarization secrets into the release workflow', () => {

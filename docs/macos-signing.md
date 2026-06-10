@@ -4,9 +4,10 @@ LEDGER's release workflow signs and notarizes the macOS build on GitHub's
 `macos-latest` runners. **No certificates ever live in the repo or on a
 developer machine** — they're read from GitHub Actions **secrets** at build time.
 
-When the secrets are absent, electron-builder silently skips signing (per its
-documented behavior) and still produces an *unsigned* `.dmg`, so the release
-workflow never breaks for contributors without the credentials.
+When the secrets are absent, electron-builder skips signing (per its
+documented behavior): the x64 artifact is left unsigned and the arm64 artifact
+gets an ad-hoc signature, and notarization is skipped — so the release workflow
+never breaks for contributors without the credentials.
 
 ## What you need (one-time)
 
