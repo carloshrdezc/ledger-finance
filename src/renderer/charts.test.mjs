@@ -5,6 +5,7 @@ import {
   buildIncomeExpenseSeries,
   buildNetWorthDailyTrend,
   buildNetWorthTrend,
+  buildSankeyFlows,
   svgLinePath,
 } from './charts.mjs';
 
@@ -74,4 +75,65 @@ test('svgLinePath converts points into a bounded SVG path', () => {
 
 test('svgLinePath renders a visible single-point range', () => {
   expect(svgLinePath([10], 100, 50)).toBe('M0.0 25.0 L100.0 25.0');
+});
+
+test('buildSankeyFlows splits income into a hub and out to categories + savings', () => {
+  const { nodes, links, totalIn, totalOut } = buildSankeyFlows(transactions, ['2026-04', '2026-05'], RATES);
+
+  expect(totalIn).toBe(3000);          // 1000 + 2000 income
+  expect(totalOut).toBe(330.8);        // food 280.8 + dining 50
+
+  // income flows into the hub
+  expect(links).toContainEqual({ source: 'in:income', target: '__hub__', value: 3000 });
+  // hub flows out to each spending category
+  expect(links).toContainEqual({ source: '__hub__', target: 'out:food', value: 280.8 });
+  expect(links).toContainEqual({ source: '__hub__', target: 'out:dining', value: 50 });
+  // surplus (3000 - 330.8) becomes a savings outflow
+  expect(links).toContainEqual({ source: '__hub__', target: '__savings__', value: 2669.2 });
+
+  // nodes carry side + value; hub sizes to the larger of in/out
+  expect(nodes.find(n => n.id === '__hub__')).toEqual({ id: '__hub__', label: 'budget', side: 'hub', value: 3000 });
+  expect(nodes.find(n => n.id === 'in:income')).toEqual({ id: 'in:income', label: 'income', side: 'in', value: 3000 });
+});
+
+test('buildSankeyFlows ignores periods outside the selected window', () => {
+  const { totalIn, totalOut } = buildSankeyFlows(transactions, ['2026-04'], RATES);
+  expect(totalIn).toBe(1000);
+  expect(totalOut).toBe(120);
+});
+
+test('buildSankeyFlows collapses long category tails into __other__', () => {
+  const txs = Array.from({ length: 12 }, (_, i) => ({
+    date: '2026-05-10', cat: `c${i}`, path: [`c${i}`], amt: -(i + 1), acct: 'a', ccy: 'USD',
+  }));
+  const { nodes } = buildSankeyFlows(txs, ['2026-05'], RATES, 'USD', 8);
+  const outNodes = nodes.filter(n => n.side === 'out');
+  expect(outNodes).toHaveLength(8);                       // limit respected
+  expect(outNodes.some(n => n.id === 'out:__other__')).toBe(true);
+});
+
+test('buildSankeyFlows omits savings flow when spending exceeds income', () => {
+  const txs = [
+    { date: '2026-05-01', cat: 'income', path: ['income'], amt: 100, acct: 'a', ccy: 'USD' },
+    { date: '2026-05-02', cat: 'food', path: ['food'], amt: -150, acct: 'a', ccy: 'USD' },
+  ];
+  const { links } = buildSankeyFlows(txs, ['2026-05'], RATES);
+  expect(links.some(l => l.target === '__savings__')).toBe(false);
+});
+
+test('buildSankeyFlows excludes internal transfers from cash flow', () => {
+  // Transfer legs have cat:'transfer' and path:[]. Without filtering, the +leg
+  // would mislabel as income and the -leg as 'other' spending — double-counting
+  // a single internal movement (CAR-350 review M1).
+  const txs = [
+    { date: '2026-05-01', cat: 'income', path: ['income'], amt: 1000, acct: 'chk', ccy: 'USD' },
+    { date: '2026-05-02', cat: 'food', path: ['food'], amt: -200, acct: 'chk', ccy: 'USD' },
+    { date: '2026-05-03', cat: 'transfer', path: [], amt: -5000, acct: 'chk', ccy: 'USD', transferId: 't1' },
+    { date: '2026-05-03', cat: 'transfer', path: [], amt: 5000, acct: 'sav', ccy: 'USD', transferId: 't1' },
+  ];
+  const { nodes, links, totalIn, totalOut } = buildSankeyFlows(txs, ['2026-05'], RATES);
+  expect(totalIn).toBe(1000);
+  expect(totalOut).toBe(200);
+  expect(nodes.some(n => n.label === 'income' && n.value === 6000)).toBe(false);
+  expect(links.some(l => l.value === 5000)).toBe(false);
 });

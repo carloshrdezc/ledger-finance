@@ -1,6 +1,6 @@
 import React from 'react';
 import { A } from '../../theme';
-import { ALabel, CategoryTrendChart, IncomeExpenseChart, LineChart } from '../../components/Shared';
+import { ALabel, CategoryTrendChart, IncomeExpenseChart, LineChart, SankeyChart } from '../../components/Shared';
 import PeriodSwitcher from '../../components/PeriodSwitcher';
 import RangeSelector from '../../components/RangeSelector';
 import WebShell from './WebShell';
@@ -13,6 +13,7 @@ import {
   buildCategoryTrend,
   buildIncomeExpenseSeries,
   buildNetWorthTrend,
+  buildSankeyFlows,
   getRecentPeriods,
 } from '../../charts.mjs';
 import { exportReportCSV } from '../../importExport';
@@ -47,6 +48,17 @@ export default function WebReports({ t, onNavigate, onAdd }) {
   const incomeExpense = buildIncomeExpenseSeries(transactions, trendPeriods, rates, t.currency || 'USD');
   const netWorthTrend = buildNetWorthTrend(accounts, transactions, trendPeriods, rates, t.currency || 'USD');
   const categoryTrend = buildCategoryTrend(transactions, trendPeriods, 5, rates, t.currency || 'USD');
+  // CAR-350: Sankey reflects the active report window (period or range). reportTxs
+  // is already scoped; reportPeriods just enumerates its months so buildSankeyFlows'
+  // own period filter is a no-op safety net here.
+  const reportPeriods = React.useMemo(
+    () => [...new Set(reportTxs.map(tx => tx.date?.slice(0, 7)).filter(Boolean))],
+    [reportTxs],
+  );
+  const sankeyFlows = React.useMemo(
+    () => buildSankeyFlows(reportTxs, reportPeriods, rates, t.currency || 'USD'),
+    [reportTxs, reportPeriods, rates, t.currency],
+  );
   const attributionRange = useRange
     ? resolved
     : getPeriodBoundaries(selectedPeriod, budgetStartDay);
@@ -214,9 +226,29 @@ export default function WebReports({ t, onNavigate, onAdd }) {
         </div>
       </div>
 
+      <div style={{ marginTop: 28, borderTop: '2px solid ' + A.ink, paddingTop: 18 }}>
+        <ALabel>[03] CASH · FLOW · {heroLabel}</ALabel>
+        <div style={{ marginTop: 14 }}>
+          {sankeyFlows.totalIn === 0 && sankeyFlows.totalOut === 0 ? (
+            <EmptySectionHint message="No income or spending for this period." />
+          ) : (
+            <SankeyChart
+              flows={sankeyFlows}
+              categoryTree={categoryTree}
+              accent={t.accent}
+              fmt={(v) => fmtMoney(v, t.currency, false)}
+            />
+          )}
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 9, color: A.muted, letterSpacing: 1, marginTop: 8 }}>
+          <span>IN · {fmtMoney(sankeyFlows.totalIn, t.currency, false)}</span>
+          <span>OUT · {fmtMoney(sankeyFlows.totalOut, t.currency, false)}</span>
+        </div>
+      </div>
+
       <div style={{ marginTop: 28, display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 32 }}>
         <div>
-          <ALabel>[03] SPEND · BY · CATEGORY · TREND</ALabel>
+          <ALabel>[04] SPEND · BY · CATEGORY · TREND</ALabel>
           <div style={{ marginTop: 12, borderTop: '2px solid ' + A.ink, paddingTop: 14 }}>
             <CategoryTrendChart rows={categoryTrend} periods={trendPeriods} accent={t.accent} categoryTree={categoryTree} />
           </div>
@@ -249,7 +281,7 @@ export default function WebReports({ t, onNavigate, onAdd }) {
           </div>
         </div>
         <div>
-          <ALabel>[04] NET WORTH · TREND</ALabel>
+          <ALabel>[05] NET WORTH · TREND</ALabel>
           <div style={{ marginTop: 12, borderTop: '2px solid ' + A.ink, paddingTop: 16 }}>
             <LineChart data={netWorthTrend} stroke={t.accent} fill={t.accent} height={140} />
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 9, color: A.muted, letterSpacing: 1, marginTop: 6 }}>
@@ -263,12 +295,12 @@ export default function WebReports({ t, onNavigate, onAdd }) {
               t={t}
               buckets={netWorthAttribution}
               onBucketClick={drillNetWorthBucket}
-              label="[05] NET WORTH · ATTRIBUTION"
+              label="[06] NET WORTH · ATTRIBUTION"
               compact
             />
           </div>
 
-          <ALabel style={{ marginTop: 28 }}>[06] CALENDAR · {periodLabel}</ALabel>
+          <ALabel style={{ marginTop: 28 }}>[07] CALENDAR · {periodLabel}</ALabel>
           {useRange ? (
             <div style={{ marginTop: 12, padding: '14px 0', fontSize: 10, color: A.muted, letterSpacing: 1, borderTop: '2px solid ' + A.ink }}>
               CALENDAR HEATMAP IS PER-MONTH · SWITCH TO 'THIS MONTH' OR 'LAST MONTH' TO VIEW
@@ -301,7 +333,7 @@ export default function WebReports({ t, onNavigate, onAdd }) {
             </div>
           )}
 
-          <ALabel style={{ marginTop: 28 }}>[07] DETECTED · INSIGHTS</ALabel>
+          <ALabel style={{ marginTop: 28 }}>[08] DETECTED · INSIGHTS</ALabel>
           <div style={{ marginTop: 8, borderTop: '2px solid ' + A.ink }}>
             {[['SPEND', `${periodTransactions.length} TXS · ${fmtMoney(total, t.currency, false)}`],['BUDGET', 'ROLLOVER ACTIVE'],['PERIOD', periodLabel],['COMPARE', `${formatShortPeriodLabel(previousPeriod)} · ${fmtMoney(previousTotal, t.currency, false)}`]].map(([k, v], i) => (
               <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid ' + A.rule2, fontSize: 11 }}>
@@ -314,7 +346,7 @@ export default function WebReports({ t, onNavigate, onAdd }) {
       </div>
 
       <div style={{ marginTop: 28 }}>
-        <ALabel>[07] TOP · MERCHANTS</ALabel>
+        <ALabel>[09] TOP · MERCHANTS</ALabel>
         <div style={{ marginTop: 12, borderTop: '2px solid ' + A.ink }}>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 80px 80px 120px', padding: '8px 0', fontSize: 9, color: A.muted, letterSpacing: 1.2, borderBottom: '1px solid ' + A.rule2 }}>
             <div>MERCHANT</div><div>VISITS</div><div>AVG</div><div style={{ textAlign: 'right' }}>TOTAL</div>
