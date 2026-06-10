@@ -9,6 +9,7 @@ import { ALL_CURRENCIES, convertBetween } from '../../fx.mjs';
 import { useFx } from '../../useFx';
 import AccountFormSheet from '../../components/AccountFormSheet';
 import CategoryPicker from '../../components/CategoryPicker';
+import AttachmentsField from '../../components/AttachmentsField';
 
 export default function AddSheet({ t, onClose, editTx = null }) {
   const { addTransactions, updateTx, deleteTx, deleteTransfer, createTransfer, updateTransfer, transactions, accountsWithBalance, selectedPeriod, rules, categoryTree } = useUndoableStore();
@@ -41,6 +42,12 @@ export default function AddSheet({ t, onClose, editTx = null }) {
   const [catManuallySet, setCatManuallySet] = React.useState(!!editTx);
   const [acct, setAcct]         = React.useState(editTx ? editTx.acct : (accountsWithBalance[0]?.id || 'chk'));
   const [date, setDate]         = React.useState(editTx ? editTx.date : defaultDate);
+
+  // CAR-346: optional free-text note + receipt/photo attachments (mobile
+  // parity with WebAddModal). Stored on the tx object; attachments are
+  // downscaled, size-capped base64 data-URLs.
+  const [note, setNote] = React.useState(editTx?.note || '');
+  const [attachments, setAttachments] = React.useState(editTx?.attachments || []);
 
   // CAR-348: optional per-transaction FOREIGN amount (mobile parity with
   // WebAddModal). Stores origAmt/origCcy alongside the account-currency
@@ -136,6 +143,12 @@ export default function AddSheet({ t, onClose, editTx = null }) {
         ccy: acctCcyForTx,
         acct,
       };
+      // CAR-346: persist optional note + attachments on the tx (mobile parity).
+      const trimmedNote = note.trim();
+      if (trimmedNote) changes.note = trimmedNote;
+      else if (editTx?.note) changes.note = undefined;
+      if (attachments.length > 0) changes.attachments = attachments;
+      else if (editTx?.attachments) changes.attachments = undefined;
       if (usingForeign) {
         changes.origAmt = sign * Math.abs(parseFloat(foreignAmt));
         changes.origCcy = foreignCcy;
@@ -442,6 +455,20 @@ export default function AddSheet({ t, onClose, editTx = null }) {
               <option key={a.id} value={a.id}>{a.name} · {a.code}</option>
             ))}
           </select>
+        </div>
+
+        <ARule />
+
+        {/* CAR-346: note + receipt/photo attachments (mobile parity) */}
+        <div style={{ padding: '10px 0' }}>
+          <AttachmentsField
+            t={t}
+            note={note}
+            onNoteChange={setNote}
+            attachments={attachments}
+            onAddAttachment={att => setAttachments(prev => [...prev, att])}
+            onRemoveAttachment={id => setAttachments(prev => prev.filter(a => a.id !== id))}
+          />
         </div>
         </>)}
 
