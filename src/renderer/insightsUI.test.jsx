@@ -76,6 +76,10 @@ function makeStore(overrides = {}) {
     insightRows: [],
     dismissInsight: vi.fn(),
     restoreInsights: vi.fn(),
+    // CAR-351 surface
+    anomalyRows: [],
+    dismissAnomaly: vi.fn(),
+    restoreAnomalies: vi.fn(),
     setTxFilter: vi.fn(),
     ...overrides,
   };

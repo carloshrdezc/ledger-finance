@@ -18,6 +18,7 @@ import {
 } from './recategorizeStats.mjs';
 import { buildAlertRows } from './alerts.mjs';
 import { buildInsightRows } from './insights.mjs';
+import { buildAnomalyRows } from './anomalies.mjs';
 import { DEFAULT_RATES, buildDefaultRatesHistory, latestRateEntry, normalizeRatesHistory, toReportingCurrency } from './fx.mjs';
 import { fetchRatesFromFrankfurter } from './fxFetch.mjs';
 import { buildBackup } from './backup.mjs';
@@ -494,6 +495,8 @@ function StoreProviderImpl({ children }) {
   // CAR-217: weekly insight dismissal. Same pattern as alerts — store the
   // insight ids the user has dismissed; insightRows filters them out.
   const [dismissedInsightIds, setDismissedInsightIds] = useLS('ledger:dismissedInsights', []);
+  // CAR-351: transaction-level anomaly flags. Same dismissal pattern as insights.
+  const [dismissedAnomalyIds, setDismissedAnomalyIds] = useLS('ledger:dismissedAnomalies', []);
   const [welcomeSeen, setWelcomeSeen] = useLS('ledger:welcomeSeen', false);
   const [onboarded, setOnboarded] = useLS('ledger:onboarded', false);
   const [rates, setRates] = useLS('ledger:fxRates', buildDefaultRatesHistory());
@@ -665,6 +668,14 @@ function StoreProviderImpl({ children }) {
       dismissedInsightIds,
     }),
     [isAppEmpty, transactions, bills, budgetRows, dismissedInsightIds],
+  );
+
+  // CAR-351: per-transaction anomaly flags — also purely derived, suppressed on
+  // an empty store. Complements the weekly insights with transaction-level
+  // outlier / duplicate / new-merchant detection.
+  const anomalyRows = React.useMemo(
+    () => isAppEmpty ? [] : buildAnomalyRows({ transactions, dismissedAnomalyIds }),
+    [isAppEmpty, transactions, dismissedAnomalyIds],
   );
 
   const addTransactions = React.useCallback(incoming => setTxs(prev => {
@@ -1413,6 +1424,15 @@ function StoreProviderImpl({ children }) {
     setDismissedInsightIds([]);
   }, [setDismissedInsightIds]);
 
+  // CAR-351: anomaly dismissal mirrors insights.
+  const dismissAnomaly = React.useCallback(id => {
+    setDismissedAnomalyIds(prev => prev.includes(id) ? prev : [...prev, id]);
+  }, [setDismissedAnomalyIds]);
+
+  const restoreAnomalies = React.useCallback(() => {
+    setDismissedAnomalyIds([]);
+  }, [setDismissedAnomalyIds]);
+
   const dismissWelcome = React.useCallback(() => {
     setWelcomeSeen(true);
   }, [setWelcomeSeen]);
@@ -1464,6 +1484,7 @@ function StoreProviderImpl({ children }) {
     setTrades([]);
     setDismissedAlertIds([]);
     setDismissedInsightIds([]);
+    setDismissedAnomalyIds([]);
     setTxFilterRaw(null);
     setRates(DEFAULT_RATES);
     setRatesUpdated({});
@@ -1614,6 +1635,7 @@ function StoreProviderImpl({ children }) {
     setTxFilterRaw(null);
     setDismissedAlertIds([]);
     setDismissedInsightIds([]);
+    setDismissedAnomalyIds([]);
     setFxAutoFetch('off');
     setFxLastFetchedAt(null);
     setFxLastFetchError(null);
@@ -1655,6 +1677,7 @@ function StoreProviderImpl({ children }) {
     setTrades([]);
     setDismissedAlertIds([]);
     setDismissedInsightIds([]);
+    setDismissedAnomalyIds([]);
     setTxFilterRaw(null);
     setRates(DEFAULT_RATES);
     setRatesUpdated({});
@@ -1740,6 +1763,10 @@ function StoreProviderImpl({ children }) {
       insightRows,
       dismissInsight,
       restoreInsights,
+      // CAR-351
+      anomalyRows,
+      dismissAnomaly,
+      restoreAnomalies,
       lastBackupAt,
       backupReminderInterval,
       setBackupReminderInterval,

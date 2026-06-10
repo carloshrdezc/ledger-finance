@@ -21,7 +21,7 @@ function severityColor(severity, accent) {
 }
 
 export default function WebAlerts({ t, onNavigate, onAdd }) {
-  const { alertRows, dismissAlert, restoreAlerts, insightRows, dismissInsight, restoreInsights, setTxFilter } = useStore();
+  const { alertRows, dismissAlert, restoreAlerts, insightRows, dismissInsight, restoreInsights, anomalyRows, dismissAnomaly, restoreAnomalies, setTxFilter } = useStore();
   const activeCount = alertRows.length;
   const criticalCount = alertRows.filter(a => a.severity === 'critical').length;
 
@@ -29,6 +29,13 @@ export default function WebAlerts({ t, onNavigate, onAdd }) {
   // insightNav.js so all 3 surfaces stay in lockstep.
   const goToInsight = React.useCallback((insight) => {
     applyInsightDrillDown(insight, { setTxFilter, navigate: onNavigate });
+  }, [setTxFilter, onNavigate]);
+
+  // CAR-351: drill from a flagged transaction to the transactions list,
+  // filtered to that merchant so the user can review it in context.
+  const goToFlagged = React.useCallback((flag) => {
+    setTxFilter(flag.title ? { merchant: flag.title } : null);
+    onNavigate('transactions');
   }, [setTxFilter, onNavigate]);
 
   return (
@@ -132,6 +139,56 @@ export default function WebAlerts({ t, onNavigate, onAdd }) {
               {insight.action}
             </button>
             <button onClick={() => dismissInsight(insight.id)} style={{ all: 'unset', cursor: 'pointer', textAlign: 'right', fontSize: 10, letterSpacing: 1.2, color: A.muted }}>
+              DISMISS
+            </button>
+          </div>
+        ))}
+      </div>
+
+      {/* CAR-351: transaction-level anomaly flags — flagged items with a reason. */}
+      <div style={{ marginTop: 32, display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 16 }}>
+        <div>
+          <ALabel>[03] FLAGGED TRANSACTIONS</ALabel>
+          <div style={{ fontSize: 28, letterSpacing: -1, fontVariantNumeric: 'tabular-nums', lineHeight: 1, marginTop: 6 }}>
+            {anomalyRows.length}
+            <span style={{ color: A.muted, fontSize: 16 }}> FLAGGED</span>
+          </div>
+        </div>
+        <button onClick={restoreAnomalies} style={{ all: 'unset', cursor: 'pointer', padding: '8px 16px', border: '1px solid ' + A.ink, fontSize: 10, letterSpacing: 1.4 }}>
+          RESTORE DISMISSED
+        </button>
+      </div>
+
+      <ARule thick />
+
+      <div style={{ marginTop: 8, borderTop: '2px solid ' + A.ink }}>
+        {anomalyRows.length === 0 ? (
+          <div style={{ padding: '26px 0', fontSize: 12, color: A.muted, letterSpacing: 1 }}>
+            NO FLAGGED TRANSACTIONS
+          </div>
+        ) : anomalyRows.map(flag => (
+          <div key={flag.id} style={{
+            display: 'grid',
+            gridTemplateColumns: '94px 1fr 96px 96px 86px',
+            alignItems: 'center',
+            gap: 16,
+            padding: t.density === 'compact' ? '10px 0' : '14px 0',
+            borderBottom: '1px solid ' + A.rule2,
+          }}>
+            <div style={{ fontSize: 9, letterSpacing: 1.2, color: flag.severity === 'high' ? A.neg : flag.severity === 'medium' ? t.accent : A.muted }}>
+              {flag.severity.toUpperCase()}
+              <br />
+              <span style={{ color: A.muted }}>{flag.date}</span>
+            </div>
+            <button onClick={() => goToFlagged(flag)} style={{ all: 'unset', cursor: 'pointer', minWidth: 0 }}>
+              <div style={{ fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{flag.title}</div>
+              <div style={{ fontSize: 10, color: A.muted, letterSpacing: 0.8, marginTop: 3 }}>{flag.detail}</div>
+            </button>
+            <div style={{ textAlign: 'right', fontSize: 12, fontVariantNumeric: 'tabular-nums' }}>{fmtMoney(flag.metric, t.currency, t.decimals)}</div>
+            <button onClick={() => goToFlagged(flag)} style={{ all: 'unset', cursor: 'pointer', textAlign: 'right', fontSize: 10, letterSpacing: 1.2, color: t.accent }}>
+              REVIEW
+            </button>
+            <button onClick={() => dismissAnomaly(flag.id)} style={{ all: 'unset', cursor: 'pointer', textAlign: 'right', fontSize: 10, letterSpacing: 1.2, color: A.muted }}>
               DISMISS
             </button>
           </div>
