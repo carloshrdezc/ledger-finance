@@ -7,11 +7,12 @@ import RecurringFormSheet from '../../components/RecurringFormSheet';
 import GoalFormSheet from '../../components/GoalFormSheet';
 
 export default function More({ t, onNavigate }) {
-  const { goals, billRows, bills, alertRows, accountsWithBalance, investments } = useStore();
+  const { goals, billRows, bills, alertRows, accountsWithBalance, investments, debts } = useStore();
   const activeRules = bills.filter(b => b.active !== false).length;
   const billTotal = billRows.filter(b => b.type !== 'income').reduce((s, b) => s + b.amt, 0);
   const ccAccounts = accountsWithBalance.filter(a => a.type === 'CC' && !a.archived);
   const portfolioTotal = investments.reduce((s, i) => s + i.shares * i.price, 0);
+  const debtTotal = debts.reduce((s, d) => s + (Number(d.balance) || 0), 0);
   const [showAddRecurring, setShowAddRecurring] = React.useState(false);
   const [showAddGoal, setShowAddGoal] = React.useState(false);
   const sections = [
@@ -33,6 +34,20 @@ export default function More({ t, onNavigate }) {
             params: { goalId: g.id },
           }))
         : [{ label: 'NO GOALS YET', sub: 'TAP + ADD TO CREATE ONE', screen: null }],
+    },
+    {
+      title: 'DEBT PAYOFF',
+      rows: [
+        {
+          label: debts.length > 0
+            ? 'PAYOFF PLANNER · ' + fmtMoney(debtTotal, t.currency, false)
+            : 'DEBT PAYOFF PLANNER',
+          sub: debts.length > 0
+            ? debts.length + ' DEBTS · SNOWBALL VS AVALANCHE'
+            : 'MODEL SNOWBALL VS AVALANCHE',
+          screen: 'debts',
+        },
+      ],
     },
     {
       title: 'CREDIT CARDS',

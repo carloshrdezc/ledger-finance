@@ -32,6 +32,7 @@ import BillsHub from './screens/mobile/BillsHub';
 import AlertsHub from './screens/mobile/AlertsHub';
 import Settings from './screens/mobile/Settings';
 import CategoriesEditor from './screens/mobile/CategoriesEditor';
+import DebtPayoff from './screens/mobile/DebtPayoff';
 
 // Web screens
 import Dashboard from './screens/web/Dashboard';
@@ -39,6 +40,7 @@ import WebTransactions from './screens/web/WebTransactions';
 import WebAccounts from './screens/web/WebAccounts';
 import WebBudgets from './screens/web/WebBudgets';
 import WebGoals from './screens/web/WebGoals';
+import WebDebts from './screens/web/WebDebts';
 import WebBills from './screens/web/WebBills';
 import WebReports from './screens/web/WebReports';
 import WebInvestments from './screens/web/WebInvestments';
@@ -151,6 +153,7 @@ function MobileApp({ t, setAccent, setDensity, setDecimals, setCurrency, setThem
       case 'investments':return <Investments {...props} />;
       case 'settings':   return <Settings {...props} setAccent={setAccent} setDensity={setDensity} setDecimals={setDecimals} setCurrency={setCurrency} setTheme={setTheme} />;
       case 'categories': return <CategoriesEditor {...props} />;
+      case 'debts':      return <DebtPayoff {...props} />;
       default: return null;
     }
   };
@@ -265,6 +268,7 @@ function DesktopApp({ t, setAccent, setDensity, setDecimals, setCurrency, setThe
       case 'accounts':     return <WebAccounts {...props} />;
       case 'budgets':      return <WebBudgets {...props} />;
       case 'goals':        return <WebGoals {...props} />;
+      case 'debts':        return <WebDebts {...props} />;
       case 'bills':        return <WebBills {...props} />;
       case 'reports':      return <WebReports {...props} />;
       case 'investments':  return <WebInvestments {...props} />;

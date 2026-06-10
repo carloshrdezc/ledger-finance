@@ -37,7 +37,7 @@ const MIGRATED_TO_DISK_KEY = 'ledger:_migratedToDisk';
 const ONBOARDED_KEY = 'ledger:onboarded';
 const FIRST_RUN_SLICES = ['ledger:tx', 'ledger:accounts', 'ledger:bills', 'ledger:goals',
                           'ledger:budgets', 'ledger:investments', 'ledger:trades',
-                          'ledger:catTree', 'ledger:rules', 'ledger:savedViews'];
+                          'ledger:catTree', 'ledger:rules', 'ledger:savedViews', 'ledger:debts'];
 const LEDGER_PREFIX = 'ledger:';
 const PERSIST_DEBOUNCE_MS = 250;
 const PersistenceCtx = React.createContext(null);
@@ -239,7 +239,7 @@ export const StoreCtx = React.createContext(null);
     if (localStorage.getItem('ledger:welcomeSeen') !== null) return;
 
     const slices = ['ledger:tx', 'ledger:accounts', 'ledger:bills', 'ledger:goals',
-                    'ledger:budgets', 'ledger:investments', 'ledger:trades'];
+                    'ledger:budgets', 'ledger:investments', 'ledger:trades', 'ledger:debts'];
     for (const key of slices) {
       const raw = localStorage.getItem(key);
       if (!raw) continue;
@@ -464,6 +464,11 @@ function StoreProviderImpl({ children }) {
     setBills(prev => migrateBills(prev));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [goals, setGoals] = useLS('ledger:goals', []);
+  // CAR-345: debt payoff planner. Each debt: { id, name, balance, apr, minPayment }.
+  // `debtExtraPayment` is the single shared "extra monthly budget" the planner
+  // funnels into the focus debt on top of every debt's minimum.
+  const [debts, setDebts] = useLS('ledger:debts', []);
+  const [debtExtraPayment, setDebtExtraPayment] = useLS('ledger:debtExtraPayment', 0);
   const [goalContributions, setGoalContributions] = useLS('ledger:goalContributions', []);
   const [rules, setRules] = useLS('ledger:rules', []);
   // CAR-83: one persisted slice for both Transactions and Reports saved views.
@@ -963,6 +968,45 @@ function StoreProviderImpl({ children }) {
     }
   }, [setGoals, setGoalContributions]);
 
+  // CAR-345: debt payoff planner CRUD. Mirrors the goals slice shape.
+  const addDebt = React.useCallback(({ name, balance, apr, minPayment }) => {
+    const debt = {
+      id: 'd_' + Date.now(),
+      name: (name || '').trim().toUpperCase(),
+      balance: Math.max(0, Number(balance) || 0),
+      apr: Math.max(0, Number(apr) || 0),
+      minPayment: Math.max(0, Number(minPayment) || 0),
+      createdAt: new Date().toISOString().slice(0, 10),
+    };
+    setDebts(prev => [...prev, debt]);
+    return debt;
+  }, [setDebts]);
+
+  const updateDebt = React.useCallback((id, patch) => {
+    setDebts(prev => prev.map(d => {
+      if (d.id !== id) return d;
+      const next = { ...d, ...patch };
+      if (patch.name !== undefined) next.name = String(patch.name).trim().toUpperCase();
+      if (patch.balance !== undefined) next.balance = Math.max(0, Number(patch.balance) || 0);
+      if (patch.apr !== undefined) next.apr = Math.max(0, Number(patch.apr) || 0);
+      if (patch.minPayment !== undefined) next.minPayment = Math.max(0, Number(patch.minPayment) || 0);
+      return next;
+    }));
+  }, [setDebts]);
+
+  const deleteDebt = React.useCallback(id => {
+    setDebts(prev => prev.filter(d => d.id !== id));
+  }, [setDebts]);
+
+  const restoreDebt = React.useCallback(debt => {
+    if (!debt) return;
+    setDebts(prev => prev.some(d => d.id === debt.id) ? prev : [...prev, debt]);
+  }, [setDebts]);
+
+  const setExtraPayment = React.useCallback(v => {
+    setDebtExtraPayment(Math.max(0, Number(v) || 0));
+  }, [setDebtExtraPayment]);
+
   const addBudget = React.useCallback(({ cat, limit, rollover }) => {
     const entry = {
       cat,
@@ -1321,8 +1365,10 @@ function StoreProviderImpl({ children }) {
     setLastBackupAt(null);
     setBackupReminderSnoozedUntil(null);
     setBackupReminderIntervalRaw(30);
+    setDebts([]); // CAR-345
+    setDebtExtraPayment(0); // CAR-345
     _seedSampleData();
-  }, [_seedSampleData, abortFxFetch, setTxs, setCatTree, setBudgets, setAccounts, setBills, setGoals, setGoalContributions, setRules, setSavedViews, setSelectedPeriod, setHidden, setBudgetStartDay, setInvestments, setTrades, setDismissedAlertIds, setDismissedInsightIds, setTxFilterRaw, setRates, setRatesUpdated, setFxAutoFetch, setFxLastFetchedAt, setFxLastFetchError, setFxMigrationToastSeen, setWelcomeSeen, setOnboarded, setLastBackupAt, setBackupReminderSnoozedUntil, setBackupReminderIntervalRaw]);
+  }, [_seedSampleData, abortFxFetch, setTxs, setCatTree, setBudgets, setAccounts, setBills, setGoals, setGoalContributions, setRules, setSavedViews, setSelectedPeriod, setHidden, setBudgetStartDay, setInvestments, setTrades, setDismissedAlertIds, setDismissedInsightIds, setTxFilterRaw, setRates, setRatesUpdated, setFxAutoFetch, setFxLastFetchedAt, setFxLastFetchError, setFxMigrationToastSeen, setWelcomeSeen, setOnboarded, setLastBackupAt, setBackupReminderSnoozedUntil, setBackupReminderIntervalRaw, setDebts, setDebtExtraPayment]);
 
   React.useEffect(() => () => {
     if (fxFetchAbortRef.current) fxFetchAbortRef.current.abort();
@@ -1384,11 +1430,11 @@ function StoreProviderImpl({ children }) {
     const obj = buildBackup({
       txs, accounts, catTree, budgets, hidden, bills, goals, goalContributions,
       savedViews, investments, trades, rates, ratesUpdated, fxAutoFetch, fxLastFetchedAt, fxLastFetchError,
-      selectedPeriod, budgetStartDay,
+      selectedPeriod, budgetStartDay, debts, debtExtraPayment,
       settings: { accent, density, decimals, currency, theme, forecastLiquidAccountIds, forecastThreshold },
     });
     return JSON.stringify(obj, null, 2);
-  }, [txs, accounts, catTree, budgets, hidden, bills, goals, goalContributions, savedViews, investments, trades, rates, ratesUpdated, fxAutoFetch, fxLastFetchedAt, fxLastFetchError, selectedPeriod, budgetStartDay, accent, density, decimals, currency, theme, forecastLiquidAccountIds, forecastThreshold]);
+  }, [txs, accounts, catTree, budgets, hidden, bills, goals, goalContributions, savedViews, investments, trades, rates, ratesUpdated, fxAutoFetch, fxLastFetchedAt, fxLastFetchError, selectedPeriod, budgetStartDay, debts, debtExtraPayment, accent, density, decimals, currency, theme, forecastLiquidAccountIds, forecastThreshold]);
 
   const recordBackupTaken = React.useCallback(() => {
     setLastBackupAt(new Date().toISOString().slice(0, 10));
@@ -1416,6 +1462,9 @@ function StoreProviderImpl({ children }) {
     setGoalContributions(Array.isArray(data.goalContributions) ? data.goalContributions : []);
     setRules(Array.isArray(data.rules) ? data.rules : []);
     setSavedViews(Array.isArray(data.savedViews) ? data.savedViews : []);
+    // CAR-345: debts default to [] when restoring an older backup without them.
+    setDebts(Array.isArray(data.debts) ? data.debts : []);
+    setDebtExtraPayment(Math.max(0, Number(data.debtExtraPayment) || 0));
     // CAR-182: backups don't carry recategorize stats — clear them on restore
     // so the new dataset starts fresh (counters keyed on old tx ids would be stale).
     setRecategorizeStats({});
@@ -1472,6 +1521,7 @@ function StoreProviderImpl({ children }) {
     setFxAutoFetch, setFxLastFetchedAt, setFxLastFetchError,
     setWelcomeSeen, setFxMigrationToastSeen,
     setBackupReminderSnoozedUntil,
+    setDebts, setDebtExtraPayment,
   ]);
 
   const reset = React.useCallback(() => {
@@ -1508,7 +1558,9 @@ function StoreProviderImpl({ children }) {
     // CAR-218: clear forecast settings to defaults too.
     setForecastLiquidAccountIds([]);
     setForecastThreshold(0);
-  }, [abortFxFetch, setTxs, setCatTree, setBudgets, setAccounts, setBills, setGoals, setGoalContributions, setRules, setSavedViews, setRecategorizeStats, setSelectedPeriod, setHidden, setBudgetStartDay, setInvestments, setTrades, setDismissedAlertIds, setDismissedInsightIds, setTxFilterRaw, setRates, setRatesUpdated, setFxAutoFetch, setFxLastFetchedAt, setFxLastFetchError, setFxMigrationToastSeen, setWelcomeSeen, setOnboarded, setLastBackupAt, setBackupReminderSnoozedUntil, setBackupReminderIntervalRaw, setForecastLiquidAccountIds, setForecastThreshold]);
+    setDebts([]); // CAR-345
+    setDebtExtraPayment(0); // CAR-345
+  }, [abortFxFetch, setTxs, setCatTree, setBudgets, setAccounts, setBills, setGoals, setGoalContributions, setRules, setSavedViews, setRecategorizeStats, setSelectedPeriod, setHidden, setBudgetStartDay, setInvestments, setTrades, setDismissedAlertIds, setDismissedInsightIds, setTxFilterRaw, setRates, setRatesUpdated, setFxAutoFetch, setFxLastFetchedAt, setFxLastFetchError, setFxMigrationToastSeen, setWelcomeSeen, setOnboarded, setLastBackupAt, setBackupReminderSnoozedUntil, setBackupReminderIntervalRaw, setForecastLiquidAccountIds, setForecastThreshold, setDebts, setDebtExtraPayment]);
 
   return (
     <StoreCtx.Provider value={{
@@ -1593,6 +1645,15 @@ function StoreProviderImpl({ children }) {
       updateGoal,
       deleteGoal,
       restoreGoal,
+      // CAR-345: debt payoff planner
+      debts,
+      setDebts,
+      addDebt,
+      updateDebt,
+      deleteDebt,
+      restoreDebt,
+      debtExtraPayment,
+      setDebtExtraPayment: setExtraPayment,
       selectedPeriod,
       setSelectedPeriod,
       txFilter,
