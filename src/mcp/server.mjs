@@ -34,15 +34,20 @@ const SERVER_VERSION = '1.0.0';
 const PROTOCOL_VERSION = '2024-11-05';
 
 /**
- * Resolve the Electron `userData` directory for this app per-platform. The
- * Electron app name is "ledger-finance" (package.json name); userData is
- * <appData>/<name>.
+ * Resolve the Electron `userData` directory for an app name per-platform.
+ * userData is `<appData>/<appName>`. NOTE: Electron derives the app name from
+ * `app.getName()`, which in a PACKAGED build is the `productName` ("LEDGER"),
+ * but in dev is the package `name` ("ledger-finance"). loadState() tries both.
  */
-export function defaultUserDataDir(appName = 'ledger-finance', platform = process.platform, home = os.homedir()) {
+export function defaultUserDataDir(appName = 'LEDGER', platform = process.platform, home = os.homedir()) {
   if (platform === 'darwin') return path.join(home, 'Library', 'Application Support', appName);
   if (platform === 'win32') return path.join(process.env.APPDATA || path.join(home, 'AppData', 'Roaming'), appName);
   return path.join(process.env.XDG_CONFIG_HOME || path.join(home, '.config'), appName);
 }
+
+// App-name candidates in priority order: packaged productName first, then the
+// dev package name. Whichever directory actually holds a store wins.
+const APP_NAME_CANDIDATES = ['LEDGER', 'ledger-finance'];
 
 function parseArgs(argv) {
   const out = {};
@@ -60,23 +65,40 @@ function parseArgs(argv) {
  * @param {{statePath?:string, userDataDir?:string}} opts
  */
 export async function loadState({ statePath, userDataDir } = {}) {
-  const dir = userDataDir || defaultUserDataDir();
-  const plain = statePath || path.join(dir, 'ledger-state.json');
-  const encrypted = path.join(dir, 'ledger-encrypted.json');
-
-  // If an encrypted store exists and no explicit plaintext path was given,
-  // treat the store as locked — we cannot decrypt without the passphrase.
-  if (!statePath) {
-    try {
-      await access(encrypted);
-      // Encrypted store present. Only treat as locked if there's no plaintext
-      // alongside it (the app keeps exactly one of the two).
-      try { await access(plain); } catch { return { locked: true }; }
-    } catch { /* no encrypted store — fall through to plaintext */ }
+  // Explicit plaintext file: read it directly. NOTE: this bypasses the
+  // encrypted-store check, so pointing --state at a stale plaintext left over
+  // from before security was enabled will serve outdated data with no "locked"
+  // signal. Documented in README; explicit-flag escape hatch for power users.
+  if (statePath) {
+    return readPlainOrEmpty(statePath);
   }
 
+  // Candidate userData dirs: an explicit --userData, else the per-platform dirs
+  // for both the packaged productName ("LEDGER") and the dev name
+  // ("ledger-finance"). Pick the first that holds a store.
+  const dirs = userDataDir
+    ? [userDataDir]
+    : APP_NAME_CANDIDATES.map(name => defaultUserDataDir(name));
+
+  for (const dir of dirs) {
+    const plain = path.join(dir, 'ledger-state.json');
+    const encrypted = path.join(dir, 'ledger-encrypted.json');
+    const hasPlain = await exists(plain);
+    const hasEnc = await exists(encrypted);
+    if (hasEnc && !hasPlain) return { locked: true };
+    if (hasPlain) return readPlainOrEmpty(plain);
+    // neither in this dir → try the next candidate
+  }
+  return { state: {} };
+}
+
+async function exists(p) {
+  try { await access(p); return true; } catch { return false; }
+}
+
+async function readPlainOrEmpty(filePath) {
   try {
-    const raw = await readFile(plain, 'utf8');
+    const raw = await readFile(filePath, 'utf8');
     const parsed = JSON.parse(raw);
     return { state: parsed && typeof parsed === 'object' ? parsed : {} };
   } catch (err) {
@@ -171,7 +193,9 @@ export async function handleRpc(msg, loadOpts = {}) {
       try {
         return reply(await callTool(name, args, loadOpts));
       } catch (err) {
-        return fail(-32603, `Tool execution failed: ${err?.message || err}`);
+        // Per MCP, tool-execution failures surface as an isError content block
+        // (a successful JSON-RPC result), not a protocol-level error.
+        return reply({ isError: true, content: [{ type: 'text', text: `Tool execution failed: ${err?.message || err}` }] });
       }
     }
     default:

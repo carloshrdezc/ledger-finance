@@ -90,12 +90,15 @@ export function queryTransactions(state, opts = {}) {
 }
 
 /**
- * Account balances. Balance = account opening/base balance (if present) plus
- * the sum of its transactions. Mirrors the renderer's accountsWithBalance
- * derivation at a coarse level (no FX conversion).
+ * Account balances. Mirrors the renderer's `allAccountsWithBalance` derivation:
+ * balance = `openingBal` + sum of the account's transactions. Excludes archived
+ * accounts. The `includedInTotals` flag (`includeInTotals !== false`) is carried
+ * through so callers can sum a totals-consistent subset.
  *
  * @param {Object} state
- * @returns {{accounts:Array<{id,name,type,balance}>, total:number}}
+ * @returns {{accounts:Array<{id,name,type,balance,includedInTotals,archived}>, total:number}}
+ *   `total` is over accounts included in totals (archived excluded), matching
+ *   the app's net-worth figure.
  */
 export function queryAccountBalances(state) {
   const txByAcct = new Map();
@@ -105,11 +108,23 @@ export function queryAccountBalances(state) {
     txByAcct.set(id, round2((txByAcct.get(id) || 0) + num(tx.amt)));
   }
   const accounts = arr(state, K.accounts).map(a => {
-    const base = num(a.balance ?? a.opening ?? 0);
+    // openingBal is the canonical base field (see store.jsx allAccountsWithBalance).
+    const base = num(a.openingBal ?? a.balance ?? a.opening ?? 0);
     const balance = round2(base + (txByAcct.get(a.id) || 0));
-    return { id: a.id, name: a.name || a.id, type: a.type || '', balance };
+    return {
+      id: a.id,
+      name: a.name || a.id,
+      type: a.type || '',
+      balance,
+      includedInTotals: a.includeInTotals !== false,
+      archived: a.archived === true,
+    };
   });
-  const total = round2(accounts.reduce((s, a) => s + a.balance, 0));
+  const total = round2(
+    accounts
+      .filter(a => !a.archived && a.includedInTotals)
+      .reduce((s, a) => s + a.balance, 0),
+  );
   return { accounts, total };
 }
 
@@ -194,18 +209,25 @@ export function queryGoals(state) {
 }
 
 /**
- * Net worth: sum of account balances plus current investment market value.
+ * Net worth. Mirrors the app's headline figure: the sum of account balances
+ * that are included in totals (archived + includeInTotals:false excluded). In
+ * this data model investment holdings are tracked as INV/CRY-type *accounts*,
+ * so the app does NOT add the `ledger:investments` array on top — doing so would
+ * double-count. We therefore report `netWorth` = accounts total, and expose the
+ * separate holdings-tracker market value as an INFORMATIONAL field only.
  *
  * @param {Object} state
- * @returns {{accountsTotal:number, investmentsValue:number, netWorth:number}}
+ * @returns {{netWorth:number, accountsTotal:number, holdingsTrackerValue:number}}
  */
 export function queryNetWorth(state) {
   const accountsTotal = queryAccountBalances(state).total;
-  const investmentsValue = round2(arr(state, K.investments).reduce((s, h) => s + num(h.shares) * num(h.price), 0));
+  const holdingsTrackerValue = round2(
+    arr(state, K.investments).reduce((s, h) => s + num(h.shares) * num(h.price), 0),
+  );
   return {
+    netWorth: accountsTotal,            // matches the app's headline number
     accountsTotal,
-    investmentsValue,
-    netWorth: round2(accountsTotal + investmentsValue),
+    holdingsTrackerValue,               // informational; NOT added to netWorth
   };
 }
 

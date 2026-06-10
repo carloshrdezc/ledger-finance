@@ -14,8 +14,11 @@ import {
 const STATE = {
   'ledger:currency': 'USD',
   'ledger:accounts': [
-    { id: 'chk', name: 'Chase Checking', type: 'CHK', balance: 1000 },
-    { id: 'sav', name: 'Ally Savings', type: 'SAV', balance: 5000 },
+    { id: 'chk', name: 'Chase Checking', type: 'CHK', openingBal: 1000 },
+    { id: 'sav', name: 'Ally Savings', type: 'SAV', openingBal: 5000 },
+    { id: 'inv', name: 'Vanguard', type: 'INV', openingBal: 20000 },
+    { id: 'arch', name: 'Old Card', type: 'CHK', openingBal: 100, archived: true },
+    { id: 'excl', name: 'Tracked-only', type: 'CHK', openingBal: 999, includeInTotals: false },
   ],
   'ledger:tx': [
     { id: 't1', name: 'Rent · Greenpoint', amt: -2400, date: '2026-06-01', cat: 'housing', path: ['housing'], acct: 'chk' },
@@ -81,14 +84,23 @@ describe('queryTransactions', () => {
 });
 
 describe('queryAccountBalances', () => {
-  it('adds transactions to base balance per account', () => {
+  it('adds transactions to openingBal per account', () => {
     const r = queryAccountBalances(STATE);
     const chk = r.accounts.find(a => a.id === 'chk');
     // 1000 + (-2400-120+6840-80-500) = 1000 + 3740 = 4740
     expect(chk.balance).toBe(4740);
     const sav = r.accounts.find(a => a.id === 'sav');
-    expect(sav.balance).toBe(5000); // no txs
-    expect(r.total).toBe(9740);
+    expect(sav.balance).toBe(5000); // openingBal only, no txs
+    const inv = r.accounts.find(a => a.id === 'inv');
+    expect(inv.balance).toBe(20000); // INV account openingBal, no txs
+  });
+
+  it('total excludes archived and includeInTotals:false accounts', () => {
+    const r = queryAccountBalances(STATE);
+    // chk 4740 + sav 5000 + inv 20000 = 29740; arch + excl excluded
+    expect(r.total).toBe(29740);
+    expect(r.accounts.find(a => a.id === 'arch').archived).toBe(true);
+    expect(r.accounts.find(a => a.id === 'excl').includedInTotals).toBe(false);
   });
 });
 
@@ -132,11 +144,11 @@ describe('queryGoals', () => {
 });
 
 describe('queryNetWorth', () => {
-  it('sums account balances and investment value', () => {
+  it('matches the app: accounts total only, holdings tracker is informational (no double-count)', () => {
     const r = queryNetWorth(STATE);
-    expect(r.accountsTotal).toBe(9740);
-    expect(r.investmentsValue).toBe(10 * 300 + 20 * 75); // 3000 + 1500 = 4500
-    expect(r.netWorth).toBe(14240);
+    expect(r.accountsTotal).toBe(29740);
+    expect(r.netWorth).toBe(29740);          // == accounts total, NOT + investments
+    expect(r.holdingsTrackerValue).toBe(4500); // 10*300 + 20*75, informational only
   });
 });
 

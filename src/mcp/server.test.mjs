@@ -16,7 +16,7 @@ const SERVER = fileURLToPath(new URL('./server.mjs', import.meta.url));
 
 const STATE = {
   'ledger:currency': 'USD',
-  'ledger:accounts': [{ id: 'chk', name: 'Checking', type: 'CHK', balance: 1000 }],
+  'ledger:accounts': [{ id: 'chk', name: 'Checking', type: 'CHK', openingBal: 1000 }],
   'ledger:tx': [
     { id: 't1', name: 'Rent', amt: -2400, date: '2026-06-01', cat: 'housing', path: ['housing'], acct: 'chk' },
     { id: 't2', name: 'Salary', amt: 5000, date: '2026-06-05', cat: 'income', path: ['income'], acct: 'chk' },
@@ -137,6 +137,17 @@ describe('handleRpc', () => {
     const r = await handleRpc({ jsonrpc: '2.0', id: 4, method: 'tools/call', params: { name: 'account_balances' } }, { statePath });
     const payload = JSON.parse(r.result.content[0].text);
     expect(payload.total).toBe(3600);
+  });
+
+  it('echoes id:0 (not coerced to null)', async () => {
+    const r = await handleRpc({ jsonrpc: '2.0', id: 0, method: 'ping' });
+    expect(r.id).toBe(0);
+  });
+
+  it('returns an isError content block for an unknown tool (not a JSON-RPC error)', async () => {
+    const r = await handleRpc({ jsonrpc: '2.0', id: 5, method: 'tools/call', params: { name: 'nope' } }, { statePath });
+    expect(r.error).toBeUndefined();
+    expect(r.result.isError).toBe(true);
   });
 });
 

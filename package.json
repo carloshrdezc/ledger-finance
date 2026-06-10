@@ -30,6 +30,7 @@
       "dist/**/*",
       "src/main/**/*",
       "src/preload/**/*",
+      "src/mcp/**/*",
       "package.json"
     ],
     "publish": [
