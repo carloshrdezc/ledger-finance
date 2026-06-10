@@ -12,6 +12,7 @@
     "package:mac": "vite build && electron-builder --mac",
     "package:linux": "vite build && electron-builder --linux",
     "preview": "vite preview",
+    "mcp": "node src/mcp/server.mjs",
     "test": "vitest run",
     "test:watch": "vitest"
   },
