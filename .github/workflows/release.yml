@@ -51,6 +51,7 @@ jobs:
           path: |
             dist-app/*.exe
             dist-app/*.dmg
+            dist-app/*.zip
             dist-app/*.AppImage
             dist-app/*.deb
             dist-app/latest*.yml
@@ -78,6 +79,7 @@ jobs:
           files: |
             artifacts/*.exe
             artifacts/*.dmg
+            artifacts/*.zip
             artifacts/*.AppImage
             artifacts/*.deb
             artifacts/latest*.yml

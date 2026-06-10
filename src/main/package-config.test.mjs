@@ -37,18 +37,22 @@ describe('Windows packaging config', () => {
 });
 
 describe('macOS packaging config (CAR-212)', () => {
-  it('targets dmg for both x64 and arm64 in the finance category', () => {
+  it('targets dmg + zip for both x64 and arm64 in the finance category', () => {
     const mac = packageJson.build?.mac;
     expect(mac.category).toBe('public.app-category.finance');
+    // CAR-213 added a zip target alongside the dmg (mac auto-update needs zip).
     expect(mac.target).toEqual([
       { target: 'dmg', arch: ['x64', 'arm64'] },
+      { target: 'zip', arch: ['x64', 'arm64'] },
     ]);
   });
 
-  it('does not configure mac code signing/notarization (deferred to CAR-213)', () => {
+  it('configures mac code signing + notarization (CAR-213)', () => {
+    // Full assertions live in mac-signing.test.mjs; this just confirms the
+    // CAR-212 "deferred" placeholder has been superseded.
     const mac = packageJson.build?.mac ?? {};
-    expect(mac).not.toHaveProperty('identity');
-    expect(mac).not.toHaveProperty('notarize');
+    expect(mac.hardenedRuntime).toBe(true);
+    expect(mac.notarize).toBe(true);
   });
 });
 
