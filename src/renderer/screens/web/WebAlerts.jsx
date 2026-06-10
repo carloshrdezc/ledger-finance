@@ -34,8 +34,8 @@ export default function WebAlerts({ t, onNavigate, onAdd }) {
   // CAR-351: drill from a flagged transaction to the transactions list,
   // filtered to that merchant so the user can review it in context.
   const goToFlagged = React.useCallback((flag) => {
-    setTxFilter(flag.title ? { merchant: flag.title } : null);
-    onNavigate('transactions');
+    setTxFilter(flag.merchantRaw ? { type: 'expense', merchant: flag.merchantRaw } : null);
+    onNavigate('tx');
   }, [setTxFilter, onNavigate]);
 
   return (

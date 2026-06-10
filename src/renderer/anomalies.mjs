@@ -37,6 +37,7 @@ const DUPLICATE_WINDOW_DAYS = 3;
  * @typedef {Object} AnomalyRow
  * @property {string} id        stable id (for dismiss/restore)
  * @property {string} txId
+ * @property {string} merchantRaw  raw (un-uppercased) merchant for drill-down filtering
  * @property {'amount-outlier'|'large-new-merchant'|'possible-duplicate'} reason
  * @property {AnomalySeverity} severity
  * @property {string} title     merchant/name
@@ -86,7 +87,7 @@ function median(values) {
 }
 
 function round2(value) {
-  return Math.round((value + Number.EPSILON) * 100) / 100 + 0;
+  return Math.round((value + Number.EPSILON) * 100) / 100;
 }
 
 function compareRows(a, b) {
@@ -117,21 +118,28 @@ export function detectTransactionAnomalies(transactions, todayIso = new Date().t
     expenses.push({ tx, date, amount: Math.abs(Number(tx.amt)) });
   }
 
-  // Category baselines (median of priors) over the full baseline window.
+  // Category baselines (median of priors) over the baseline window.
   const byCategory = new Map();
-  // Merchant first-seen dates, to recognize brand-new merchants.
-  const merchantFirstSeen = new Map();
   for (const e of expenses) {
     const cat = categoryKey(e.tx);
     if (cat) {
       if (!byCategory.has(cat)) byCategory.set(cat, []);
       byCategory.get(cat).push({ date: e.date, amount: e.amount });
     }
-    const merch = merchantKey(e.tx);
-    if (merch) {
-      const prev = merchantFirstSeen.get(merch);
-      if (!prev || e.date < prev) merchantFirstSeen.set(merch, e.date);
-    }
+  }
+
+  // Merchant first-seen dates — built from the FULL transaction history (not
+  // the 180-day baseline window), so an annual/semi-annual charge whose prior
+  // occurrence predates the window isn't mis-flagged as a brand-new merchant.
+  const merchantFirstSeen = new Map();
+  for (const tx of transactions || []) {
+    if (!isExpense(tx)) continue;
+    const date = parseIso(tx.date);
+    if (!date) continue;
+    const merch = merchantKey(tx);
+    if (!merch) continue;
+    const prev = merchantFirstSeen.get(merch);
+    if (!prev || date < prev) merchantFirstSeen.set(merch, date);
   }
 
   const rows = [];
@@ -155,6 +163,9 @@ export function detectTransactionAnomalies(transactions, todayIso = new Date().t
     const merch = merchantKey(tx);
     const cat = categoryKey(tx);
     const title = merch || normalizeText(tx.name) || (cat ? cat : 'TRANSACTION');
+    // Raw (un-uppercased) merchant for the drill-down filter, which compares
+    // against the original tx.name case-sensitively (see WebTransactions).
+    const merchantRaw = String(tx.name || '').split(' · ')[0];
     const dateIso = tx.date;
 
     // 1) possible-duplicate: same merchant + same amount within a few days.
@@ -172,6 +183,7 @@ export function detectTransactionAnomalies(transactions, todayIso = new Date().t
       pushRow({
         id: `anomaly:duplicate:${txId}`,
         txId,
+        merchantRaw,
         reason: 'possible-duplicate',
         severity: 'high',
         title,
@@ -194,6 +206,7 @@ export function detectTransactionAnomalies(transactions, todayIso = new Date().t
           pushRow({
             id: `anomaly:outlier:${txId}`,
             txId,
+            merchantRaw,
             reason: 'amount-outlier',
             severity: ratio >= 5 ? 'high' : 'medium',
             title,
@@ -206,25 +219,24 @@ export function detectTransactionAnomalies(transactions, todayIso = new Date().t
       }
     }
 
-    // 3) large-new-merchant: sizable first-ever charge from a never-seen merchant.
+    // 3) large-new-merchant: sizable first-ever charge from a never-seen
+    // merchant. merchantFirstSeen spans the full history, so this is true only
+    // when no earlier charge from this merchant exists anywhere in the ledger.
     if (merch && e.amount >= LARGE_NEW_MERCHANT_AMOUNT) {
       const firstSeen = merchantFirstSeen.get(merch);
       if (firstSeen && firstSeen.getTime() === e.date.getTime()) {
-        // first-seen == this tx's date AND no earlier occurrence exists
-        const hasEarlier = expenses.some(o => o.tx.id !== txId && merchantKey(o.tx) === merch && o.date < e.date);
-        if (!hasEarlier) {
-          pushRow({
-            id: `anomaly:new-merchant:${txId}`,
-            txId,
-            reason: 'large-new-merchant',
-            severity: 'medium',
-            title,
-            detail: `LARGE FIRST CHARGE FROM A NEW MERCHANT`,
-            metric: round2(e.amount),
-            date: dateIso,
-          });
-          continue;
-        }
+        pushRow({
+          id: `anomaly:new-merchant:${txId}`,
+          txId,
+          merchantRaw,
+          reason: 'large-new-merchant',
+          severity: 'medium',
+          title,
+          detail: `LARGE FIRST CHARGE FROM A NEW MERCHANT`,
+          metric: round2(e.amount),
+          date: dateIso,
+        });
+        continue;
       }
     }
   }

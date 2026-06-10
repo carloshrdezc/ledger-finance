@@ -75,6 +75,50 @@ describe('detectTransactionAnomalies', () => {
     expect(detectTransactionAnomalies(txs, TODAY).some(r => r.reason === 'large-new-merchant')).toBe(false);
   });
 
+  it('does not flag an annual merchant whose prior charge predates the baseline window (review m1)', () => {
+    // Prior charge ~1 year ago (outside the 180d baseline) — still not "new".
+    const txs = [
+      { id: 'annual-old', name: 'ACME INSURANCE', amt: -600, date: '2025-06-20', cat: 'insurance', path: ['insurance'] },
+      { id: 'annual-now', name: 'ACME INSURANCE', amt: -600, date: '2026-06-10', cat: 'insurance', path: ['insurance'] },
+    ];
+    expect(detectTransactionAnomalies(txs, TODAY).some(r => r.reason === 'large-new-merchant')).toBe(false);
+  });
+
+  it('carries raw merchant (not upper-cased) for the drill-down filter (review M1)', () => {
+    const txs = [
+      { id: 'a', name: 'Acme · Store', amt: -75, date: '2026-06-10', cat: 'shopping', path: ['shopping'] },
+      { id: 'b', name: 'Acme · Store', amt: -75, date: '2026-06-11', cat: 'shopping', path: ['shopping'] },
+    ];
+    const rows = detectTransactionAnomalies(txs, TODAY);
+    // merchantRaw must preserve original case so WebTransactions' case-sensitive
+    // merchant filter actually matches the transaction.
+    expect(rows[0].merchantRaw).toBe('Acme');
+    expect(rows[0].title).toBe('ACME'); // display title stays normalized
+  });
+
+  it('computes an even-length category median correctly (review T2)', () => {
+    // priors [10,10,30,30] → median 20; a 70 charge is 3.5× → flagged.
+    const txs = [
+      { id: 'p1', name: 'A', amt: -10, date: '2026-03-01', cat: 'food', path: ['food'] },
+      { id: 'p2', name: 'B', amt: -10, date: '2026-03-08', cat: 'food', path: ['food'] },
+      { id: 'p3', name: 'C', amt: -30, date: '2026-03-15', cat: 'food', path: ['food'] },
+      { id: 'p4', name: 'D', amt: -30, date: '2026-03-22', cat: 'food', path: ['food'] },
+      { id: 'big', name: 'E', amt: -70, date: '2026-06-10', cat: 'food', path: ['food'] },
+    ];
+    const flag = detectTransactionAnomalies(txs, TODAY).find(r => r.txId === 'big');
+    expect(flag).toBeTruthy();
+    expect(flag.detail).toMatch(/MEDIAN 20/);
+  });
+
+  it('suppresses a small-but-3x charge below the dollar floor (review T4)', () => {
+    // 3× the median but only $30 (< $50 MIN_OUTLIER_AMOUNT) → not flagged.
+    const txs = [
+      ...priors('coffee', 5, 6),
+      { id: 'smallbig', name: 'CAFE', amt: -30, date: '2026-06-10', cat: 'coffee', path: ['coffee'] },
+    ];
+    expect(detectTransactionAnomalies(txs, TODAY).some(r => r.txId === 'smallbig')).toBe(false);
+  });
+
   it('ignores income and transfers', () => {
     const txs = [
       { id: 'inc', name: 'SALARY', amt: 5000, date: '2026-06-10', cat: 'income', path: ['income'] },
