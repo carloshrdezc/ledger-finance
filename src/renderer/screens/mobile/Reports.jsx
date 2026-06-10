@@ -120,9 +120,17 @@ export default function Reports({ t, onBack, onGoToRoute }) {
   const incomeExpense = buildIncomeExpenseSeries(transactions, trendPeriods, rates, t.currency || 'USD');
   const categoryTrend = buildCategoryTrend(transactions, trendPeriods, 4, rates, t.currency || 'USD');
   const netWorthTrend = buildNetWorthTrend(accounts, transactions, trendPeriods, rates, t.currency || 'USD');
-  // CAR-350: cash-flow Sankey for the active report window.
-  const reportPeriods = [...new Set(reportTxs.map(tx => tx.date?.slice(0, 7)).filter(Boolean))];
-  const sankeyFlows = buildSankeyFlows(reportTxs, reportPeriods, rates, t.currency || 'USD');
+  // CAR-350: cash-flow Sankey for the active report window. reportTxs is already
+  // period/range-scoped; reportPeriods just enumerates the months it spans so
+  // buildSankeyFlows' own period filter is a no-op safety net here.
+  const reportPeriods = React.useMemo(
+    () => [...new Set(reportTxs.map(tx => tx.date?.slice(0, 7)).filter(Boolean))],
+    [reportTxs],
+  );
+  const sankeyFlows = React.useMemo(
+    () => buildSankeyFlows(reportTxs, reportPeriods, rates, t.currency || 'USD'),
+    [reportTxs, reportPeriods, rates, t.currency],
+  );
 
   // Rolling 12-month spend (absolute expense totals, USD-normalized).
   const momPeriods = getRecentPeriods(selectedPeriod, 12);

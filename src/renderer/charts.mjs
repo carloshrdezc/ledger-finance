@@ -114,6 +114,7 @@ export function buildSankeyFlows(transactions, periods, rates = { USD: 1 }, repo
   const outflows = new Map();
 
   for (const tx of transactions) {
+    if (tx.cat === 'transfer') continue;   // CAR-350: internal movements aren't cash flow
     if (!periods.includes(txPeriod(tx))) continue;
     const cat = txCategory(tx) || (tx.amt >= 0 ? 'income' : 'other');
     const value = toReporting(tx.amt, tx.ccy, rates, tx.date, reportingCcy);

@@ -48,8 +48,9 @@ export default function WebReports({ t, onNavigate, onAdd }) {
   const incomeExpense = buildIncomeExpenseSeries(transactions, trendPeriods, rates, t.currency || 'USD');
   const netWorthTrend = buildNetWorthTrend(accounts, transactions, trendPeriods, rates, t.currency || 'USD');
   const categoryTrend = buildCategoryTrend(transactions, trendPeriods, 5, rates, t.currency || 'USD');
-  // CAR-350: Sankey reflects the active report window (period or range), built
-  // from the distinct months present in reportTxs.
+  // CAR-350: Sankey reflects the active report window (period or range). reportTxs
+  // is already scoped; reportPeriods just enumerates its months so buildSankeyFlows'
+  // own period filter is a no-op safety net here.
   const reportPeriods = React.useMemo(
     () => [...new Set(reportTxs.map(tx => tx.date?.slice(0, 7)).filter(Boolean))],
     [reportTxs],

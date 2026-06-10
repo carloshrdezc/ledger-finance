@@ -120,3 +120,20 @@ test('buildSankeyFlows omits savings flow when spending exceeds income', () => {
   const { links } = buildSankeyFlows(txs, ['2026-05'], RATES);
   expect(links.some(l => l.target === '__savings__')).toBe(false);
 });
+
+test('buildSankeyFlows excludes internal transfers from cash flow', () => {
+  // Transfer legs have cat:'transfer' and path:[]. Without filtering, the +leg
+  // would mislabel as income and the -leg as 'other' spending — double-counting
+  // a single internal movement (CAR-350 review M1).
+  const txs = [
+    { date: '2026-05-01', cat: 'income', path: ['income'], amt: 1000, acct: 'chk', ccy: 'USD' },
+    { date: '2026-05-02', cat: 'food', path: ['food'], amt: -200, acct: 'chk', ccy: 'USD' },
+    { date: '2026-05-03', cat: 'transfer', path: [], amt: -5000, acct: 'chk', ccy: 'USD', transferId: 't1' },
+    { date: '2026-05-03', cat: 'transfer', path: [], amt: 5000, acct: 'sav', ccy: 'USD', transferId: 't1' },
+  ];
+  const { nodes, links, totalIn, totalOut } = buildSankeyFlows(txs, ['2026-05'], RATES);
+  expect(totalIn).toBe(1000);
+  expect(totalOut).toBe(200);
+  expect(nodes.some(n => n.label === 'income' && n.value === 6000)).toBe(false);
+  expect(links.some(l => l.value === 5000)).toBe(false);
+});

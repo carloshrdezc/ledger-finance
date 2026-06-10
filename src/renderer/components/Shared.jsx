@@ -260,32 +260,31 @@ export function SankeyChart({ flows, categoryTree, accent = A.ink, width = 520, 
   const outX = width - pad - nodeW;
   const usable = height - pad * 2;
 
-  // Each side scales independently so the taller stack fills the canvas; the
-  // shorter stack uses the same per-unit scale and is vertically centered.
+  // One shared pixel-per-currency scale so a band of value V is the same height
+  // on both sides — the taller stack fills the canvas, the shorter is centered.
   const sumVals = (ns) => ns.reduce((s, n) => s + n.value, 0);
   const inTotal = sumVals(ins) || 1;
   const outTotal = sumVals(outs) || 1;
   const maxTotal = Math.max(inTotal, outTotal);
-  const stackH = (ns) => usable - gap * Math.max(0, ns.length - 1);
-  const unit = (ns, total) => (stackH(ns) * (total / maxTotal)) / (total || 1);
+  const maxBands = Math.max(ins.length, outs.length);
+  const unit = (usable - gap * Math.max(0, maxBands - 1)) / maxTotal;
 
-  const layout = (ns, x, total) => {
-    const u = unit(ns, total);
-    const h = ns.reduce((s, n) => s + n.value * u, 0) + gap * Math.max(0, ns.length - 1);
-    let y = pad + (usable - h) / 2;
+  const layout = (ns, x) => {
+    const stack = ns.reduce((s, n) => s + Math.max(1, n.value * unit), 0) + gap * Math.max(0, ns.length - 1);
+    let y = pad + (usable - stack) / 2;
     return ns.map(n => {
-      const bandH = Math.max(1, n.value * u);
+      const bandH = Math.max(1, n.value * unit);
       const rect = { ...n, x, y, h: bandH };
       y += bandH + gap;
       return rect;
     });
   };
 
-  const inRects = layout(ins, inX, inTotal);
-  const outRects = layout(outs, outX, outTotal);
+  const inRects = layout(ins, inX);
+  const outRects = layout(outs, outX);
   const hubH = Math.max(...inRects.map(r => r.y + r.h), ...outRects.map(r => r.y + r.h), pad)
     - Math.min(...inRects.map(r => r.y), ...outRects.map(r => r.y), pad);
-  const hubTop = Math.min(...inRects.map(r => r.y), ...outRects.map(r => r.y));
+  const hubTop = Math.min(...inRects.map(r => r.y), ...outRects.map(r => r.y), pad);
 
   const ribbon = (x1, y1, x2, y2, h) => {
     const mx = (x1 + x2) / 2;
@@ -293,13 +292,14 @@ export function SankeyChart({ flows, categoryTree, accent = A.ink, width = 520, 
       + `L${x2},${y2 + h} C${mx},${y2 + h} ${mx},${y1 + h} ${x1},${y1 + h} Z`;
   };
 
-  // Hub anchor offsets: ribbons stack along the hub edge in the same order.
+  // Ribbons stack along the hub edge in band order, advancing by band height +
+  // gap so each ribbon lines up with its source/target band (CAR-350 review m2).
   let hubInY = hubTop;
   let hubOutY = hubTop;
   const labelFor = (n) => {
     if (n.id === '__hub__') return 'BUDGET';
     if (n.id === '__savings__') return 'SAVINGS';
-    if (n.label === '__other__') return 'OTHER (REST)';
+    if (n.label === '__other__') return 'OTHER CATEGORIES';
     return (categoryTree && categoryTree[n.label]?.label) || (n.label || '').toUpperCase();
   };
 
@@ -308,13 +308,13 @@ export function SankeyChart({ flows, categoryTree, accent = A.ink, width = 520, 
       <svg viewBox={`0 0 ${width} ${height}`} width="100%" height={height} preserveAspectRatio="none" style={{ display: 'block' }}>
         {inRects.map(r => {
           const d = ribbon(inX + nodeW, r.y, hubX, hubInY, r.h);
-          hubInY += r.h;
+          hubInY += r.h + gap;
           return <path key={`lin-${r.id}`} d={d} fill={accent} opacity="0.22" />;
         })}
         {outRects.map(r => {
           const isSavings = r.id === '__savings__';
           const d = ribbon(hubX + nodeW, hubOutY, outX, r.y, r.h);
-          hubOutY += r.h;
+          hubOutY += r.h + gap;
           return <path key={`lout-${r.id}`} d={d} fill={isSavings ? A.pos : A.neg} opacity="0.18" />;
         })}
         <rect x={hubX} y={hubTop} width={nodeW} height={Math.max(1, hubH)} fill={A.ink} />
