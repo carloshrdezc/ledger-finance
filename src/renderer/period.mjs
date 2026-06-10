@@ -130,10 +130,10 @@ function txBudgetCategory(tx) {
   return (tx.path || [tx.cat])[0];
 }
 
-function spentByCategory(transactions, period, cat, rates) {
+function spentByCategory(transactions, period, cat, rates, reportingCcy = 'USD') {
   return transactions
     .filter(tx => tx.amt < 0 && tx.date?.startsWith(period) && txBudgetCategory(tx) === cat)
-    .reduce((sum, tx) => sum + Math.abs(toReportingCurrency(tx.amt, tx.ccy, rates, 'USD', tx.date)), 0);
+    .reduce((sum, tx) => sum + Math.abs(toReportingCurrency(tx.amt, tx.ccy, rates, reportingCcy, tx.date)), 0);
 }
 
 function roundCents(value) {
@@ -147,15 +147,19 @@ function priorPeriods(transactions, selectedPeriod) {
   return periods;
 }
 
-export function buildBudgetRows(budgets, transactions, selectedPeriod, rates = { USD: 1 }) {
+// CAR-348: `reportingCcy` is the user's PRIMARY currency. Both the budget
+// limit and the spend are expressed in this currency before comparison, so a
+// mixed-currency category (e.g. EUR + USD txs, primary EUR) compares
+// like-for-like. Defaults to 'USD' for backward compatibility.
+export function buildBudgetRows(budgets, transactions, selectedPeriod, rates = { USD: 1 }, reportingCcy = 'USD') {
   transactions = transactions.filter(tx => tx.cat !== 'transfer');
   const periods = priorPeriods(transactions, selectedPeriod);
   return budgets.map(budget => {
     const rollover = periods.reduce((sum, period) => {
-      const spent = spentByCategory(transactions, period, budget.cat, rates);
+      const spent = spentByCategory(transactions, period, budget.cat, rates, reportingCcy);
       return sum + budget.limit - spent;
     }, 0);
-    const spent = spentByCategory(transactions, selectedPeriod, budget.cat, rates);
+    const spent = spentByCategory(transactions, selectedPeriod, budget.cat, rates, reportingCcy);
     const available = budget.limit + rollover;
     const left = available - spent;
     return {

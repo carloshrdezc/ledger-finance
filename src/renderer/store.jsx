@@ -568,8 +568,8 @@ function StoreProviderImpl({ children }) {
   );
   const periodLabel = React.useMemo(() => formatPeriodLabel(selectedPeriod, budgetStartDay), [selectedPeriod, budgetStartDay]);
   const budgetRows = React.useMemo(
-    () => buildBudgetRows(Array.isArray(budgets) ? budgets : [], transactions, selectedPeriod, rates),
-    [budgets, transactions, selectedPeriod, rates],
+    () => buildBudgetRows(Array.isArray(budgets) ? budgets : [], transactions, selectedPeriod, rates, currency),
+    [budgets, transactions, selectedPeriod, rates, currency],
   );
   const billRows = React.useMemo(
     () => buildBillRows(bills, transactions, selectedPeriod),
@@ -605,18 +605,21 @@ function StoreProviderImpl({ children }) {
   // rows the Accounts / Bills / Budgets / Goals surfaces already compute, so
   // it stays provably consistent with them and re-renders whenever any of
   // those inputs change (transactions edit balances, bills, and budgets).
-  // Computed in USD base via the FX rate history; the consuming hero card
-  // converts the final figure to the user's reporting currency the same way
-  // net worth is converted on the dashboard.
+  // CAR-348: computed directly in the user's PRIMARY (reporting) currency.
+  // `convert` maps each account/bill amount from its own ccy straight to the
+  // primary ccy in ONE call; `budgetRows.left` is already in the primary ccy
+  // (buildBudgetRows now threads `currency`); goals are bare primary-ccy
+  // numbers. The consuming hero card therefore renders these values directly
+  // WITHOUT a second conversion (doing so would double-convert).
   const safeToSpend = React.useMemo(
     () => computeSafeToSpend({
       accounts: accountsIncludedInTotals,
       billRows,
       budgetRows,
       goals,
-      convert: (amt, ccy) => toReportingCurrency(amt, ccy, rates, 'USD'),
+      convert: (amt, ccy) => toReportingCurrency(amt, ccy, rates, currency),
     }),
-    [accountsIncludedInTotals, billRows, budgetRows, goals, rates],
+    [accountsIncludedInTotals, billRows, budgetRows, goals, rates, currency],
   );
 
   const isAppEmpty = React.useMemo(

@@ -139,14 +139,12 @@ export function sumGoalsRemaining(goals) {
  */
 export function computeSafeToSpend({ accounts, billRows, budgetRows, goals, convert } = {}) {
   // M1 (CAR-344 review): return FULL-PRECISION component values, do NOT round
-  // to cents here. The consuming hero card FX-converts each component
-  // (`toReporting(value, 'USD')`) and then `fmtMoney` rounds for display.
-  // Rounding in USD *before* that conversion would drift by a sub-cent versus
-  // the Accounts/Bills/Budgets screens (which convert-then-round, the
-  // net-worth pattern) for any non-USD reporting currency. Keeping precision
-  // here makes the breakdown line tie out to the penny in every locale.
-  // `isNegative` is derived from a cents-rounded copy so a -0.004-style FP
-  // residue never flips the sign / color.
+  // to cents here. CAR-348: the consuming hero card now receives each component
+  // ALREADY in the user's primary (reporting) currency — the store's `convert`
+  // fn maps every input straight to the primary ccy in one step — and `fmtMoney`
+  // rounds for display. Keeping full precision here lets the breakdown line tie
+  // out to the penny in every locale. `isNegative` is derived from a
+  // cents-rounded copy so a -0.004-style FP residue never flips the sign/color.
   const liquidBalance = sumLiquidBalance(accounts, convert);
   const unpaidBills = sumUnpaidBills(billRows, convert);
   const budgetRemaining = sumBudgetRemaining(budgetRows);

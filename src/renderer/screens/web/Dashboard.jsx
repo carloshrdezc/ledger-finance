@@ -49,8 +49,8 @@ export default function Dashboard({ t, onNavigate, onAdd }) {
 
   const netWorthTrend = React.useMemo(() => {
     const days = period === 'MAX' ? 365 : PERIOD_DAYS[period];
-    return buildNetWorthDailyTrend(accountsIncludedInTotals, transactions, todayIso, days, rates);
-  }, [accountsIncludedInTotals, transactions, todayIso, period, rates]);
+    return buildNetWorthDailyTrend(accountsIncludedInTotals, transactions, todayIso, days, rates, t.currency || 'USD');
+  }, [accountsIncludedInTotals, transactions, todayIso, period, rates, t.currency]);
   const netWorthSpark = netWorthTrend.map(point => point.value);
   const chartTicks = React.useMemo(() => {
     if (netWorthTrend.length <= 5) return netWorthTrend;
@@ -137,11 +137,14 @@ export default function Dashboard({ t, onNavigate, onAdd }) {
           still be non-empty and the card would deref undefined. Defensive on
           purpose. */}
       {accountsIncludedInTotals.length > 0 && safeToSpend && (() => {
-        const safeVal      = toReporting(safeToSpend.safeToSpend, 'USD');
-        const liquidVal    = toReporting(safeToSpend.liquidBalance, 'USD');
-        const billsVal     = toReporting(safeToSpend.unpaidBills, 'USD');
-        const budgetsVal   = toReporting(safeToSpend.budgetRemaining, 'USD');
-        const goalsVal     = toReporting(safeToSpend.goalsRemaining, 'USD');
+        // CAR-348: safeToSpend components are ALREADY in the primary
+        // (reporting) currency — the store converts each input in one step.
+        // Render them directly; a second toReporting() here would double-convert.
+        const safeVal      = safeToSpend.safeToSpend;
+        const liquidVal    = safeToSpend.liquidBalance;
+        const billsVal     = safeToSpend.unpaidBills;
+        const budgetsVal   = safeToSpend.budgetRemaining;
+        const goalsVal     = safeToSpend.goalsRemaining;
         const negative     = safeToSpend.isNegative;
         return (
           <div style={{ marginTop: 18, border: '2px solid ' + A.ink, padding: '16px 18px' }}>
