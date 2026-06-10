@@ -64,8 +64,8 @@ export default function WebSettings({ t, onNavigate, onAdd, setAccent, setDensit
   };
 
   // CAR-218: liquid-account selection. Same predicate the data layer uses
-  // (CHK/SAV in USD), so toggling here matches what the forecast actually
-  // projects.
+  // (CHK/SAV, any currency — CAR-359), so toggling here matches what the
+  // forecast actually projects.
   const liquidAccounts = React.useMemo(
     () => (accountsWithBalance || []).filter(isLiquidAccount),
     [accountsWithBalance],

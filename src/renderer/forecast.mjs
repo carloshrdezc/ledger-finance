@@ -9,9 +9,16 @@
  * Contract:
  *   - `accounts` is expected to follow the `accountsWithBalance` shape from
  *     `store.jsx`.
- *   - Only liquid accounts are included by default: type `CHK` and `SAV`.
- *   - Non-USD accounts are skipped rather than FX-converted. That keeps the
- *     projection deterministic until FX rules become a follow-up setting.
+ *   - Only liquid accounts are included: type `CHK` and `SAV`, regardless of
+ *     currency. Non-USD liquid accounts are projected too (CAR-359).
+ *   - When an optional `{ rates, reportingCcy }` is supplied, each account's
+ *     balance and event deltas are converted into `reportingCcy` so the
+ *     emitted `projectedBalance` values are homogeneous and can be summed
+ *     across accounts. Account balances use current valuation (latest rate,
+ *     no date); event flows convert using the event's own ccy on the event
+ *     date — matching the app-wide convention (see netWorthAttribution.mjs).
+ *   - With no rates/reportingCcy passed, behavior is unchanged: balances and
+ *     deltas stay in each account's native (USD-implicit) currency.
  *   - `transactions` and recurring-rule events are applied only when their
  *     dates fall within `[fromDate, fromDate + daysAhead)`.
  *   - Output rows are ordered by date, then by account order in the input.
@@ -20,6 +27,7 @@
  */
 
 import { buildCashFlowForecast } from './cashFlowForecast.mjs';
+import { toReportingCurrency } from './fx.mjs';
 
 const MS_PER_DAY = 86400000;
 const LIQUID_TYPES = new Set(['CHK', 'SAV']);
@@ -37,11 +45,7 @@ function addDays(iso, days) {
 }
 
 export function isLiquidAccount(account) {
-  return Boolean(
-    account &&
-    LIQUID_TYPES.has(account.type) &&
-    (account.ccy == null || account.ccy === 'USD')
-  );
+  return Boolean(account && LIQUID_TYPES.has(account.type));
 }
 
 function buildEvent(date, amount, source) {
@@ -74,11 +78,21 @@ function normalizeTransaction(tx) {
  * @param {Array<Object>} recurringRules
  * @param {string} fromDate ISO 'YYYY-MM-DD' inclusive start date
  * @param {number} [daysAhead=90] number of days to project forward
+ * @param {{rates?:Object, reportingCcy?:string}} [fx]
+ *   When `rates` and `reportingCcy` are both provided, projectedBalance values
+ *   (and event deltas) are converted into `reportingCcy` so they can be summed
+ *   across accounts of differing currencies. Omitting it preserves the legacy
+ *   account-native (USD-implicit) behavior.
  * @returns {Array<{date:string, accountId:string, projectedBalance:number, events:Array<Object>, isRiskEvent:boolean}>}
  */
-export function projectBalances(accounts, transactions, recurringRules, fromDate, daysAhead = 90) {
+export function projectBalances(accounts, transactions, recurringRules, fromDate, daysAhead = 90, fx = {}) {
   const horizon = Math.max(0, Number(daysAhead) || 0);
   if (!fromDate || horizon === 0) return [];
+
+  const { rates, reportingCcy } = fx || {};
+  const convert = (rates && reportingCcy)
+    ? ((amt, ccy, date) => toReportingCurrency(amt, ccy || reportingCcy, rates, reportingCcy, date))
+    : null;
 
   const liquidAccounts = (Array.isArray(accounts) ? accounts : [])
     .filter(isLiquidAccount)
@@ -122,7 +136,12 @@ export function projectBalances(accounts, transactions, recurringRules, fromDate
     addToBucket(event.acct, event);
   }
 
-  const balancesByAccount = new Map(liquidAccounts.map(account => [account.id, account.balance]));
+  // Opening balances use current valuation (latest rate, no date); event
+  // deltas convert using each event's own ccy on the event date.
+  const balancesByAccount = new Map(liquidAccounts.map(account => [
+    account.id,
+    convert ? convert(account.balance, account.ccy) : account.balance,
+  ]));
   const rows = [];
 
   for (let day = 0; day < horizon; day++) {
@@ -131,7 +150,10 @@ export function projectBalances(accounts, transactions, recurringRules, fromDate
       const key = `${account.id}|${date}`;
       const dayEvents = eventsByAccountAndDate.get(key) || [];
       const priorBalance = balancesByAccount.get(account.id) || 0;
-      const delta = dayEvents.reduce((sum, event) => sum + (Number.isFinite(event.amount) ? event.amount : 0), 0);
+      const delta = dayEvents.reduce((sum, event) => {
+        const amount = Number.isFinite(event.amount) ? event.amount : 0;
+        return sum + (convert ? convert(amount, event.ccy, event.date) : amount);
+      }, 0);
       const projectedBalance = priorBalance + delta;
       balancesByAccount.set(account.id, projectedBalance);
       rows.push({

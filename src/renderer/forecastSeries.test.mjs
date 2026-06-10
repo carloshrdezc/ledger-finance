@@ -1,5 +1,7 @@
 import { test, expect, describe } from 'vitest';
 import { compactForecastSeries } from './forecastSeries.mjs';
+import { projectBalances } from './forecast.mjs';
+import { DEFAULT_RATES } from './fx.mjs';
 
 const row = (date, accountId, projectedBalance, isRiskEvent = false) => ({
   date, accountId, projectedBalance, isRiskEvent, events: [],
@@ -98,5 +100,50 @@ describe('compactForecastSeries', () => {
       row('2026-06-01', 'a2', 500),
     ];
     expect(compactForecastSeries(rows).totals).toEqual([500]);
+  });
+});
+
+describe('forecast pipeline mixed-currency aggregation (CAR-359)', () => {
+  // DEFAULT_RATES: USD=1, MXN=17.2 (1 USD = N units of ccy). Primary = MXN.
+  const accounts = [
+    { id: 'usd', name: 'USD CHK', type: 'CHK', ccy: 'USD', balance: 1000 },
+    { id: 'mxn', name: 'MXN SAV', type: 'SAV', ccy: 'MXN', balance: 5000 },
+  ];
+
+  test('per-date total is the sum of each account balance CONVERTED to primary ccy, not the raw sum', () => {
+    const rows = projectBalances(
+      accounts, [], [], '2026-01-01', 1,
+      { rates: DEFAULT_RATES, reportingCcy: 'MXN' },
+    );
+    const out = compactForecastSeries(rows);
+    // USD 1000 -> 17200 MXN; MXN 5000 -> 5000 MXN. Converted total = 22200.
+    // Raw (unconverted, buggy) sum would have been 1000 + 5000 = 6000.
+    expect(out.totals[0]).toBeCloseTo(22200, 6);
+    expect(out.totals[0]).not.toBe(6000);
+  });
+
+  test('an event in a non-USD account moves the converted total by the converted delta', () => {
+    const rows = projectBalances(
+      accounts,
+      // -344 MXN expense on the MXN account on day 1.
+      [{ id: 'tx', name: 'TIENDA', amt: -344, acct: 'mxn', ccy: 'MXN', date: '2026-01-02', cat: 'food' }],
+      [],
+      '2026-01-01',
+      2,
+      { rates: DEFAULT_RATES, reportingCcy: 'MXN' },
+    );
+    const out = compactForecastSeries(rows);
+    // Day 0: 17200 + 5000 = 22200. Day 1: 17200 + (5000 - 344) = 21856.
+    expect(out.totals[0]).toBeCloseTo(22200, 6);
+    expect(out.totals[1]).toBeCloseTo(21856, 6);
+  });
+
+  test('backward-compat: all-USD pipeline with no rates is unchanged', () => {
+    const usdOnly = [
+      { id: 'a', type: 'CHK', ccy: 'USD', balance: 1000 },
+      { id: 'b', type: 'SAV', ccy: 'USD', balance: 500 },
+    ];
+    const rows = projectBalances(usdOnly, [], [], '2026-01-01', 1);
+    expect(compactForecastSeries(rows).totals[0]).toBe(1500);
   });
 });
