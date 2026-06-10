@@ -69,4 +69,14 @@ describe('buildCashFlowCalendar', () => {
     // Rows are all January; February filter yields nothing.
     expect(buildCashFlowCalendar(rows, '2026-02').days).toHaveLength(0);
   });
+
+  it('does not flag a sub-cent-negative day that rounds to zero (CAR-349 review M1)', () => {
+    // A residual like -0.004 must not flag RISK when the day renders as $0.00.
+    const rows = [
+      { date: '2026-01-01', accountId: 'chk', projectedBalance: -0.004, events: [], isRiskEvent: false },
+    ];
+    const cal = buildCashFlowCalendar(rows, '2026-01');
+    expect(cal.days[0].balance).toBe(0);
+    expect(cal.days[0].isRisk).toBe(false);
+  });
 });

@@ -21,7 +21,8 @@
  * @property {number} inflow   sum of positive event amounts that day (>= 0)
  * @property {number} outflow  sum of negative event amounts as positive (>= 0)
  * @property {Array<{name:string, amount:number, kind:string, source:string}>} events
- *                             bill/tx events landing this day (deduped per account row)
+ *                             scheduled items landing this day (one entry per item;
+ *                             projectBalances keys events per account, so no cross-account dup)
  * @property {boolean} isRisk  any account overdrawn OR total balance < 0 this day
  */
 
@@ -78,15 +79,20 @@ export function buildCashFlowCalendar(rows, period, accountIds = null) {
     }
   }
 
-  const days = Array.from(byDate.values()).map(entry => ({
-    ...entry,
-    day: Number(entry.date.slice(8, 10)),
-    balance: roundCents(entry.balance),
-    inflow: roundCents(entry.inflow),
-    outflow: roundCents(entry.outflow),
-    // A day is risky if any account was overdrawn OR the rolled-up total dips below 0.
-    isRisk: entry.isRisk || entry.balance < 0,
-  }));
+  const days = Array.from(byDate.values()).map(entry => {
+    const balance = roundCents(entry.balance);
+    return {
+      ...entry,
+      day: Number(entry.date.slice(8, 10)),
+      balance,
+      inflow: roundCents(entry.inflow),
+      outflow: roundCents(entry.outflow),
+      // A day is risky if any account was overdrawn OR the rounded total dips
+      // below 0. Compare the rounded value so the flag matches the displayed
+      // balance (a -0.004 residual shouldn't flag a $0.00 day as RISK).
+      isRisk: entry.isRisk || balance < 0,
+    };
+  });
 
   let minBalance = days.length ? days[0].balance : 0;
   let minDate = days.length ? days[0].date : null;
@@ -103,5 +109,6 @@ export function buildCashFlowCalendar(rows, period, accountIds = null) {
 }
 
 function roundCents(value) {
-  return Math.round((value + Number.EPSILON) * 100) / 100;
+  // `+ 0` normalizes -0 to 0 so a sub-cent-negative residual never renders as "-$0.00".
+  return Math.round((value + Number.EPSILON) * 100) / 100 + 0;
 }

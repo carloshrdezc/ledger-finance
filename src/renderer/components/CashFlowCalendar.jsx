@@ -29,7 +29,8 @@ export default function CashFlowCalendar({ t }) {
   );
 
   // Project from the first of the selected month through the end of that month.
-  const [year, month] = selectedPeriod.split('-').map(Number);
+  const validPeriod = /^\d{4}-\d{2}$/.test(selectedPeriod || '');
+  const [year, month] = (validPeriod ? selectedPeriod : '1970-01').split('-').map(Number);
   const daysInMonth = new Date(year, month, 0).getDate();
   const firstIso = `${selectedPeriod}-01`;
 
