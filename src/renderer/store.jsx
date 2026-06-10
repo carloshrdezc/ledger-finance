@@ -741,6 +741,41 @@ function StoreProviderImpl({ children }) {
     prev.map(tx => tx.id === id ? { ...tx, ...changes } : tx)
   ), [setTxs]);
 
+  // CAR-346: receipt/photo + note attachments on transactions. `note` reuses
+  // the SAME field/convention already used by transfer legs (createTransfer /
+  // updateTransfer). `attachments` is an optional array of downscaled,
+  // size-capped base64 data-URL images stored on the tx object so they ride
+  // the existing encrypted persistence + backup `transactions` slice. All
+  // fields are optional and backward-compatible (txs without them are
+  // unchanged). Built on the same setTxs map primitive as updateTx.
+  const setTxNote = React.useCallback((id, note) => setTxs(prev =>
+    prev.map(tx => {
+      if (tx.id !== id) return tx;
+      const trimmed = (note || '').trim();
+      if (trimmed) return { ...tx, note: trimmed };
+      // Empty note clears the field rather than storing an empty string.
+      const { note: _drop, ...rest } = tx;
+      return rest;
+    })
+  ), [setTxs]);
+
+  const addTxAttachment = React.useCallback((id, attachment) => setTxs(prev =>
+    prev.map(tx => tx.id === id
+      ? { ...tx, attachments: [...(tx.attachments || []), attachment] }
+      : tx)
+  ), [setTxs]);
+
+  const removeTxAttachment = React.useCallback((id, attachmentId) => setTxs(prev =>
+    prev.map(tx => {
+      if (tx.id !== id) return tx;
+      const next = (tx.attachments || []).filter(a => a.id !== attachmentId);
+      if (next.length > 0) return { ...tx, attachments: next };
+      // Drop the field entirely when the last attachment is removed.
+      const { attachments: _drop, ...rest } = tx;
+      return rest;
+    })
+  ), [setTxs]);
+
   const addCategory = React.useCallback((pathParts, label) => {
     setCatTree(prev => {
       const tree = JSON.parse(JSON.stringify(prev));
@@ -1580,6 +1615,10 @@ function StoreProviderImpl({ children }) {
       updateTransfer,
       deleteTransfer,
       updateTx,
+      // CAR-346 receipt/photo + note attachments
+      setTxNote,
+      addTxAttachment,
+      removeTxAttachment,
       // CAR-82 bulk methods
       deleteTxs,
       hideTxs,

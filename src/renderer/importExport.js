@@ -732,6 +732,8 @@ export function exportXLSX(store) {
     // CAR-348: optional per-tx foreign amount provenance. Blank when absent.
     'Original Amount': tx.origAmt ?? '',
     'Original Currency': tx.origCcy ?? '',
+    // CAR-346: free-text note (text only — image data is never exported).
+    Note: tx.note || '',
     Memo: tx.memo || '',
   }));
   const accounts = (store.accounts || []).map(acct => ({
@@ -770,7 +772,7 @@ export function exportXLSX(store) {
 export function exportCSV(transactions) {
   const esc = s => `"${(s || '').replace(/"/g, '""')}"`;
   return [
-    'Date,Description,Amount,Category,Account,Currency,Original Amount,Original Currency,Memo',
+    'Date,Description,Amount,Category,Account,Currency,Original Amount,Original Currency,Note,Memo',
     ...transactions.map(tx =>
       [
         tx.date || new Date().toISOString().slice(0, 10),
@@ -782,6 +784,8 @@ export function exportCSV(transactions) {
         // CAR-348: optional foreign-amount provenance; blank columns when absent.
         tx.origAmt != null ? Number(tx.origAmt).toFixed(2) : '',
         tx.origCcy || '',
+        // CAR-346: free-text note (text only — image data is never exported to CSV).
+        esc(tx.note),
         esc(tx.memo),
       ].join(',')
     ),

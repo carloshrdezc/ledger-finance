@@ -9,6 +9,7 @@ import { ALL_CURRENCIES, convertBetween } from '../../fx.mjs';
 import { useFx } from '../../useFx';
 import AccountFormModal from '../../components/AccountFormModal';
 import CategoryPicker from '../../components/CategoryPicker';
+import AttachmentsField from '../../components/AttachmentsField';
 
 export default function WebAddModal({ t, onClose, editTx = null, convertFromTxs = null }) {
   const { addTransactions, updateTx, deleteTx, deleteTransfer, createTransfer, updateTransfer, convertToTransfer, transactions, accountsWithBalance, selectedPeriod, rules, categoryTree } = useUndoableStore();
@@ -46,6 +47,13 @@ export default function WebAddModal({ t, onClose, editTx = null, convertFromTxs 
   );
   const [catManuallySet, setCatManuallySet] = React.useState(!!editTx);
   const [acct, setAcct]         = React.useState(editTx ? editTx.acct : (accountsWithBalance[0]?.id || 'chk'));
+
+  // CAR-346: optional free-text note + receipt/photo attachments. Both are
+  // stored on the tx object; attachments are downscaled, size-capped base64
+  // data-URLs that ride the encrypted store + backup. Reuses the same `note`
+  // field/convention as transfer legs.
+  const [note, setNote] = React.useState(editTx?.note || '');
+  const [attachments, setAttachments] = React.useState(editTx?.attachments || []);
   const [date, setDate]         = React.useState(
     editTx ? editTx.date
       : convertingPair ? convertingPair.out.date
@@ -178,6 +186,14 @@ export default function WebAddModal({ t, onClose, editTx = null, convertFromTxs 
         ccy: acctCcyForTx,
         acct,
       };
+      // CAR-346: persist optional note + attachments on the tx. Clear the
+      // note field when blanked; omit attachments key when empty so plain
+      // txs stay clean / backward-compatible.
+      const trimmedNote = note.trim();
+      if (trimmedNote) changes.note = trimmedNote;
+      else if (editTx?.note) changes.note = undefined;
+      if (attachments.length > 0) changes.attachments = attachments;
+      else if (editTx?.attachments) changes.attachments = undefined;
       if (usingForeign) {
         changes.origAmt = sign * Math.abs(parseFloat(foreignAmt));
         changes.origCcy = foreignCcy;
@@ -436,6 +452,20 @@ export default function WebAddModal({ t, onClose, editTx = null, convertFromTxs 
                   <option key={a.id} value={a.id}>{a.name} · {a.code}</option>
                 ))}
               </select>
+            </div>
+
+            <ARule />
+
+            {/* CAR-346: note + receipt/photo attachments */}
+            <div style={{ margin: '12px 0 4px' }}>
+              <AttachmentsField
+                t={t}
+                note={note}
+                onNoteChange={setNote}
+                attachments={attachments}
+                onAddAttachment={att => setAttachments(prev => [...prev, att])}
+                onRemoveAttachment={id => setAttachments(prev => prev.filter(a => a.id !== id))}
+              />
             </div>
           </>
         )}
