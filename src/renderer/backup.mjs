@@ -5,7 +5,7 @@
 export const BACKUP_FORMAT_VERSION = 2;
 export const BACKUP_TYPE = 'ledger-backup';
 
-// 16 user-data slices total: 14 in SLICES + 2 in SCALAR_SLICES.
+// 18 user-data slices total: 15 in SLICES + 3 in SCALAR_SLICES.
 // Excluded (session-ephemera, reset on restore): txFilter, dismissedAlerts,
 // dismissedInsights, welcomeSeen, fxMigrationToastSeen, lastBackupAt,
 // backupReminderInterval, backupReminderSnoozedUntil,
@@ -30,12 +30,17 @@ const SLICES = [
   ['trades',             'trades',           [], 'array'],
   ['rates',              'fxRates',          {}, 'object'],
   ['ratesUpdated',       'fxRatesUpdated',   {}, 'object'],
+  // CAR-345: debt payoff planner. Optional slice — old backups without it
+  // restore to [] (backward-compatible; no BACKUP_FORMAT_VERSION bump needed).
+  ['debts',              'debts',            [], 'array'],
 ];
 
 const SCALAR_SLICES = [
   // [stateKey, backupKey, defaultValue]
   ['selectedPeriod',  'selectedPeriod',  null],
   ['budgetStartDay',  'budgetStartDay',  1],
+  // CAR-345: shared "extra monthly payment" budget for the payoff planner.
+  ['debtExtraPayment', 'debtExtraPayment', 0],
 ];
 
 function isPlainObject(v) {
