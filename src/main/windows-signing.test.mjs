@@ -24,6 +24,13 @@ describe('CAR-363 · Windows signing + auto-update contract', () => {
     expect(win.signtoolOptions.signingHashAlgorithms).toContain('sha256');
   });
 
+  it('disables update signature verification (CAR-365 interim — unsigned builds)', () => {
+    // Until a real Authenticode cert is configured (CAR-363), the update channel
+    // can't enforce signatures or Windows auto-update rejects every unsigned
+    // build. Re-enable (delete this / set true) once signing is live.
+    expect(win.verifyUpdateCodeSignature).toBe(false);
+  });
+
   it('wires the Windows signing secrets into the release workflow', () => {
     expect(workflow).toContain('CSC_LINK: ${{ secrets.WINDOWS_CERT_PFX_BASE64 }}');
     expect(workflow).toContain('CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}');

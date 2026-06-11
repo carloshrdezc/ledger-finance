@@ -11,6 +11,12 @@ installs it.
 > v1.0.2 installs fine. **Auto-updates are verified**, so every Windows
 > auto-update is blocked until builds are signed.
 
+> **Interim (CAR-365, since v1.0.5):** `build.win.verifyUpdateCodeSignature` is
+> set to `false`, so the updater accepts unsigned installers and auto-update
+> works without a cert. This weakens update-channel tamper protection (see
+> trade-off below). **Re-enable signature verification (delete that flag) once a
+> real cert is configured** per this doc.
+
 ## What you need (one-time)
 
 An **Authenticode code-signing certificate**. Options:
