@@ -1,4 +1,4 @@
-import { test, expect } from 'vitest';
+import { test, expect, beforeAll, afterAll } from 'vitest';
 
 import {
   billKey,
@@ -109,6 +109,81 @@ test('getOccurrences expands biweekly rules to every other week within the perio
     '2026-05',
   );
   expect(occ).toEqual(['2026-05-01', '2026-05-15', '2026-05-29']);
+});
+
+// CAR-361 regression: biweekly/custom occurrence dates must not drift by one
+// day EAST of UTC. Previously the anchor was parsed as LOCAL midnight while
+// dates were emitted via toISOString() (UTC). EAST of UTC (positive offsets,
+// e.g. Asia/Tokyo UTC+9) local midnight is the PREVIOUS day in UTC, so a rule
+// surfaced one day EARLY. West-of-UTC zones (e.g. America/Mexico_City UTC-6)
+// were unaffected, which is why a UTC-only CI run (the default) never caught
+// the bug. The fix parses the anchor AND the period bounds as UTC midnight.
+//
+// To anchor the fix, these tests force an east-of-UTC timezone via
+// process.env.TZ = 'Asia/Tokyo' (Node honors this for Date construction). Under
+// the old local-midnight anchor this turns the assertions RED; under the fix
+// they stay GREEN regardless of machine/CI timezone.
+const SAVED_TZ = process.env.TZ;
+beforeAll(() => {
+  // UTC+9 — east of UTC, where the old local-parse anchor drifted one day early.
+  process.env.TZ = 'Asia/Tokyo';
+});
+afterAll(() => {
+  if (SAVED_TZ === undefined) delete process.env.TZ;
+  else process.env.TZ = SAVED_TZ;
+});
+
+test('getOccurrences biweekly dates do not drift one day early east of UTC (CAR-361)', () => {
+  // Sanity-check the test harness: confirm we really are east of UTC, so the
+  // drift code path is exercised. (If TZ didn't take effect this would catch it.)
+  expect(new Date('2026-05-08T00:00:00').toISOString().slice(0, 10)).toBe(
+    '2026-05-07',
+  );
+
+  // startDate falls inside the period; the emitted dates must equal the anchor
+  // date and anchor+14n exactly — never anchor-1 (the off-by-one bug). Under the
+  // pre-fix local-midnight anchor in Asia/Tokyo this returns ['2026-05-07', ...].
+  const occ = getOccurrences(
+    { freq: 'biweekly', startDate: '2026-05-08' },
+    '2026-05',
+  );
+  expect(occ).toEqual(['2026-05-08', '2026-05-22']);
+  // The very first emitted occurrence must equal the startDate, not the day
+  // before it — this assertion fails under the old local-parse code east of UTC.
+  expect(occ[0]).toBe('2026-05-08');
+
+  // Anchor in a PRIOR month: the projected occurrences into a later period must
+  // still land on the correct calendar days (anchor + k*14), not one day early.
+  const carried = getOccurrences(
+    { freq: 'biweekly', startDate: '2026-04-29' },
+    '2026-05',
+  );
+  // 2026-04-29 + 14 = 2026-05-13, + 28 = 2026-05-27.
+  expect(carried).toEqual(['2026-05-13', '2026-05-27']);
+});
+
+test('getOccurrences custom-interval dates do not drift one day early east of UTC (CAR-361)', () => {
+  // Confirm the east-of-UTC drift path is active for this test too.
+  expect(new Date('2026-05-03T00:00:00').toISOString().slice(0, 10)).toBe(
+    '2026-05-02',
+  );
+
+  // freq='custom' with interval=N (here N=10): anchor + k*10 days.
+  const occ = getOccurrences(
+    { freq: 'custom', interval: 10, startDate: '2026-05-03' },
+    '2026-05',
+  );
+  // 2026-05-03, +10 = 2026-05-13, +20 = 2026-05-23.
+  expect(occ).toEqual(['2026-05-03', '2026-05-13', '2026-05-23']);
+  expect(occ[0]).toBe('2026-05-03');
+
+  // A custom rule anchored in a prior month, interval 21 days.
+  const carried = getOccurrences(
+    { freq: 'custom', interval: 21, startDate: '2026-04-20' },
+    '2026-05',
+  );
+  // 2026-04-20 +21 = 2026-05-11, +42 = 2026-06-01 (out of period).
+  expect(carried).toEqual(['2026-05-11']);
 });
 
 test('markRecurringPaid creates an expense with an occurrence-scoped billKey', () => {
