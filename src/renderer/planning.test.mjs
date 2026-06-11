@@ -111,6 +111,56 @@ test('getOccurrences expands biweekly rules to every other week within the perio
   expect(occ).toEqual(['2026-05-01', '2026-05-15', '2026-05-29']);
 });
 
+// CAR-361 regression: biweekly/custom occurrence dates must not drift by one
+// day in negative-UTC timezones. Previously the anchor was parsed as LOCAL
+// midnight while dates were emitted via toISOString() (UTC), so in offsets like
+// America/Mexico_City (UTC-6) local midnight is the PREVIOUS day in UTC and a
+// rule could surface one day EARLY. The fix parses the anchor AND the period
+// bounds as UTC midnight, making the day-count arithmetic and emission
+// consistent. These assertions on exact ISO strings only hold under
+// UTC-consistent logic and are independent of the machine timezone.
+test('getOccurrences biweekly dates do not drift by one day regardless of timezone (CAR-361)', () => {
+  // startDate falls inside the period; the emitted dates must equal the anchor
+  // date and anchor+14n exactly — never anchor-1 (the off-by-one bug).
+  const occ = getOccurrences(
+    { freq: 'biweekly', startDate: '2026-05-08' },
+    '2026-05',
+  );
+  expect(occ).toEqual(['2026-05-08', '2026-05-22']);
+  // The very first emitted occurrence must equal the startDate, not the day
+  // before it — this is the assertion that fails under the old local-parse code
+  // in a negative-UTC tz.
+  expect(occ[0]).toBe('2026-05-08');
+
+  // Anchor in a PRIOR month: the projected occurrences into a later period must
+  // still land on the correct calendar days (anchor + k*14), not one day early.
+  const carried = getOccurrences(
+    { freq: 'biweekly', startDate: '2026-04-29' },
+    '2026-05',
+  );
+  // 2026-04-29 + 14 = 2026-05-13, + 28 = 2026-05-27.
+  expect(carried).toEqual(['2026-05-13', '2026-05-27']);
+});
+
+test('getOccurrences custom-interval dates do not drift by one day regardless of timezone (CAR-361)', () => {
+  // freq='custom' with interval=N (here N=10): anchor + k*10 days.
+  const occ = getOccurrences(
+    { freq: 'custom', interval: 10, startDate: '2026-05-03' },
+    '2026-05',
+  );
+  // 2026-05-03, +10 = 2026-05-13, +20 = 2026-05-23.
+  expect(occ).toEqual(['2026-05-03', '2026-05-13', '2026-05-23']);
+  expect(occ[0]).toBe('2026-05-03');
+
+  // A custom rule anchored in a prior month, interval 21 days.
+  const carried = getOccurrences(
+    { freq: 'custom', interval: 21, startDate: '2026-04-20' },
+    '2026-05',
+  );
+  // 2026-04-20 +21 = 2026-05-11, +42 = 2026-06-01 (out of period).
+  expect(carried).toEqual(['2026-05-11']);
+});
+
 test('markRecurringPaid creates an expense with an occurrence-scoped billKey', () => {
   const rule = {
     id: 'rule_comcast',

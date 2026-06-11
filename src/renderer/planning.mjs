@@ -41,9 +41,13 @@ export function getOccurrences(rule, period) {
   // biweekly or custom: all dates = startDate + k*interval for integer k >= 0
   const interval = rule.freq === 'biweekly' ? 14 : Number(rule.interval);
   if (!interval || interval < 1) return [];
-  const anchor = new Date((rule.startDate || period + '-01') + 'T00:00:00');
-  const periodStart = new Date(year, month - 1, 1);
-  const periodEnd = new Date(year, month - 1, daysInMonth);
+  // Parse anchor and period bounds as UTC midnight so the day-count arithmetic
+  // below is consistent with the UTC emission (toISOString) at the end. Mixing
+  // a local-midnight anchor with local-constructed period bounds caused a
+  // one-day drift in negative-UTC timezones (CAR-361).
+  const anchor = new Date((rule.startDate || period + '-01') + 'T00:00:00Z');
+  const periodStart = new Date(Date.UTC(year, month - 1, 1));
+  const periodEnd = new Date(Date.UTC(year, month - 1, daysInMonth));
   const MS = 86400000;
 
   const daysFromAnchorToStart = (periodStart - anchor) / MS;
