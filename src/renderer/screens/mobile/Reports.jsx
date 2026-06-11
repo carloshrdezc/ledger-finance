@@ -8,6 +8,7 @@ import { useFx } from '../../useFx';
 import { exportReportCSV } from '../../importExport';
 import RangeSelector from '../../components/RangeSelector';
 import { CURRENT_PERIOD_SENTINEL, addMonths, filterTransactionsForPeriod, filterTransactionsForRange, formatShortPeriodLabel, resolvePeriod, resolveRangePreset } from '../../period.mjs';
+import { isGoalFunding } from '../../planning.mjs';
 import { buildCategoryTrend, buildIncomeExpenseSeries, buildNetWorthTrend, buildSankeyFlows, getRecentPeriods } from '../../charts.mjs';
 
 export default function Reports({ t, onBack, onGoToRoute }) {
@@ -91,12 +92,12 @@ export default function Reports({ t, onBack, onGoToRoute }) {
   };
   const previousPeriod = addMonths(selectedPeriod, -1);
   const previousPeriodTxs = filterTransactionsForPeriod(transactions, previousPeriod);
-  const previousTotal = previousPeriodTxs.filter(x => x.amt < 0)
+  const previousTotal = previousPeriodTxs.filter(x => x.amt < 0 && !isGoalFunding(x))
     .reduce((s, x) => s + Math.abs(toReporting(x.amt, x.ccy, x.date)), 0);
-  const total = reportTxs.filter(x => x.amt < 0)
+  const total = reportTxs.filter(x => x.amt < 0 && !isGoalFunding(x))
     .reduce((s, x) => s + Math.abs(toReporting(x.amt, x.ccy, x.date)), 0);
   const byCat = {};
-  reportTxs.filter(x => x.amt < 0).forEach(x => {
+  reportTxs.filter(x => x.amt < 0 && !isGoalFunding(x)).forEach(x => {
     const k = (x.path || [x.cat])[0];
     byCat[k] = (byCat[k] || 0) + Math.abs(toReporting(x.amt, x.ccy, x.date));
   });
@@ -105,7 +106,7 @@ export default function Reports({ t, onBack, onGoToRoute }) {
 
   // Top merchants computed from reportTxs (matches WebReports).
   const merchantMap = {};
-  reportTxs.filter(x => x.amt < 0).forEach(tx => {
+  reportTxs.filter(x => x.amt < 0 && !isGoalFunding(x)).forEach(tx => {
     const key = (tx.name || '').split(' · ')[0];
     if (!key) return;
     const curr = merchantMap[key] || { name: key, amt: 0, n: 0 };
@@ -135,7 +136,7 @@ export default function Reports({ t, onBack, onGoToRoute }) {
   // Rolling 12-month spend (absolute expense totals, USD-normalized).
   const momPeriods = getRecentPeriods(selectedPeriod, 12);
   const momSpend = momPeriods.map(p => filterTransactionsForPeriod(transactions, p)
-    .filter(x => x.amt < 0)
+    .filter(x => x.amt < 0 && !isGoalFunding(x))
     .reduce((s, x) => s + Math.abs(toReporting(x.amt, x.ccy, x.date)), 0));
   const momMax = Math.max(...momSpend, 1);
   const momAvg = momSpend.reduce((s, v) => s + v, 0) / momSpend.length;
@@ -143,7 +144,7 @@ export default function Reports({ t, onBack, onGoToRoute }) {
   // ── Detected Insights ────────────────────────────────────────────────────
   // 1. Top-growing category vs previous period (largest absolute increase).
   const prevByCat = {};
-  previousPeriodTxs.filter(x => x.amt < 0).forEach(x => {
+  previousPeriodTxs.filter(x => x.amt < 0 && !isGoalFunding(x)).forEach(x => {
     const k = (x.path || [x.cat])[0];
     prevByCat[k] = (prevByCat[k] || 0) + Math.abs(toReporting(x.amt, x.ccy, x.date));
   });

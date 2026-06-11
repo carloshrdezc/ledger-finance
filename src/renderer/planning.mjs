@@ -41,9 +41,15 @@ export function getOccurrences(rule, period) {
   // biweekly or custom: all dates = startDate + k*interval for integer k >= 0
   const interval = rule.freq === 'biweekly' ? 14 : Number(rule.interval);
   if (!interval || interval < 1) return [];
-  const anchor = new Date((rule.startDate || period + '-01') + 'T00:00:00');
-  const periodStart = new Date(year, month - 1, 1);
-  const periodEnd = new Date(year, month - 1, daysInMonth);
+  // Parse anchor and period bounds as UTC midnight so the day-count arithmetic
+  // below is consistent with the UTC emission (toISOString) at the end. Mixing
+  // a local-midnight anchor with local-constructed period bounds caused a
+  // one-day drift EAST of UTC (positive offsets, e.g. Asia/Tokyo UTC+9): local
+  // midnight there is the PREVIOUS day in UTC, so toISOString() surfaced the
+  // occurrence one day EARLY. (West-of-UTC zones were unaffected.) (CAR-361)
+  const anchor = new Date((rule.startDate || period + '-01') + 'T00:00:00Z');
+  const periodStart = new Date(Date.UTC(year, month - 1, 1));
+  const periodEnd = new Date(Date.UTC(year, month - 1, daysInMonth));
   const MS = 86400000;
 
   const daysFromAnchorToStart = (periodStart - anchor) / MS;
@@ -129,6 +135,22 @@ export function createBillPaymentTransaction(bill, period) {
   };
 }
 
+/**
+ * CAR-362: True when a transaction is a goal-funding outflow ("money set
+ * aside"). These carry a `goalId` (most robust signal) and are tagged
+ * `cat: 'savings'`. They are transfer-like — excluded from BOTH income and
+ * spending/expense reporting and from spending insights.
+ *
+ * @param {{goalId?:string, cat?:string, path?:string[]}} tx
+ * @returns {boolean}
+ */
+export function isGoalFunding(tx) {
+  if (!tx) return false;
+  return tx.goalId != null
+    || tx.cat === 'savings'
+    || (Array.isArray(tx.path) && tx.path[0] === 'savings');
+}
+
 export function createGoalContribution(goal, { amount, date, acct = 'chk' }) {
   const safeAmount = Math.max(0, Number(amount) || 0);
   const id = `goal_${goal.id}_${date}_${Math.round(safeAmount * 100)}_${Date.now()}`;
@@ -137,8 +159,11 @@ export function createGoalContribution(goal, { amount, date, acct = 'chk' }) {
     name: `GOAL · ${goal.name}`,
     amt: -safeAmount,
     date,
-    cat: 'income',
-    path: ['income'],
+    // CAR-362: goal funding is a transfer-like movement of money INTO a goal —
+    // not income and not consumption. Tag it `savings` so it's excluded from
+    // both income and spending/expense reporting (see isGoalFunding).
+    cat: 'savings',
+    path: ['savings'],
     ccy: 'USD',
     acct,
     goalId: goal.id,

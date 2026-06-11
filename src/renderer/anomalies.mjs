@@ -19,6 +19,8 @@
  * link to the transaction, and a stable `id` for dismiss/restore.
  */
 
+import { isGoalFunding } from './planning.mjs';
+
 const DAY_MS = 86_400_000;
 const SEVERITY_RANK = { high: 0, medium: 1, low: 2 };
 
@@ -76,6 +78,7 @@ function isExpense(tx) {
   // Exclude transfers and goal contributions — they aren't "spending".
   if (amt == null || amt >= 0) return false;
   if (tx?.cat === 'transfer') return false;
+  if (isGoalFunding(tx)) return false; // CAR-362: goal funding is set-aside savings
   return true;
 }
 

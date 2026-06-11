@@ -5,7 +5,7 @@
 export const BACKUP_FORMAT_VERSION = 2;
 export const BACKUP_TYPE = 'ledger-backup';
 
-// 18 user-data slices total: 15 in SLICES + 3 in SCALAR_SLICES.
+// 19 user-data slices total: 16 in SLICES + 3 in SCALAR_SLICES.
 // Excluded (session-ephemera, reset on restore): txFilter, dismissedAlerts,
 // dismissedInsights, welcomeSeen, fxMigrationToastSeen, lastBackupAt,
 // backupReminderInterval, backupReminderSnoozedUntil,
@@ -33,6 +33,9 @@ const SLICES = [
   // CAR-345: debt payoff planner. Optional slice — old backups without it
   // restore to [] (backward-compatible; no BACKUP_FORMAT_VERSION bump needed).
   ['debts',              'debts',            [], 'array'],
+  // CAR-360: per-goal auto-fund rules (CAR-347). Optional slice — old
+  // backups without it restore to [] (backward-compatible).
+  ['goalAutoFundRules',  'goalAutoFundRules', [], 'array'],
 ];
 
 const SCALAR_SLICES = [

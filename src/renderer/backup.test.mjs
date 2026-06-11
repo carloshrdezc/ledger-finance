@@ -61,14 +61,14 @@ describe('buildBackup', () => {
   });
 
   // Documentation-as-test: locks the user-data slice count so the comment
-  // in backup.mjs ("18 user-data slices total: 15 in SLICES + 3 in
+  // in backup.mjs ("19 user-data slices total: 16 in SLICES + 3 in
   // SCALAR_SLICES") can't drift silently. If a slice is added or removed,
   // this assertion forces the count + comment to be updated together.
-  it('emits exactly 18 user-data slice keys (locks slice count)', () => {
+  it('emits exactly 19 user-data slice keys (locks slice count)', () => {
     const b = buildBackup({});
     const envelopeKeys = ['_type', 'version', 'exportedAt', 'settings'];
     const sliceKeys = Object.keys(b).filter((k) => !envelopeKeys.includes(k));
-    expect(sliceKeys).toHaveLength(18);
+    expect(sliceKeys).toHaveLength(19);
   });
 
   it('handles missing/undefined slices by emitting empty defaults', () => {
@@ -317,5 +317,48 @@ describe('CAR-345: debt payoff planner slices', () => {
     expect(result.ok).toBe(true);
     expect(result.data.debts).toEqual([]);
     expect(result.warnings.some(w => /debts/i.test(w))).toBe(true);
+  });
+});
+
+// CAR-360: per-goal auto-fund rules (CAR-347) must survive the
+// export → wipe → import round-trip and remain backward-compatible.
+describe('CAR-360: goal auto-fund rules slice', () => {
+  const autoFundState = {
+    goalAutoFundRules: [
+      { id: 'r1', goalId: 'g1', amount: 50, cadence: 'monthly', sourceAccountId: 'a1' },
+      { id: 'r2', goalId: 'g2', amount: 125, cadence: 'monthly', sourceAccountId: 'a1' },
+    ],
+  };
+
+  it('buildBackup carries goalAutoFundRules through unchanged', () => {
+    const b = buildBackup(autoFundState);
+    expect(b.goalAutoFundRules).toEqual(autoFundState.goalAutoFundRules);
+  });
+
+  it('build → JSON.stringify → parseBackup round-trips goalAutoFundRules', () => {
+    const json = JSON.stringify(buildBackup(autoFundState));
+    const result = parseBackup(json);
+    expect(result.ok).toBe(true);
+    expect(result.data.goalAutoFundRules).toEqual(autoFundState.goalAutoFundRules);
+    expect(result.summary.goalAutoFundRules).toBe(2);
+  });
+
+  it('an old backup missing the goalAutoFundRules slice defaults to []', () => {
+    // Simulate a pre-CAR-360 backup: strip the new key entirely.
+    const obj = buildBackup(autoFundState);
+    delete obj.goalAutoFundRules;
+    const result = parseBackup(JSON.stringify(obj));
+    expect(result.ok).toBe(true);
+    expect(result.data.goalAutoFundRules).toEqual([]);
+    expect(result.summary.goalAutoFundRules).toBe(0);
+  });
+
+  it('a wrong-typed goalAutoFundRules slice is skipped with a warning', () => {
+    const obj = buildBackup(autoFundState);
+    obj.goalAutoFundRules = 'not an array';
+    const result = validateBackup(obj);
+    expect(result.ok).toBe(true);
+    expect(result.data.goalAutoFundRules).toEqual([]);
+    expect(result.warnings.some(w => /goalAutoFundRules/i.test(w))).toBe(true);
   });
 });

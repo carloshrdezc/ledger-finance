@@ -12,6 +12,8 @@
  *   and keeping the detector pure avoids hidden rate dependencies.
  */
 
+import { isGoalFunding } from './planning.mjs';
+
 const DAY_MS = 86_400_000;
 const SEVERITY_RANK = { high: 0, medium: 1, low: 2 };
 const WINDOWS_TO_LOOKBACK = 26; // ~6 months of weekly buckets
@@ -81,7 +83,9 @@ function getTxCategoryKey(tx) {
 }
 
 function isExpenseTx(tx) {
-  return safeNumber(tx?.amt) != null && Number(tx.amt) < 0;
+  if (safeNumber(tx?.amt) == null || Number(tx.amt) >= 0) return false;
+  if (isGoalFunding(tx)) return false; // CAR-362: money set aside, not spending
+  return true;
 }
 
 function isIncomeTx(tx) {
@@ -148,7 +152,7 @@ function buildCategoryBuckets(transactions, todayIso) {
   for (const tx of transactions || []) {
     const date = getTxDate(tx);
     const amt = safeNumber(tx?.amt);
-    if (!date || amt == null || amt >= 0) continue;
+    if (!date || amt == null || !isExpenseTx(tx)) continue;
     const catKey = getTxCategoryKey(tx);
     const catLabel = getTxCategoryLabel(tx);
     if (!catKey) continue;
@@ -217,7 +221,7 @@ export function detectNewMerchants(transactions, todayIso) {
   for (const tx of transactions || []) {
     const date = getTxDate(tx);
     const amt = safeNumber(tx?.amt);
-    if (!date || amt == null || amt >= 0) continue;
+    if (!date || amt == null || !isExpenseTx(tx)) continue;
     const merchant = normalizeText(tx?.name);
     if (!merchant) continue;
     if (date < windows.currentStart) {
