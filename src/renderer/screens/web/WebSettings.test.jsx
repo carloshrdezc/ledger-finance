@@ -9,6 +9,7 @@ import { UndoProvider } from '../../UndoContext';
 vi.mock('../../components/ImportExport', () => ({ default: () => <div data-testid="import-export" /> }));
 vi.mock('../../components/FxRatesSection', () => ({ default: () => <div data-testid="fx-rates" /> }));
 vi.mock('../../components/BackupSection', () => ({ default: () => <div data-testid="backup" /> }));
+vi.mock('../../components/UpdatesSection', () => ({ default: () => <div data-testid="updates" /> }));
 vi.mock('../../components/RulesEditor', () => ({ default: () => <div data-testid="rules-editor" /> }));
 vi.mock('./WebShell', () => ({ default: ({ children }) => <div>{children}</div> }));
 

@@ -2,6 +2,7 @@ const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { setupAutoUpdater } = require('./auto-updater');
+const { installApplicationMenu } = require('./menu');
 
 const isDev = !app.isPackaged;
 
@@ -231,6 +232,7 @@ app.whenReady().then(async () => {
   });
 
   createdWin = createWindow();
+  installApplicationMenu();
   await setupAutoUpdater();
 });
 

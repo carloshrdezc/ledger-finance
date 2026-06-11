@@ -8,6 +8,7 @@ import { StoreCtx } from '../../store';
 vi.mock('../../components/ImportExport', () => ({ default: () => <div data-testid="import-export" /> }));
 vi.mock('../../components/FxRatesSection', () => ({ default: () => <div data-testid="fx-rates" /> }));
 vi.mock('../../components/BackupSection', () => ({ default: () => <div data-testid="backup" /> }));
+vi.mock('../../components/UpdatesSection', () => ({ default: () => <div data-testid="updates" /> }));
 
 afterEach(() => cleanup());
 
