@@ -1,4 +1,5 @@
 import { toReportingCurrency } from './fx.mjs';
+import { isGoalFunding } from './planning.mjs';
 
 // CAR-348: convert `amount` (in `ccy`) into the user's PRIMARY reporting
 // currency. Defaults to 'USD' so existing call sites and tests are unchanged;
@@ -35,6 +36,7 @@ export function buildCategoryTrend(transactions, periods, limit = 6, rates = { U
   const totals = new Map();
   for (const tx of transactions) {
     if (tx.amt >= 0) continue;
+    if (isGoalFunding(tx)) continue; // CAR-362: money set aside, not spending
     const period = txPeriod(tx);
     if (!periods.includes(period)) continue;
     const cat = txCategory(tx);
@@ -53,7 +55,9 @@ export function buildCategoryTrend(transactions, periods, limit = 6, rates = { U
 
 export function buildIncomeExpenseSeries(transactions, periods, rates = { USD: 1 }, reportingCcy = 'USD') {
   return periods.map(period => {
-    const periodTxs = transactions.filter(tx => txPeriod(tx) === period);
+    // CAR-362: exclude goal-funding (savings) txns from BOTH income and expense
+    // aggregation — they're money set aside, not income and not consumption.
+    const periodTxs = transactions.filter(tx => txPeriod(tx) === period && !isGoalFunding(tx));
     const income = periodTxs.filter(tx => tx.amt > 0).reduce((s, tx) => s + toReporting(tx.amt, tx.ccy, rates, tx.date, reportingCcy), 0);
     const expense = periodTxs.filter(tx => tx.amt < 0).reduce((s, tx) => s + Math.abs(toReporting(tx.amt, tx.ccy, rates, tx.date, reportingCcy)), 0);
     return {
@@ -115,6 +119,7 @@ export function buildSankeyFlows(transactions, periods, rates = { USD: 1 }, repo
 
   for (const tx of transactions) {
     if (tx.cat === 'transfer') continue;   // CAR-350: internal movements aren't cash flow
+    if (isGoalFunding(tx)) continue;       // CAR-362: goal funding is set-aside savings, not a spend
     if (!periods.includes(txPeriod(tx))) continue;
     const cat = txCategory(tx) || (tx.amt >= 0 ? 'income' : 'other');
     const value = toReporting(tx.amt, tx.ccy, rates, tx.date, reportingCcy);

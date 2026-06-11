@@ -72,6 +72,21 @@ describe('queryTransactions', () => {
     expect(queryTransactions(STATE, { type: 'expense' }).count).toBe(4);
   });
 
+  it('excludes goal-funding (savings) txns from expense queries (CAR-362)', () => {
+    const state = {
+      ...STATE,
+      'ledger:tx': [
+        ...STATE['ledger:tx'],
+        { id: 'gf', name: 'GOAL · EMERGENCY', amt: -300, date: '2026-06-08', cat: 'savings', path: ['savings'], acct: 'chk', goalId: 'g1' },
+      ],
+    };
+    // Goal-funding outflow is money set aside, not spending — expense count is
+    // unchanged from the base fixture (still 4), and the savings txn isn't listed.
+    const r = queryTransactions(state, { type: 'expense' });
+    expect(r.count).toBe(4);
+    expect(r.transactions.some(tx => tx.id === 'gf')).toBe(false);
+  });
+
   it('filters by merchant (first segment, case-insensitive)', () => {
     expect(queryTransactions(STATE, { merchant: 'whole foods' }).count).toBe(2);
   });

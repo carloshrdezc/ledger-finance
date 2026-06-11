@@ -43,6 +43,17 @@ function topCat(tx) {
   return String(tx?.cat || '');
 }
 
+// CAR-362: goal-funding outflows (money set aside into a goal) carry a `goalId`
+// and are tagged `cat: 'savings'`. They're transfer-like — not real spending —
+// so an `expense` query must not surface them. Self-contained (this engine
+// deliberately has no cross-dependency on the renderer layer).
+function isGoalFunding(tx) {
+  if (!tx) return false;
+  return tx.goalId != null
+    || tx.cat === 'savings'
+    || (Array.isArray(tx.path) && tx.path[0] === 'savings');
+}
+
 function inRange(date, from, to) {
   if (from && date < from) return false;
   if (to && date > to) return false;
@@ -75,7 +86,7 @@ export function queryTransactions(state, opts = {}) {
     if (!tx || typeof tx.date !== 'string') return false;
     if (!inRange(tx.date, from, to)) return false;
     const amt = num(tx.amt);
-    if (type === 'expense' && amt >= 0) return false;
+    if (type === 'expense' && (amt >= 0 || isGoalFunding(tx))) return false;
     if (type === 'income' && amt <= 0) return false;
     if (cat && topCat(tx).toUpperCase() !== cat) return false;
     if (merch && String(tx.name || '').toUpperCase().split(' · ')[0] !== merch) return false;
