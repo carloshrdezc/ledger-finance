@@ -4,6 +4,7 @@ import { AsciiSpark, ARule, ALabel } from '../../components/Shared';
 import { fmtMoney, fmtSigned, fmtPct, dayLabel } from '../../data';
 import { buildNetWorthDailyTrend } from '../../charts.mjs';
 import { projectBalances, isLiquidAccount } from '../../forecast.mjs';
+import { isGoalFunding } from '../../planning.mjs';
 import { compactForecastSeries } from '../../forecastSeries.mjs';
 import { useStore } from '../../store';
 import { useFx } from '../../useFx';
@@ -21,7 +22,7 @@ export default function Home({ t, onAcct, onAdd, onViewAll, onInsight }) {
   const NET_WORTH   = accountsIncludedInTotals.reduce((s, a) => s + toReporting(a.balance, a.ccy), 0);
   const monthTxs    = transactions.filter(tx => tx.date?.startsWith(thisMonth));
   const MONTH_IN    = monthTxs.filter(tx => tx.amt > 0 && tx.cat !== 'transfer').reduce((s, tx) => s + toReporting(tx.amt, tx.ccy, tx.date), 0);
-  const MONTH_OUT   = monthTxs.filter(tx => tx.amt < 0 && tx.cat !== 'transfer').reduce((s, tx) => s + toReporting(tx.amt, tx.ccy, tx.date), 0);
+  const MONTH_OUT   = monthTxs.filter(tx => tx.amt < 0 && tx.cat !== 'transfer' && !isGoalFunding(tx)).reduce((s, tx) => s + toReporting(tx.amt, tx.ccy, tx.date), 0);
   const MONTH_NET   = MONTH_IN + MONTH_OUT;
   const MONTH_SPEND = Math.abs(MONTH_OUT);
   const CASH        = accountsWithBalance
@@ -42,7 +43,7 @@ export default function Home({ t, onAcct, onAdd, onViewAll, onInsight }) {
     const out = new Array(days).fill(0);
     const end = new Date(`${todayIso}T00:00:00`);
     for (const tx of transactions) {
-      if (!tx.date || tx.amt >= 0 || tx.cat === 'transfer') continue;
+      if (!tx.date || tx.amt >= 0 || tx.cat === 'transfer' || isGoalFunding(tx)) continue;
       const d = new Date(`${tx.date}T00:00:00`);
       const diff = Math.round((end - d) / 86400000);
       if (diff >= 0 && diff < days) {

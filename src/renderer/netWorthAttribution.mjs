@@ -1,4 +1,5 @@
 import { DEFAULT_RATES, toReportingCurrency } from './fx.mjs';
+import { isGoalFunding } from './planning.mjs';
 
 const INVESTMENT_TYPES = new Set(['INV', 'CRY']);
 
@@ -137,9 +138,17 @@ export function attributeNetWorthChange(
     const isInvestment = INVESTMENT_TYPES.has(account?.type);
     const amt = reportingAmt(tx, account, rates, reportingCcy);
 
-    if (tx.cat !== 'transfer') {
+    if (tx.cat !== 'transfer' && !isGoalFunding(tx)) {
       if (amt >= 0) income += amt;
       else spending += amt;
+      if (isInvestment) investmentTxTotal += amt;
+      continue;
+    }
+
+    // CAR-362: goal-funding txns (cat:'savings', negative, non-transfer) are
+    // transfer-like movements INTO a goal — not income, not consumption. Skip
+    // them from income/spending buckets entirely.
+    if (isGoalFunding(tx) && tx.cat !== 'transfer') {
       if (isInvestment) investmentTxTotal += amt;
       continue;
     }

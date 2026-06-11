@@ -9,6 +9,7 @@ import { fmtMoney, fmtSigned } from '../../data';
 import { useStore } from '../../store';
 import { useFx } from '../../useFx';
 import { CURRENT_PERIOD_SENTINEL, addMonths, filterTransactionsForPeriod, filterTransactionsForRange, formatShortPeriodLabel, getDaysInPeriod, getPeriodBoundaries, resolvePeriod, resolveRangePreset } from '../../period.mjs';
+import { isGoalFunding } from '../../planning.mjs';
 import {
   buildCategoryTrend,
   buildIncomeExpenseSeries,
@@ -40,7 +41,7 @@ export default function WebReports({ t, onNavigate, onAdd }) {
   const reportTxs = useRange ? rangeTxs : periodTransactions;
   const heroLabel = useRange ? (resolved?.label || 'CUSTOM') : periodLabel;
 
-  const sumExpense = (txs) => txs.filter(x => x.amt < 0).reduce((s, x) => s + Math.abs(toReporting(x.amt, x.ccy, x.date)), 0);
+  const sumExpense = (txs) => txs.filter(x => x.amt < 0 && !isGoalFunding(x)).reduce((s, x) => s + Math.abs(toReporting(x.amt, x.ccy, x.date)), 0);
   const total = sumExpense(reportTxs);
   const previousPeriod = addMonths(selectedPeriod, -1);
   const previousTotal = sumExpense(filterTransactionsForPeriod(transactions, previousPeriod));
@@ -131,7 +132,7 @@ export default function WebReports({ t, onNavigate, onAdd }) {
   }, [deleteView, selectedView]);
 
   const byCat = {};
-  reportTxs.filter(x => x.amt < 0).forEach(x => {
+  reportTxs.filter(x => x.amt < 0 && !isGoalFunding(x)).forEach(x => {
     const k = (x.path || [x.cat])[0];
     byCat[k] = (byCat[k] || 0) + Math.abs(toReporting(x.amt, x.ccy, x.date));
   });
@@ -142,13 +143,13 @@ export default function WebReports({ t, onNavigate, onAdd }) {
   const cells = Array.from({ length: dayCount }, (_, i) => {
     const day = String(i + 1).padStart(2, '0');
     return periodTransactions
-      .filter(x => x.date === `${selectedPeriod}-${day}` && x.amt < 0)
+      .filter(x => x.date === `${selectedPeriod}-${day}` && x.amt < 0 && !isGoalFunding(x))
       .reduce((s, x) => s + Math.abs(toReporting(x.amt, x.ccy, x.date)), 0);
   });
   const cellMax = Math.max(...cells, 1);
 
   const merchantMap = {};
-  reportTxs.filter(x => x.amt < 0).forEach(tx => {
+  reportTxs.filter(x => x.amt < 0 && !isGoalFunding(x)).forEach(tx => {
     const key = (tx.name || '').split(' · ')[0] || 'UNNAMED';
     const curr = merchantMap[key] || { name: key, amt: 0, n: 0 };
     curr.amt += Math.abs(toReporting(tx.amt, tx.ccy, tx.date));
