@@ -20,6 +20,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return () => ipcRenderer.removeListener('auto-update:downloaded', listener);
   },
   installUpdate: () => ipcRenderer.invoke('auto-update:install-now'),
+  // CAR-364: on-demand update check + live status for the Settings UI.
+  checkForUpdates: () => ipcRenderer.invoke('auto-update:check'),
+  onAutoUpdateStatus: callback => {
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on('auto-update:status', listener);
+    return () => ipcRenderer.removeListener('auto-update:status', listener);
+  },
+  getAppVersion: () => ipcRenderer.invoke('app:get-version'),
 });
 
 // CAR-242 + CAR-243: security bridge. The MK NEVER crosses this boundary —

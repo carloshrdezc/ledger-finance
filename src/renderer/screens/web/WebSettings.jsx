@@ -6,6 +6,7 @@ import { useUndoableStore } from '../../useUndoableStore';
 import ImportExport from '../../components/ImportExport';
 import FxRatesSection from '../../components/FxRatesSection';
 import BackupSection from '../../components/BackupSection';
+import UpdatesSection from '../../components/UpdatesSection';
 import RulesEditor from '../../components/RulesEditor';
 import { SecuritySettings, SecurityNudge } from '../../components/SecuritySettings';
 import { isLiquidAccount } from '../../forecast.mjs';
@@ -427,6 +428,11 @@ export default function WebSettings({ t, onNavigate, onAdd, setAccent, setDensit
           {/* BACKUP */}
           <div style={{ marginTop: 20 }}>
             <BackupSection />
+          </div>
+
+          {/* CAR-364: UPDATES */}
+          <div style={{ marginTop: 20 }}>
+            <UpdatesSection />
           </div>
 
           {/* CAR-243: SECURITY */}
