@@ -5,6 +5,7 @@ import { fmtMoney } from '../../data';
 import { useStore } from '../../store';
 import { useFx } from '../../useFx';
 import { getDaysInPeriod } from '../../period.mjs';
+import { isGoalFunding } from '../../planning.mjs';
 
 export default function ReportsCalendar({ t, onBack, onGoToRoute }) {
   const { periodTransactions, selectedPeriod, periodLabel, setTxFilter } = useStore();
@@ -18,7 +19,7 @@ export default function ReportsCalendar({ t, onBack, onGoToRoute }) {
   const cells = Array.from({ length: dayCount }, (_, i) => {
     const day = String(i + 1).padStart(2, '0');
     return periodTransactions
-      .filter(x => x.date === `${selectedPeriod}-${day}` && x.amt < 0)
+      .filter(x => x.date === `${selectedPeriod}-${day}` && x.amt < 0 && !isGoalFunding(x))
       .reduce((s, x) => s + Math.abs(toReporting(x.amt, x.ccy, x.date)), 0);
   });
   const max = Math.max(...cells, 1);
@@ -28,7 +29,7 @@ export default function ReportsCalendar({ t, onBack, onGoToRoute }) {
   const weekdayLabels = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
   const weekdayTotals = [0, 0, 0, 0, 0, 0, 0];
   for (const tx of periodTransactions) {
-    if (tx.amt >= 0 || !tx.date) continue;
+    if (tx.amt >= 0 || !tx.date || isGoalFunding(tx)) continue;
     const d = new Date(`${tx.date}T00:00:00`);
     // Date.getDay(): 0 = Sunday. Re-map so Mon = 0 ... Sun = 6.
     const dow = (d.getDay() + 6) % 7;

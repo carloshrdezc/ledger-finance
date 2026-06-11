@@ -64,6 +64,39 @@ test('detectCategorySpikes flags categories that exceed twice the trailing 6-mon
   expect(rows[0].metric).toBe('150%');
 });
 
+// CAR-362: goal-funding contributions are money set aside (cat:'savings',
+// negative amt, carry goalId). They must NOT be treated as income, nor as
+// discretionary spending — so they shouldn't trigger income-change, category
+// spike, or new-merchant insights.
+test('goal-funding (savings) txns are excluded from income and spending insights', () => {
+  // A large weekly goal contribution that, if mistaken for spending, would
+  // spike a "savings" category, and if mistaken for income would move income.
+  const goalTxs = [
+    ...rollingWeeksTxs({ cat: 'food', weeklyAmounts: Array(26).fill(100) }),
+    {
+      id: 'goal-current',
+      name: 'GOAL · EMERGENCY',
+      date: isoDaysFromToday(0),
+      cat: 'savings',
+      path: ['savings'],
+      amt: -500,
+      ccy: 'USD',
+      goalId: 'g1',
+    },
+  ];
+
+  // Not flagged as a spending spike (no 'savings' category insight).
+  const spikes = detectCategorySpikes(goalTxs, TODAY);
+  expect(spikes.some(r => r.title.includes('SAVINGS'))).toBe(false);
+
+  // Not flagged as a new merchant.
+  const merchants = detectNewMerchants(goalTxs, TODAY);
+  expect(merchants.some(r => r.detail.includes('GOAL'))).toBe(false);
+
+  // Not counted as income — income-change detector sees no income at all here.
+  expect(detectIncomeChanges(goalTxs, TODAY)).toEqual([]);
+});
+
 test('detectCategorySpikes escalates to high when current spend is above 3x the mean', () => {
   const txs = [
     ...rollingWeeksTxs({ cat: 'dining', weeklyAmounts: Array(26).fill(50) }),

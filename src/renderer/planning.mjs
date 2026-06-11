@@ -135,6 +135,22 @@ export function createBillPaymentTransaction(bill, period) {
   };
 }
 
+/**
+ * CAR-362: True when a transaction is a goal-funding outflow ("money set
+ * aside"). These carry a `goalId` (most robust signal) and are tagged
+ * `cat: 'savings'`. They are transfer-like — excluded from BOTH income and
+ * spending/expense reporting and from spending insights.
+ *
+ * @param {{goalId?:string, cat?:string, path?:string[]}} tx
+ * @returns {boolean}
+ */
+export function isGoalFunding(tx) {
+  if (!tx) return false;
+  return tx.goalId != null
+    || tx.cat === 'savings'
+    || (Array.isArray(tx.path) && tx.path[0] === 'savings');
+}
+
 export function createGoalContribution(goal, { amount, date, acct = 'chk' }) {
   const safeAmount = Math.max(0, Number(amount) || 0);
   const id = `goal_${goal.id}_${date}_${Math.round(safeAmount * 100)}_${Date.now()}`;
@@ -143,8 +159,11 @@ export function createGoalContribution(goal, { amount, date, acct = 'chk' }) {
     name: `GOAL · ${goal.name}`,
     amt: -safeAmount,
     date,
-    cat: 'income',
-    path: ['income'],
+    // CAR-362: goal funding is a transfer-like movement of money INTO a goal —
+    // not income and not consumption. Tag it `savings` so it's excluded from
+    // both income and spending/expense reporting (see isGoalFunding).
+    cat: 'savings',
+    path: ['savings'],
     ccy: 'USD',
     acct,
     goalId: goal.id,

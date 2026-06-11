@@ -158,8 +158,10 @@ export function planAutoFundContributions(goal, rule, dueDates) {
       name: `GOAL · ${goal.name}`,
       amt: -applied,
       date,
-      cat: 'income',
-      path: ['income'],
+      // CAR-362: goal funding is money set aside (transfer-like), not income
+      // or consumption — tag `savings` so reports/insights exclude it.
+      cat: 'savings',
+      path: ['savings'],
       ccy: 'USD',
       acct: rule.source || 'chk',
       goalId: goal.id,

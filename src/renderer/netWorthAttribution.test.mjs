@@ -33,6 +33,25 @@ describe('attributeNetWorthChange', () => {
     });
   });
 
+  test('CAR-362: goal-funding (cat:savings, negative, non-transfer) is NOT counted as spending', () => {
+    const accounts = [
+      { id: 'chk', type: 'CHK', ccy: 'USD', openingBal: 1000 },
+    ];
+
+    const transactions = [
+      { id: 'inc', date: '2026-05-10', acct: 'chk', cat: 'income', amt: 1000, ccy: 'USD' },
+      { id: 'exp', date: '2026-05-11', acct: 'chk', cat: 'food', amt: -200, ccy: 'USD' },
+      // Goal funding: negative, non-transfer, cat:'savings', has goalId.
+      { id: 'goal-fund', date: '2026-05-12', acct: 'chk', cat: 'savings', path: ['savings'], amt: -300, ccy: 'USD', goalId: 'g1', name: 'GOAL · Emergency' },
+    ];
+
+    const result = attributeNetWorthChange(accounts, transactions, '2026-05-01', '2026-05-31');
+    // The -300 goal funding must NOT be bucketed into spending; only the -200 food expense is.
+    expect(result.spending).toBe(-200);
+    expect(result.income).toBe(1000);
+    expect(result.transfers).toBe(0);
+  });
+
   test('converts multi-currency amounts with FX before bucketing', () => {
     const accounts = [
       { id: 'chk', type: 'CHK', ccy: 'USD', openingBal: 100 },

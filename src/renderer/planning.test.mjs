@@ -7,6 +7,7 @@ import {
   createGoalContribution,
   getBillDueDate,
   getOccurrences,
+  isGoalFunding,
   markRecurringPaid,
   slug,
 } from './planning.mjs';
@@ -68,6 +69,30 @@ test('createGoalContribution returns linked contribution and transaction records
   expect(result.contribution.txId).toBe(result.transaction.id);
   expect(result.transaction.amt).toBe(-75);
   expect(result.transaction.goalId).toBe('g1');
+});
+
+// CAR-362: goal-funding outflows are "money set aside" (transfer-like), so they
+// are tagged `cat: 'savings'`/`path: ['savings']` — NOT `income` — with a
+// negative amount. They must be excluded from income AND spending reports.
+test('createGoalContribution tags the txn savings (not income) with a negative amount', () => {
+  const { transaction } = createGoalContribution(
+    { id: 'g1', name: 'EMERGENCY', target: 1000, current: 100 },
+    { amount: 75, date: '2026-05-14', acct: 'chk' },
+  );
+  expect(transaction.cat).toBe('savings');
+  expect(transaction.path).toEqual(['savings']);
+  expect(transaction.cat).not.toBe('income');
+  expect(transaction.amt).toBeLessThan(0);
+  expect(isGoalFunding(transaction)).toBe(true);
+});
+
+test('isGoalFunding detects goalId, savings cat, and savings path; ignores ordinary txns', () => {
+  expect(isGoalFunding({ goalId: 'g1', amt: -50 })).toBe(true);
+  expect(isGoalFunding({ cat: 'savings', amt: -50 })).toBe(true);
+  expect(isGoalFunding({ path: ['savings'], amt: -50 })).toBe(true);
+  expect(isGoalFunding({ cat: 'groceries', amt: -50 })).toBe(false);
+  expect(isGoalFunding({ cat: 'income', amt: 5000 })).toBe(false);
+  expect(isGoalFunding(null)).toBe(false);
 });
 
 test('slug lowercases and collapses non-alphanumerics into single dashes', () => {

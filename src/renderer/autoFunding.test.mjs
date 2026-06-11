@@ -115,7 +115,7 @@ describe('planAutoFundContributions', () => {
 
   it('builds full contribution + ledger transaction records', () => {
     const plan = planAutoFundContributions(goal, rule, ['2026-01-01']);
-    expect(plan.transactions[0]).toMatchObject({ name: 'GOAL · EMERGENCY', amt: -200, date: '2026-01-01', acct: 'sav', goalId: 'g1', cat: 'income' });
+    expect(plan.transactions[0]).toMatchObject({ name: 'GOAL · EMERGENCY', amt: -200, date: '2026-01-01', acct: 'sav', goalId: 'g1', cat: 'savings', path: ['savings'] });
     expect(plan.contributions[0]).toMatchObject({ goalId: 'g1', amount: 200, date: '2026-01-01', acct: 'sav' });
     expect(plan.goalNext.current).toBe(300);
     expect(plan.total).toBe(200);

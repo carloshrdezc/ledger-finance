@@ -37,6 +37,32 @@ test('buildIncomeExpenseSeries separates income and expenses by month', () => {
   ]);
 });
 
+// CAR-362: goal-funding txns (cat:'savings', negative amt, carry goalId) are
+// money set aside — neither income nor consumption. They must be excluded from
+// BOTH the income and expense totals (and from the spending category trend).
+test('buildIncomeExpenseSeries excludes goal-funding (savings) txns from both income and expense', () => {
+  const withGoalFunding = [
+    { date: '2026-05-01', cat: 'income', path: ['income'], amt: 2000, acct: 'chk', ccy: 'USD' },
+    { date: '2026-05-02', cat: 'food', path: ['food'], amt: -150, acct: 'amex', ccy: 'USD' },
+    // goal contribution: negative amount, savings category, goalId present
+    { date: '2026-05-10', cat: 'savings', path: ['savings'], amt: -300, acct: 'chk', ccy: 'USD', goalId: 'g1', name: 'GOAL · EMERGENCY' },
+  ];
+  const series = buildIncomeExpenseSeries(withGoalFunding, ['2026-05'], RATES);
+  // Income unchanged (2000), expense is ONLY the $150 food — the $300 goal
+  // contribution is counted in neither total.
+  expect(series).toEqual([{ period: '2026-05', income: 2000, expense: 150, net: 1850 }]);
+});
+
+test('buildCategoryTrend excludes goal-funding (savings) txns from spending categories', () => {
+  const withGoalFunding = [
+    { date: '2026-05-02', cat: 'food', path: ['food'], amt: -150, acct: 'amex', ccy: 'USD' },
+    { date: '2026-05-10', cat: 'savings', path: ['savings'], amt: -300, acct: 'chk', ccy: 'USD', goalId: 'g1' },
+  ];
+  const trend = buildCategoryTrend(withGoalFunding, ['2026-05'], 6, RATES);
+  expect(trend).toEqual([{ cat: 'food', values: [150], total: 150 }]);
+  expect(trend.some(row => row.cat === 'savings')).toBe(false);
+});
+
 test('buildNetWorthTrend accumulates transactions from opening balances', () => {
   const accounts = [
     { id: 'chk', openingBal: 100, ccy: 'USD' },
