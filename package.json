@@ -1,6 +1,6 @@
 {
   "name": "ledger-finance",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "LEDGER — Personal Finance App",
   "main": "src/main/index.js",
   "scripts": {
@@ -50,6 +50,7 @@
         }
       ],
       "artifactName": "${productName}-Setup-${version}.${ext}",
+      "verifyUpdateCodeSignature": false,
       "signtoolOptions": {
         "publisherName": "LEDGER",
         "signingHashAlgorithms": [
