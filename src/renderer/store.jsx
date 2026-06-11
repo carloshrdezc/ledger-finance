@@ -1500,7 +1500,7 @@ function StoreProviderImpl({ children }) {
     setDebts([]); // CAR-345
     setDebtExtraPayment(0); // CAR-345
     _seedSampleData();
-  }, [_seedSampleData, abortFxFetch, setTxs, setCatTree, setBudgets, setAccounts, setBills, setGoals, setGoalContributions, setRules, setSavedViews, setSelectedPeriod, setHidden, setBudgetStartDay, setInvestments, setTrades, setDismissedAlertIds, setDismissedInsightIds, setTxFilterRaw, setRates, setRatesUpdated, setFxAutoFetch, setFxLastFetchedAt, setFxLastFetchError, setFxMigrationToastSeen, setWelcomeSeen, setOnboarded, setLastBackupAt, setBackupReminderSnoozedUntil, setBackupReminderIntervalRaw, setDebts, setDebtExtraPayment]);
+  }, [_seedSampleData, abortFxFetch, setTxs, setCatTree, setBudgets, setAccounts, setBills, setGoals, setGoalContributions, setRules, setSavedViews, setSelectedPeriod, setHidden, setBudgetStartDay, setInvestments, setTrades, setDismissedAlertIds, setDismissedInsightIds, setTxFilterRaw, setRates, setRatesUpdated, setFxAutoFetch, setFxLastFetchedAt, setFxLastFetchError, setFxMigrationToastSeen, setWelcomeSeen, setOnboarded, setLastBackupAt, setBackupReminderSnoozedUntil, setBackupReminderIntervalRaw, setDebts, setDebtExtraPayment, setGoalAutoFundRules]);
 
   React.useEffect(() => () => {
     if (fxFetchAbortRef.current) fxFetchAbortRef.current.abort();
@@ -1563,10 +1563,11 @@ function StoreProviderImpl({ children }) {
       txs, accounts, catTree, budgets, hidden, bills, goals, goalContributions,
       savedViews, investments, trades, rates, ratesUpdated, fxAutoFetch, fxLastFetchedAt, fxLastFetchError,
       selectedPeriod, budgetStartDay, debts, debtExtraPayment,
+      goalAutoFundRules, // CAR-360: persist per-goal auto-fund rules (CAR-347)
       settings: { accent, density, decimals, currency, theme, forecastLiquidAccountIds, forecastThreshold },
     });
     return JSON.stringify(obj, null, 2);
-  }, [txs, accounts, catTree, budgets, hidden, bills, goals, goalContributions, savedViews, investments, trades, rates, ratesUpdated, fxAutoFetch, fxLastFetchedAt, fxLastFetchError, selectedPeriod, budgetStartDay, debts, debtExtraPayment, accent, density, decimals, currency, theme, forecastLiquidAccountIds, forecastThreshold]);
+  }, [txs, accounts, catTree, budgets, hidden, bills, goals, goalContributions, savedViews, investments, trades, rates, ratesUpdated, fxAutoFetch, fxLastFetchedAt, fxLastFetchError, selectedPeriod, budgetStartDay, debts, debtExtraPayment, goalAutoFundRules, accent, density, decimals, currency, theme, forecastLiquidAccountIds, forecastThreshold]);
 
   const recordBackupTaken = React.useCallback(() => {
     setLastBackupAt(new Date().toISOString().slice(0, 10));
@@ -1596,6 +1597,9 @@ function StoreProviderImpl({ children }) {
     setSavedViews(Array.isArray(data.savedViews) ? data.savedViews : []);
     // CAR-345: debts default to [] when restoring an older backup without them.
     setDebts(Array.isArray(data.debts) ? data.debts : []);
+    // CAR-360: per-goal auto-fund rules (CAR-347) default to [] when restoring
+    // an older backup that predates the slice (backward-compatible).
+    setGoalAutoFundRules(Array.isArray(data.goalAutoFundRules) ? data.goalAutoFundRules : []);
     setDebtExtraPayment(Math.max(0, Number(data.debtExtraPayment) || 0));
     // CAR-182: backups don't carry recategorize stats — clear them on restore
     // so the new dataset starts fresh (counters keyed on old tx ids would be stale).
@@ -1655,6 +1659,7 @@ function StoreProviderImpl({ children }) {
     setWelcomeSeen, setFxMigrationToastSeen,
     setBackupReminderSnoozedUntil,
     setDebts, setDebtExtraPayment,
+    setGoalAutoFundRules, // CAR-360
   ]);
 
   const reset = React.useCallback(() => {
@@ -1695,7 +1700,7 @@ function StoreProviderImpl({ children }) {
     setForecastThreshold(0);
     setDebts([]); // CAR-345
     setDebtExtraPayment(0); // CAR-345
-  }, [abortFxFetch, setTxs, setCatTree, setBudgets, setAccounts, setBills, setGoals, setGoalContributions, setRules, setSavedViews, setRecategorizeStats, setSelectedPeriod, setHidden, setBudgetStartDay, setInvestments, setTrades, setDismissedAlertIds, setDismissedInsightIds, setTxFilterRaw, setRates, setRatesUpdated, setFxAutoFetch, setFxLastFetchedAt, setFxLastFetchError, setFxMigrationToastSeen, setWelcomeSeen, setOnboarded, setLastBackupAt, setBackupReminderSnoozedUntil, setBackupReminderIntervalRaw, setForecastLiquidAccountIds, setForecastThreshold, setDebts, setDebtExtraPayment]);
+  }, [abortFxFetch, setTxs, setCatTree, setBudgets, setAccounts, setBills, setGoals, setGoalContributions, setRules, setSavedViews, setRecategorizeStats, setSelectedPeriod, setHidden, setBudgetStartDay, setInvestments, setTrades, setDismissedAlertIds, setDismissedInsightIds, setTxFilterRaw, setRates, setRatesUpdated, setFxAutoFetch, setFxLastFetchedAt, setFxLastFetchError, setFxMigrationToastSeen, setWelcomeSeen, setOnboarded, setLastBackupAt, setBackupReminderSnoozedUntil, setBackupReminderIntervalRaw, setForecastLiquidAccountIds, setForecastThreshold, setDebts, setDebtExtraPayment, setGoalAutoFundRules]);
 
   return (
     <StoreCtx.Provider value={{
