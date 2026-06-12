@@ -81,11 +81,11 @@ afterEach(() => {
 describe('WebTransactions saved views', () => {
   it('prompts for a name and saves the current tx filters', async () => {
     await renderScreen();
-    vi.spyOn(window, 'prompt').mockReturnValue('Coffee run');
-    vi.spyOn(window, 'confirm').mockReturnValue(false);
 
     fireEvent.change(screen.getByLabelText(/search/i), { target: { value: 'coffee' } });
     fireEvent.click(screen.getByRole('button', { name: /save current view/i }));
+    fireEvent.change(screen.getByLabelText(/view name/i), { target: { value: 'Coffee run' } });
+    fireEvent.click(screen.getByRole('button', { name: /^save$/i }));
 
     expect(store.addView).toHaveBeenCalledWith(expect.objectContaining({
       scope: 'tx',
@@ -96,13 +96,14 @@ describe('WebTransactions saved views', () => {
     }));
   });
 
-  it('saves with __current__ sentinel when user accepts the follow-current confirm', async () => {
+  it('saves with __current__ sentinel when user picks follow-current-period', async () => {
     await renderScreen();
-    vi.spyOn(window, 'prompt').mockReturnValue('Coffee run');
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
 
     fireEvent.change(screen.getByLabelText(/search/i), { target: { value: 'coffee' } });
     fireEvent.click(screen.getByRole('button', { name: /save current view/i }));
+    fireEvent.change(screen.getByLabelText(/view name/i), { target: { value: 'Coffee run' } });
+    fireEvent.click(screen.getByLabelText(/follow current period/i));
+    fireEvent.click(screen.getByRole('button', { name: /^save$/i }));
 
     expect(store.addView).toHaveBeenCalledWith(expect.objectContaining({
       scope: 'tx',
@@ -170,8 +171,9 @@ describe('WebTransactions saved views', () => {
     });
 
     fireEvent.change(screen.getByLabelText(/views/i), { target: { value: 'sv_tx_1' } });
-    vi.spyOn(window, 'prompt').mockReturnValueOnce('Food focus v2');
     fireEvent.click(screen.getByRole('button', { name: /rename view/i }));
+    fireEvent.change(screen.getByLabelText(/view name/i), { target: { value: 'Food focus v2' } });
+    fireEvent.click(screen.getByRole('button', { name: /^rename$/i }));
     expect(store.updateView).toHaveBeenCalledWith('sv_tx_1', { name: 'Food focus v2' });
 
     fireEvent.change(screen.getByLabelText(/search/i), { target: { value: 'espresso' } });
@@ -198,13 +200,13 @@ describe('WebTransactions saved views', () => {
     });
 
     fireEvent.change(screen.getByLabelText(/views/i), { target: { value: 'sv_tx_1' } });
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
     fireEvent.click(screen.getByRole('button', { name: /delete view/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^delete$/i }));
 
     expect(store.deleteView).toHaveBeenCalledWith('sv_tx_1');
   });
 
-  it('does not call updateView when the rename prompt returns whitespace-only input', async () => {
+  it('disables the rename SAVE button on whitespace-only input and never calls updateView', async () => {
     await renderScreen({
       savedViews: [
         {
@@ -219,27 +221,27 @@ describe('WebTransactions saved views', () => {
     });
 
     fireEvent.change(screen.getByLabelText(/views/i), { target: { value: 'sv_tx_1' } });
-    vi.spyOn(window, 'prompt').mockReturnValue('   ');
+    fireEvent.click(screen.getByRole('button', { name: /rename view/i }));
+    fireEvent.change(screen.getByLabelText(/view name/i), { target: { value: '   ' } });
 
-    // Must not throw and must not call updateView — store.jsx throws on
-    // whitespace-only names; the call site is required to trim.
-    expect(() => {
-      fireEvent.click(screen.getByRole('button', { name: /rename view/i }));
-    }).not.toThrow();
+    const renameBtn = screen.getByRole('button', { name: /^rename$/i });
+    expect(renameBtn.disabled).toBe(true);
+    fireEvent.click(renameBtn);
     expect(store.updateView).not.toHaveBeenCalled();
   });
 
-  it('does not call addView when the save-current-view prompt returns whitespace-only input', async () => {
+  it('disables the save SAVE button on whitespace-only input and never calls addView', async () => {
     await renderScreen();
-    vi.spyOn(window, 'prompt').mockReturnValue('   ');
+    fireEvent.click(screen.getByRole('button', { name: /save current view/i }));
+    fireEvent.change(screen.getByLabelText(/view name/i), { target: { value: '   ' } });
 
-    expect(() => {
-      fireEvent.click(screen.getByRole('button', { name: /save current view/i }));
-    }).not.toThrow();
+    const saveBtn = screen.getByRole('button', { name: /^save$/i });
+    expect(saveBtn.disabled).toBe(true);
+    fireEvent.click(saveBtn);
     expect(store.addView).not.toHaveBeenCalled();
   });
 
-  it('alerts the user when renaming would collide with another view in the same scope', async () => {
+  it('shows an inline error and keeps the modal open when renaming collides in scope', async () => {
     await renderScreen({
       savedViews: [
         {
@@ -264,13 +266,15 @@ describe('WebTransactions saved views', () => {
     });
 
     fireEvent.change(screen.getByLabelText(/views/i), { target: { value: 'sv_tx_1' } });
-    vi.spyOn(window, 'prompt').mockReturnValue('Travel');
-    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
+    fireEvent.click(screen.getByRole('button', { name: /rename view/i }));
+    fireEvent.change(screen.getByLabelText(/view name/i), { target: { value: 'Travel' } });
 
     expect(() => {
-      fireEvent.click(screen.getByRole('button', { name: /rename view/i }));
+      fireEvent.click(screen.getByRole('button', { name: /^rename$/i }));
     }).not.toThrow();
-    expect(alertSpy).toHaveBeenCalledWith(expect.stringContaining('Travel'));
+
+    expect(screen.getByRole('alert').textContent).toContain('Travel');
+    expect(screen.queryByLabelText(/view name/i)).not.toBeNull();
   });
 
   it('only shows tx-scoped views in the dropdown', async () => {

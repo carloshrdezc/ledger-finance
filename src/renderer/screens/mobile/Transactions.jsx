@@ -7,6 +7,7 @@ import { CURRENT_PERIOD_SENTINEL, resolvePeriod } from '../../period.mjs';
 import { useUndoableStore } from '../../useUndoableStore';
 import AddSheet from './AddSheet';
 import EmptySectionHint from '../../components/EmptySectionHint';
+import ViewPromptModal from '../../components/ViewPromptModal';
 
 export default function Transactions({ t }) {
   const { transactions, periodTransactions, deleteTx, deleteTransfer, accountsWithBalance, periodLabel, selectedPeriod, txFilter, setSelectedPeriod, setTxFilter, clearTxFilter, savedViews, addView, updateView, deleteView } = useUndoableStore();
@@ -56,31 +57,14 @@ export default function Transactions({ t }) {
     applySavedView(txViews.find(view => view.id === id));
   }, [applySavedView, txViews]);
 
-  const saveCurrentView = React.useCallback(() => {
-    const raw = window.prompt('Save current view as');
-    if (!raw) return;
-    const name = raw.trim();
-    if (!name) return;
-    const followCurrent = window.confirm('Follow current period?\n\nOK: this view always shows the current month.\nCancel: snapshot this period (' + periodLabel + ').');
-    addView({ scope: 'tx', name, period: followCurrent ? CURRENT_PERIOD_SENTINEL : selectedPeriod, search, txFilter });
-  }, [addView, periodLabel, selectedPeriod, search, txFilter]);
+  const [modal, setModal] = React.useState(null); // { kind: 'save'|'rename'|'delete', error? }
+  const closeModal = React.useCallback(() => setModal(null), []);
+  const saveCurrentView = React.useCallback(() => setModal({ kind: 'save', error: null }), []);
 
   const renameSelectedView = React.useCallback(() => {
     if (!selectedView) return;
-    const raw = window.prompt('Rename view', selectedView.name);
-    if (raw === null) return;
-    const name = raw.trim();
-    if (!name) return;
-    try {
-      updateView(selectedView.id, { name });
-    } catch (err) {
-      if (err && err.message === 'LEDGER_DUPLICATE_VIEW_NAME') {
-        window.alert(`A view named "${name}" already exists.`);
-        return;
-      }
-      throw err;
-    }
-  }, [selectedView, updateView]);
+    setModal({ kind: 'rename', error: null });
+  }, [selectedView]);
 
   const updateSelectedView = React.useCallback(() => {
     if (!selectedView) return;
@@ -89,9 +73,33 @@ export default function Transactions({ t }) {
 
   const deleteSelectedView = React.useCallback(() => {
     if (!selectedView) return;
-    if (!window.confirm(`Delete view "${selectedView.name}"?`)) return;
+    setModal({ kind: 'delete', error: null });
+  }, [selectedView]);
+
+  const handleSaveSubmit = React.useCallback(({ name, followCurrent }) => {
+    addView({ scope: 'tx', name, period: followCurrent ? CURRENT_PERIOD_SENTINEL : selectedPeriod, search, txFilter });
+    setModal(null);
+  }, [addView, selectedPeriod, search, txFilter]);
+
+  const handleRenameSubmit = React.useCallback(({ name }) => {
+    if (!selectedView) return;
+    try {
+      updateView(selectedView.id, { name });
+      setModal(null);
+    } catch (err) {
+      if (err && err.message === 'LEDGER_DUPLICATE_VIEW_NAME') {
+        setModal(m => ({ ...m, error: `A view named "${name}" already exists.` }));
+        return;
+      }
+      throw err;
+    }
+  }, [selectedView, updateView]);
+
+  const handleDeleteConfirm = React.useCallback(() => {
+    if (!selectedView) return;
     deleteView(selectedView.id);
     setSelectedViewId('');
+    setModal(null);
   }, [deleteView, selectedView]);
 
   const sourceTxs = txFilter && txFilter.date ? transactions : periodTransactions;
@@ -239,6 +247,45 @@ export default function Transactions({ t }) {
 
       {editTx && (
         <AddSheet t={t} editTx={editTx} onClose={() => setEditTx(null)} />
+      )}
+
+      {modal?.kind === 'save' && (
+        <ViewPromptModal
+          mode="prompt"
+          title="SAVE · VIEW"
+          label="VIEW NAME"
+          showPeriodChoice
+          periodLabel={periodLabel}
+          accent={t.accent}
+          confirmLabel="SAVE"
+          error={modal.error}
+          onSubmit={handleSaveSubmit}
+          onClose={closeModal}
+        />
+      )}
+      {modal?.kind === 'rename' && selectedView && (
+        <ViewPromptModal
+          mode="prompt"
+          title="RENAME · VIEW"
+          label="VIEW NAME"
+          initialValue={selectedView.name}
+          accent={t.accent}
+          confirmLabel="RENAME"
+          error={modal.error}
+          onSubmit={handleRenameSubmit}
+          onClose={closeModal}
+        />
+      )}
+      {modal?.kind === 'delete' && selectedView && (
+        <ViewPromptModal
+          mode="confirm"
+          title="DELETE · VIEW"
+          message={`Delete view "${selectedView.name}"? This cannot be undone.`}
+          confirmLabel="DELETE"
+          error={modal.error}
+          onSubmit={handleDeleteConfirm}
+          onClose={closeModal}
+        />
       )}
     </div>
   );
