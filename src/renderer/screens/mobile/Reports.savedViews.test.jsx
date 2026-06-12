@@ -82,10 +82,10 @@ afterEach(() => {
 describe('mobile Reports saved views', () => {
   it('prompts for a name and saves the current reports view', async () => {
     await renderScreen();
-    vi.spyOn(window, 'prompt').mockReturnValue('Monthly report');
-    vi.spyOn(window, 'confirm').mockReturnValue(false);
 
     fireEvent.click(screen.getByRole('button', { name: /save current view/i }));
+    fireEvent.change(screen.getByLabelText(/view name/i), { target: { value: 'Monthly report' } });
+    fireEvent.click(screen.getByRole('button', { name: /^save$/i }));
 
     expect(store.addView).toHaveBeenCalledWith(expect.objectContaining({
       scope: 'reports',
@@ -95,12 +95,13 @@ describe('mobile Reports saved views', () => {
     }));
   });
 
-  it('saves with __current__ sentinel when user accepts the follow-current confirm', async () => {
+  it('saves with __current__ sentinel when user picks follow-current-period', async () => {
     await renderScreen();
-    vi.spyOn(window, 'prompt').mockReturnValue('Monthly report');
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
 
     fireEvent.click(screen.getByRole('button', { name: /save current view/i }));
+    fireEvent.change(screen.getByLabelText(/view name/i), { target: { value: 'Monthly report' } });
+    fireEvent.click(screen.getByLabelText(/follow current period/i));
+    fireEvent.click(screen.getByRole('button', { name: /^save$/i }));
 
     expect(store.addView).toHaveBeenCalledWith(expect.objectContaining({
       scope: 'reports',
@@ -162,8 +163,9 @@ describe('mobile Reports saved views', () => {
 
     fireEvent.change(screen.getByLabelText(/views/i), { target: { value: 'sv_reports_1' } });
 
-    vi.spyOn(window, 'prompt').mockReturnValueOnce('Last month v2');
     fireEvent.click(screen.getByRole('button', { name: /rename view/i }));
+    fireEvent.change(screen.getByLabelText(/view name/i), { target: { value: 'Last month v2' } });
+    fireEvent.click(screen.getByRole('button', { name: /^rename$/i }));
     expect(store.updateView).toHaveBeenCalledWith('sv_reports_1', { name: 'Last month v2' });
 
     fireEvent.click(screen.getByRole('button', { name: /update from current filters/i }));
@@ -188,13 +190,13 @@ describe('mobile Reports saved views', () => {
     });
 
     fireEvent.change(screen.getByLabelText(/views/i), { target: { value: 'sv_reports_1' } });
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
     fireEvent.click(screen.getByRole('button', { name: /delete view/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^delete$/i }));
 
     expect(store.deleteView).toHaveBeenCalledWith('sv_reports_1');
   });
 
-  it('does not call updateView when the rename prompt returns whitespace-only input', async () => {
+  it('disables the rename SAVE button on whitespace-only input and never calls updateView', async () => {
     await renderScreen({
       savedViews: [
         {
@@ -208,23 +210,23 @@ describe('mobile Reports saved views', () => {
     });
 
     fireEvent.change(screen.getByLabelText(/views/i), { target: { value: 'sv_reports_1' } });
-    vi.spyOn(window, 'prompt').mockReturnValue('   ');
+    fireEvent.click(screen.getByRole('button', { name: /rename view/i }));
+    fireEvent.change(screen.getByLabelText(/view name/i), { target: { value: '   ' } });
 
-    // Must not throw and must not call updateView — store.jsx throws on
-    // whitespace-only names; the call site is required to trim.
-    expect(() => {
-      fireEvent.click(screen.getByRole('button', { name: /rename view/i }));
-    }).not.toThrow();
+    const renameBtn = screen.getByRole('button', { name: /^rename$/i });
+    expect(renameBtn.disabled).toBe(true);
+    fireEvent.click(renameBtn);
     expect(store.updateView).not.toHaveBeenCalled();
   });
 
-  it('does not call addView when the save-current-view prompt returns whitespace-only input', async () => {
+  it('disables the save SAVE button on whitespace-only input and never calls addView', async () => {
     await renderScreen();
-    vi.spyOn(window, 'prompt').mockReturnValue('   ');
+    fireEvent.click(screen.getByRole('button', { name: /save current view/i }));
+    fireEvent.change(screen.getByLabelText(/view name/i), { target: { value: '   ' } });
 
-    expect(() => {
-      fireEvent.click(screen.getByRole('button', { name: /save current view/i }));
-    }).not.toThrow();
+    const saveBtn = screen.getByRole('button', { name: /^save$/i });
+    expect(saveBtn.disabled).toBe(true);
+    fireEvent.click(saveBtn);
     expect(store.addView).not.toHaveBeenCalled();
   });
 
@@ -253,7 +255,7 @@ describe('mobile Reports saved views', () => {
     expect(store.setTxFilter).not.toHaveBeenCalled();
   });
 
-  it('alerts the user when renaming would collide with another reports view', async () => {
+  it('shows an inline error and keeps the modal open when renaming collides', async () => {
     await renderScreen({
       savedViews: [
         {
@@ -272,7 +274,7 @@ describe('mobile Reports saved views', () => {
         },
       ],
       // Real updateView contract: throws on duplicate (scope, name).
-      // Without the try/catch in renameSelectedView this would surface
+      // Without the try/catch in handleRenameSubmit this would surface
       // as an uncaught exception in a React event handler → renderer
       // crash. Locking it here keeps mobile parity with web behavior.
       updateView: vi.fn(() => {
@@ -281,12 +283,14 @@ describe('mobile Reports saved views', () => {
     });
 
     fireEvent.change(screen.getByLabelText(/views/i), { target: { value: 'sv_reports_1' } });
-    vi.spyOn(window, 'prompt').mockReturnValue('Quarterly');
-    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
+    fireEvent.click(screen.getByRole('button', { name: /rename view/i }));
+    fireEvent.change(screen.getByLabelText(/view name/i), { target: { value: 'Quarterly' } });
 
     expect(() => {
-      fireEvent.click(screen.getByRole('button', { name: /rename view/i }));
+      fireEvent.click(screen.getByRole('button', { name: /^rename$/i }));
     }).not.toThrow();
-    expect(alertSpy).toHaveBeenCalledWith(expect.stringContaining('Quarterly'));
+
+    expect(screen.getByRole('alert').textContent).toContain('Quarterly');
+    expect(screen.queryByLabelText(/view name/i)).not.toBeNull();
   });
 });
